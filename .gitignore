@@ -1,0 +1,12 @@
+.cargo/
+.claude
+.DS_Store
+.idea
+.vscode
+/dev-tools
+/target
+**/*.rs.bk
+*.swo
+*.swp
+*~
+Cargo.lock

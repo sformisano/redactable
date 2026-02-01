@@ -1,0 +1,45 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Rust checks
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@1.93.0
+        with:
+          components: clippy, rustfmt
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Format
+        run: cargo +1.93.0 fmt --all -- --check
+
+      - name: Clippy
+        run: cargo +1.93.0 clippy --all --all-targets --all-features -- -D warnings -D rust-2018-idioms -D rust-2021-compatibility -A deprecated -A dead-code
+
+      - name: Tests (all features)
+        run: cargo +1.93.0 test --all-features --all-targets
+
+      - name: Doc tests (all features)
+        run: cargo +1.93.0 test --doc --all-features
+
+      - name: Tests (no default features)
+        run: cargo check --no-default-features
+
+      - name: Tests (policy only)
+        run: cargo check --features policy
+
+      - name: Tests (redaction only)
+        run: cargo check --features redaction
