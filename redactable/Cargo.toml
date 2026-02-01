@@ -1,0 +1,36 @@
+[package]
+name = "redactable"
+version.workspace = true
+edition.workspace = true
+description = "Layered data redaction controls: policy markers and redaction strategies"
+license.workspace = true
+repository.workspace = true
+documentation = "https://docs.rs/redactable"
+homepage.workspace = true
+readme = "../README.md"
+keywords = ["redaction", "privacy", "security", "logging", "telemetry"]
+categories = ["development-tools", "data-structures"]
+# Explicitly include only what should be published to crates.io
+# Note: LICENSE.md and SECURITY.md are available in the source repository (linked via 'repository' field)
+include = ["src/**/*", "Cargo.toml", "../README.md"]
+
+[features]
+default = ["policy", "redaction"]
+policy = []
+redaction = ["policy"]
+json = ["redaction", "dep:serde", "dep:serde_json"]
+slog = ["json", "dep:slog", "redactable-derive/slog"]
+tracing = ["json", "dep:tracing"]
+tracing-valuable = ["tracing", "dep:valuable", "tracing/valuable"]
+testing = []
+
+[dependencies]
+redactable-derive = { version = "0.1.0", path = "../redactable-derive" }
+serde = { version = "1", optional = true, features = ["derive"] }
+serde_json = { version = "1", optional = true }
+slog = { version = "2.8", optional = true, features = ["nested-values"] }
+tracing = { version = "0.1", optional = true }
+valuable = { version = "0.1", optional = true, features = ["derive"] }
+
+[dev-dependencies]
+serde = { version = "1", features = ["derive"] }

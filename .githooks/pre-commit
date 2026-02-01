@@ -1,0 +1,32 @@
+#!/bin/bash
+# Pre-commit hook that runs fmt, clippy, and tests before allowing commits
+
+set -e
+
+echo "🔍 Running pre-commit checks..."
+
+# Check formatting
+echo "📝 Checking formatting..."
+if ! cargo +nightly fmt --all -- --check; then
+    echo "❌ Formatting check failed. Run 'cargo +nightly fmt --all' to fix."
+    exit 1
+fi
+echo "✅ Formatting OK"
+
+# Run clippy
+echo "📎 Running clippy..."
+if ! cargo clippy --all --all-targets --all-features -- -D warnings -D rust-2018-idioms -D rust-2021-compatibility -A deprecated -A dead-code; then
+    echo "❌ Clippy check failed. Fix the warnings above."
+    exit 1
+fi
+echo "✅ Clippy OK"
+
+# Run tests (excluding compile_fail tests which can be flaky with different rust versions)
+echo "🧪 Running tests..."
+if ! cargo test --all-features --lib; then
+    echo "❌ Tests failed."
+    exit 1
+fi
+echo "✅ Tests OK"
+
+echo "✅ All pre-commit checks passed!"

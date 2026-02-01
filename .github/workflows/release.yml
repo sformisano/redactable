@@ -1,0 +1,51 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    name: Publish crates
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@1.93.0
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Format
+        run: cargo +1.93.0 fmt --all -- --check
+
+      - name: Clippy
+        run: cargo +1.93.0 clippy --all --all-targets --all-features -- -D warnings -D rust-2018-idioms -D rust-2021-compatibility -A deprecated -A dead-code
+
+      - name: Tests
+        run: cargo +1.93.0 test --all-features --all-targets
+
+      - name: Publish redactable-derive
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        run: cargo publish -p redactable-derive
+
+      - name: Wait for crates.io index update
+        run: |
+          echo "Waiting for crates.io index to update (crates.io index typically updates within 1-2 minutes)..."
+          # Wait 90 seconds to allow crates.io index to update
+          sleep 90
+          echo "Proceeding with redactable publish..."
+
+      - name: Publish redactable
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        run: cargo publish -p redactable
