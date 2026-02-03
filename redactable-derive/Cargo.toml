@@ -2,7 +2,7 @@
 name = "redactable-derive"
 version.workspace = true
 edition.workspace = true
-description = "Proc-macro derive for Sensitive redaction traversal"
+description = "Derive macros for the redactable crate"
 license.workspace = true
 repository.workspace = true
 documentation = "https://docs.rs/redactable-derive"
