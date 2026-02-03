@@ -23,14 +23,22 @@ slog = ["json", "dep:slog", "redactable-derive/slog"]
 tracing = ["json", "dep:tracing"]
 tracing-valuable = ["tracing", "dep:valuable", "tracing/valuable"]
 testing = []
+chrono = ["dep:chrono"]
+time = ["dep:time"]
+ip-address = []
+uuid = ["dep:uuid"]
+extras = ["chrono", "time", "uuid", "ip-address"]
 
 [dependencies]
-redactable-derive = { version = "0.1.1", path = "../redactable-derive" }
+redactable-derive = { version = "0.1.2", path = "../redactable-derive" }
 serde = { version = "1", optional = true, features = ["derive"] }
 serde_json = { version = "1", optional = true }
 slog = { version = "2.8", optional = true, features = ["nested-values"] }
 tracing = { version = "0.1", optional = true }
 valuable = { version = "0.1", optional = true, features = ["derive"] }
+chrono = { version = "0.4", optional = true }
+time = { version = "0.3", optional = true }
+uuid = { version = "1", optional = true }
 
 [dev-dependencies]
 serde = { version = "1", features = ["derive"] }
