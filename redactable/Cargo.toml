@@ -2,7 +2,7 @@
 name = "redactable"
 version.workspace = true
 edition.workspace = true
-description = "Layered data redaction controls: policy markers and redaction strategies"
+description = "Automatic redaction of sensitive data in structs for safe logging and debugging"
 license.workspace = true
 repository.workspace = true
 documentation = "https://docs.rs/redactable"
@@ -25,7 +25,7 @@ tracing-valuable = ["tracing", "dep:valuable", "tracing/valuable"]
 testing = []
 
 [dependencies]
-redactable-derive = { version = "0.1.0", path = "../redactable-derive" }
+redactable-derive = { version = "0.1.1", path = "../redactable-derive" }
 serde = { version = "1", optional = true, features = ["derive"] }
 serde_json = { version = "1", optional = true }
 slog = { version = "2.8", optional = true, features = ["nested-values"] }
