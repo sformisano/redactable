@@ -1,0 +1,50 @@
+error[E0277]: the trait bound `ExternalContext: RedactableDisplay` is not satisfied
+  --> tests/ui/sensitive_display_missing_redactable_display.rs:14:24
+   |
+14 |     Invalid { context: ExternalContext },
+   |                        ^^^^^^^^^^^^^^^ unsatisfied trait bound
+   |
+help: the trait `RedactableDisplay` is not implemented for `ExternalContext`
+  --> tests/ui/sensitive_display_missing_redactable_display.rs:3:1
+   |
+ 3 | struct ExternalContext;
+   | ^^^^^^^^^^^^^^^^^^^^^^
+   = help: the following other types implement trait `RedactableDisplay`:
+             &T
+             ()
+             Cow<'_, str>
+             LoginError
+             PhantomData<T>
+             String
+             bool
+             char
+           and $N others
+
+error[E0277]: the trait bound `ExternalContext: RedactableDisplay` is not satisfied
+  --> tests/ui/sensitive_display_missing_redactable_display.rs:13:13
+   |
+11 | #[derive(SensitiveDisplay)]
+   |          ---------------- in this macro invocation
+12 | enum LoginError {
+13 |     #[error("context {context}")]
+   |             ^^^^^^^^^---------^
+   |             |        |
+   |             |        required by this formatting parameter
+   |             unsatisfied trait bound
+   |
+help: the trait `RedactableDisplay` is not implemented for `ExternalContext`
+  --> tests/ui/sensitive_display_missing_redactable_display.rs:3:1
+   |
+ 3 | struct ExternalContext;
+   | ^^^^^^^^^^^^^^^^^^^^^^
+   = help: the following other types implement trait `RedactableDisplay`:
+             &T
+             ()
+             Cow<'_, str>
+             LoginError
+             PhantomData<T>
+             String
+             bool
+             char
+           and $N others
+   = note: required for `RedactedDisplayRef<'_, ExternalContext>` to implement `std::fmt::Display`
