@@ -28,6 +28,20 @@ use crate::{
     },
 };
 
+/// Marker trait for types whose `slog` integration always emits redacted output.
+///
+/// This trait is implemented only for sink adapters and wrappers that redact
+/// before logging. It is not a blanket impl for raw types.
+///
+/// ```compile_fail
+/// use redactable::slog::SlogRedacted;
+///
+/// fn assert_slog_redacted<T: SlogRedacted>() {}
+///
+/// assert_slog_redacted::<String>();
+/// ```
+pub trait SlogRedacted {}
+
 /// A `slog::Value` that emits an owned redacted payload as structured JSON.
 ///
 /// The payload is stored as a `serde_json::Value` and emitted via
@@ -57,6 +71,8 @@ impl SlogValue for RedactedJson {
     }
 }
 
+impl SlogRedacted for RedactedJson {}
+
 fn emit_output(
     output: &RedactedOutput,
     record: &Record<'_>,
@@ -83,6 +99,8 @@ impl SlogValue for RedactedOutput {
         emit_output(self, record, key, serializer)
     }
 }
+
+impl SlogRedacted for RedactedOutput {}
 
 /// Extension trait for ergonomic slog logging of redacted values as JSON.
 ///
@@ -141,6 +159,13 @@ where
     }
 }
 
+impl<T, P> SlogRedacted for SensitiveValue<T, P>
+where
+    T: RedactableWithPolicy<P>,
+    P: RedactionPolicy,
+{
+}
+
 impl<T> SlogValue for NotSensitiveDisplay<'_, T>
 where
     T: fmt::Display + ?Sized,
@@ -154,6 +179,8 @@ where
         emit_output(&self.to_redacted_output(), record, key, serializer)
     }
 }
+
+impl<T> SlogRedacted for NotSensitiveDisplay<'_, T> where T: fmt::Display + ?Sized {}
 
 impl<T> SlogValue for NotSensitiveDebug<'_, T>
 where
@@ -169,6 +196,8 @@ where
     }
 }
 
+impl<T> SlogRedacted for NotSensitiveDebug<'_, T> where T: fmt::Debug + ?Sized {}
+
 impl<T> SlogValue for NotSensitiveJson<'_, T>
 where
     T: Serialize + ?Sized,
@@ -182,6 +211,8 @@ where
         emit_output(&self.to_redacted_output(), record, key, serializer)
     }
 }
+
+impl<T> SlogRedacted for NotSensitiveJson<'_, T> where T: Serialize + ?Sized {}
 
 impl<T> SlogValue for RedactedOutputRef<'_, T>
 where
@@ -197,6 +228,8 @@ where
     }
 }
 
+impl<T> SlogRedacted for RedactedOutputRef<'_, T> where T: Redactable + Clone + fmt::Debug {}
+
 impl<T> SlogValue for RedactedJsonRef<'_, T>
 where
     T: Redactable + Clone + Serialize,
@@ -210,6 +243,8 @@ where
         emit_output(&self.to_redacted_output(), record, key, serializer)
     }
 }
+
+impl<T> SlogRedacted for RedactedJsonRef<'_, T> where T: Redactable + Clone + Serialize {}
 
 /// Wrapper for values that implement `RedactableDisplay` to participate in slog logging.
 pub struct RedactedDisplayValue<'a, T: ?Sized>(&'a T);

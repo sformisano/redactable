@@ -21,9 +21,25 @@
 //! tracing::info!(user = user.tracing_redacted_valuable());
 //! ```
 
+use std::fmt;
+
+#[cfg(feature = "json")]
+use serde::Serialize;
 use tracing::field::{DisplayValue, display};
 
-use crate::redaction::{Redactable, RedactedOutput, ToRedactedOutput};
+use crate::{
+    policy::RedactionPolicy,
+    redaction::{
+        NotSensitiveDebug, NotSensitiveDisplay, NotSensitiveJson, Redactable, RedactableWithPolicy,
+        RedactedJsonRef, RedactedOutput, RedactedOutputRef, SensitiveValue, ToRedactedOutput,
+    },
+};
+
+/// Marker trait for types whose `tracing` integration always emits redacted output.
+///
+/// This trait is implemented only for sink adapters and wrappers that redact
+/// before logging. It is not a blanket impl for raw types.
+pub trait TracingRedacted {}
 
 /// Extension trait for logging redacted values as display strings.
 ///
@@ -50,6 +66,27 @@ where
         display(text)
     }
 }
+
+impl TracingRedacted for RedactedOutput {}
+
+impl<T, P> TracingRedacted for SensitiveValue<T, P>
+where
+    T: RedactableWithPolicy<P>,
+    P: RedactionPolicy,
+{
+}
+
+impl<T> TracingRedacted for NotSensitiveDisplay<'_, T> where T: fmt::Display + ?Sized {}
+
+impl<T> TracingRedacted for NotSensitiveDebug<'_, T> where T: fmt::Debug + ?Sized {}
+
+impl<T> TracingRedacted for RedactedOutputRef<'_, T> where T: Redactable + Clone + fmt::Debug {}
+
+#[cfg(feature = "json")]
+impl<T> TracingRedacted for NotSensitiveJson<'_, T> where T: Serialize + ?Sized {}
+
+#[cfg(feature = "json")]
+impl<T> TracingRedacted for RedactedJsonRef<'_, T> where T: Redactable + Clone + Serialize {}
 
 /// A redacted value that implements `valuable::Valuable` for structured tracing output.
 ///
@@ -85,6 +122,9 @@ impl<T: valuable::Valuable> valuable::Valuable for RedactedValuable<T> {
         self.redacted.visit(visit);
     }
 }
+
+#[cfg(feature = "tracing-valuable")]
+impl<T> TracingRedacted for RedactedValuable<T> {}
 
 /// Extension trait for logging redacted values as structured `valuable` data.
 ///

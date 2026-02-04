@@ -17,6 +17,8 @@ proc-macro = true
 default = []
 # When enabled, generates slog::Value impl for derived types
 slog = ["dep:slog"]
+# When enabled, generates tracing marker impls for derived types
+tracing = []
 
 [dependencies]
 proc-macro2 = { workspace = true }
