@@ -1,4 +1,4 @@
-//! Parsing of `#[sensitive(...)]` field attributes.
+//! Parsing of `#[sensitive(...)]` and `#[not_sensitive]` field attributes.
 //!
 //! This module maps attribute syntax to traversal decisions and produces
 //! structured errors for invalid forms.
@@ -10,10 +10,11 @@ use syn::{Attribute, Meta, Result, spanned::Spanned};
 ///
 /// ## Strategy Mapping
 ///
-/// | Attribute              | Strategy           | Behavior                              |
-/// |------------------------|--------------------|---------------------------------------|
-/// | None                   | `WalkDefault`      | Walk containers; scalars pass through |
-/// | `#[sensitive(Policy)]` | `Classify(Policy)` | Apply redaction policy                |
+/// | Attribute              | Strategy              | Behavior                              |
+/// |------------------------|-----------------------|---------------------------------------|
+/// | None                   | `WalkDefault`         | Walk containers; scalars pass through |
+/// | `#[sensitive(Policy)]` | `Policy(policy_path)` | Apply redaction policy                |
+/// | `#[not_sensitive]`     | `NotSensitive`        | Explicit opt-out (SensitiveDisplay only) |
 #[derive(Clone, Debug)]
 pub(crate) enum Strategy {
     /// No annotation: walk containers, scalars pass through unchanged.
@@ -22,14 +23,16 @@ pub(crate) enum Strategy {
     ///
     /// The policy type (e.g., `Default`, `Token`, `Pii`) determines how
     /// the value is redacted via `RedactionPolicy`.
-    Classify(syn::Path),
+    Policy(syn::Path),
+    /// `#[not_sensitive]`: explicit opt-out, renders raw (SensitiveDisplay only).
+    NotSensitive,
 }
 
 fn set_strategy(target: &mut Option<Strategy>, next: Strategy, span: Span) -> Result<()> {
     if target.is_some() {
         return Err(syn::Error::new(
             span,
-            "multiple #[sensitive] attributes specified on the same field",
+            "multiple #[sensitive] or #[not_sensitive] attributes on the same field",
         ));
     }
     *target = Some(next);
@@ -39,6 +42,22 @@ fn set_strategy(target: &mut Option<Strategy>, next: Strategy, span: Span) -> Re
 pub(crate) fn parse_field_strategy(attrs: &[Attribute]) -> Result<Strategy> {
     let mut strategy: Option<Strategy> = None;
     for attr in attrs {
+        // Handle #[not_sensitive]
+        if attr.path().is_ident("not_sensitive") {
+            match &attr.meta {
+                Meta::Path(_) => {
+                    set_strategy(&mut strategy, Strategy::NotSensitive, attr.span())?;
+                }
+                _ => {
+                    return Err(syn::Error::new(
+                        attr.span(),
+                        "#[not_sensitive] does not take arguments",
+                    ));
+                }
+            }
+            continue;
+        }
+
         if !attr.path().is_ident("sensitive") {
             continue;
         }
@@ -55,7 +74,7 @@ pub(crate) fn parse_field_strategy(attrs: &[Attribute]) -> Result<Strategy> {
                 // Parse as a policy path (e.g., #[sensitive(Default)])
                 match syn::parse2::<syn::Path>(list.tokens.clone()) {
                     Ok(path) => {
-                        set_strategy(&mut strategy, Strategy::Classify(path), attr.span())?;
+                        set_strategy(&mut strategy, Strategy::Policy(path), attr.span())?;
                     }
                     Err(_) => {
                         return Err(syn::Error::new(
@@ -115,10 +134,10 @@ mod tests {
         let attrs = parse_attrs(quote! { #[sensitive(Default)] });
         let strategy = parse_field_strategy(&attrs).unwrap();
         match strategy {
-            Strategy::Classify(path) => {
+            Strategy::Policy(path) => {
                 assert!(path.is_ident("Default"));
             }
-            Strategy::WalkDefault => panic!("expected Classify"),
+            _ => panic!("expected Policy"),
         }
     }
 
@@ -127,10 +146,10 @@ mod tests {
         let attrs = parse_attrs(quote! { #[sensitive(my_module::MyPolicy)] });
         let strategy = parse_field_strategy(&attrs).unwrap();
         match strategy {
-            Strategy::Classify(path) => {
+            Strategy::Policy(path) => {
                 assert_eq!(path.segments.len(), 2);
             }
-            Strategy::WalkDefault => panic!("expected Classify"),
+            _ => panic!("expected Policy"),
         }
     }
 
@@ -142,12 +161,7 @@ mod tests {
         });
         let result = parse_field_strategy(&attrs);
         assert!(result.is_err());
-        assert!(
-            result
-                .unwrap_err()
-                .to_string()
-                .contains("multiple #[sensitive] attributes")
-        );
+        assert!(result.unwrap_err().to_string().contains("multiple"));
     }
 
     #[test]
@@ -184,5 +198,36 @@ mod tests {
         });
         let strategy = parse_field_strategy(&attrs).unwrap();
         assert!(matches!(strategy, Strategy::WalkDefault));
+    }
+
+    #[test]
+    fn not_sensitive_returns_not_sensitive() {
+        let attrs = parse_attrs(quote! { #[not_sensitive] });
+        let strategy = parse_field_strategy(&attrs).unwrap();
+        assert!(matches!(strategy, Strategy::NotSensitive));
+    }
+
+    #[test]
+    fn not_sensitive_with_args_errors() {
+        let attrs = parse_attrs(quote! { #[not_sensitive(foo)] });
+        let result = parse_field_strategy(&attrs);
+        assert!(result.is_err());
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("does not take arguments")
+        );
+    }
+
+    #[test]
+    fn sensitive_and_not_sensitive_errors() {
+        let attrs = parse_attrs(quote! {
+            #[sensitive(Default)]
+            #[not_sensitive]
+        });
+        let result = parse_field_strategy(&attrs);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("multiple"));
     }
 }

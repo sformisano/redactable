@@ -24,11 +24,23 @@ jobs:
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
 
+      - name: Install cargo-audit
+        run: cargo install cargo-audit --locked
+
+      - name: Install cargo-deny
+        run: cargo install cargo-deny --locked
+
       - name: Format
         run: cargo +1.93.0 fmt --all -- --check
 
       - name: Clippy
         run: cargo +1.93.0 clippy --all --all-targets --all-features -- -D warnings -D rust-2018-idioms -D rust-2021-compatibility -A deprecated -A dead-code
+
+      - name: Audit dependencies
+        run: cargo audit
+
+      - name: Deny policy check
+        run: cargo deny check
 
       - name: Tests
         run: cargo +1.93.0 test --all-features --all-targets

@@ -1,7 +1,10 @@
-//! Redacted error formatting for `SensitiveError`.
+//! Redacted display formatting for `SensitiveDisplay`.
 //!
 //! This module derives a redacted formatting implementation from thiserror-style
 //! `#[error("...")]` strings or displaydoc-style doc comments.
+//!
+//! Every field referenced in a template must be explicitly annotated with either
+//! `#[sensitive(Policy)]` or `#[not_sensitive]`.
 
 use std::collections::BTreeMap;
 
@@ -20,7 +23,7 @@ pub(crate) struct RedactedDisplayOutput {
     pub(crate) body: TokenStream,
     pub(crate) display_generics: Vec<Ident>,
     pub(crate) debug_generics: Vec<Ident>,
-    pub(crate) clone_generics: Vec<Ident>,
+    pub(crate) policy_ref_generics: Vec<Ident>,
     pub(crate) nested_generics: Vec<Ident>,
 }
 
@@ -55,7 +58,7 @@ struct FormatArgsOutput {
     prelude: TokenStream,
     display_generics: Vec<Ident>,
     debug_generics: Vec<Ident>,
-    clone_generics: Vec<Ident>,
+    policy_ref_generics: Vec<Ident>,
     nested_generics: Vec<Ident>,
 }
 
@@ -70,7 +73,7 @@ pub(crate) fn derive_redacted_display(
         Data::Enum(data) => derive_enum_display(name, data, generics),
         Data::Union(u) => Err(syn::Error::new(
             u.union_token.span(),
-            "`SensitiveError` cannot be derived for unions",
+            "`SensitiveDisplay` cannot be derived for unions",
         )),
     }
 }
@@ -102,7 +105,7 @@ fn derive_struct_display(
         body,
         display_generics: format_args.display_generics,
         debug_generics: format_args.debug_generics,
-        clone_generics: format_args.clone_generics,
+        policy_ref_generics: format_args.policy_ref_generics,
         nested_generics: format_args.nested_generics,
     })
 }
@@ -115,7 +118,7 @@ fn derive_enum_display(
     let mut arms = Vec::new();
     let mut display_generics = Vec::new();
     let mut debug_generics = Vec::new();
-    let mut clone_generics = Vec::new();
+    let mut policy_ref_generics = Vec::new();
     let mut nested_generics = Vec::new();
 
     for variant in &data.variants {
@@ -138,7 +141,7 @@ fn derive_enum_display(
 
         display_generics.extend(format_args.display_generics);
         debug_generics.extend(format_args.debug_generics);
-        clone_generics.extend(format_args.clone_generics);
+        policy_ref_generics.extend(format_args.policy_ref_generics);
         nested_generics.extend(format_args.nested_generics);
     }
 
@@ -152,7 +155,7 @@ fn derive_enum_display(
         body,
         display_generics,
         debug_generics,
-        clone_generics,
+        policy_ref_generics,
         nested_generics,
     })
 }
@@ -242,8 +245,8 @@ fn build_format_args(
     let mut positional_args: Vec<Option<(Ident, &'_ FieldInfo<'_>, FormatMode)>> = Vec::new();
     let mut display_generics = Vec::new();
     let mut debug_generics = Vec::new();
-    let mut clone_generics = Vec::new();
-    let mut nested_generics = Vec::new();
+    let mut policy_ref_generics = Vec::new();
+    let nested_generics = Vec::new();
 
     for placeholder in placeholders {
         match placeholder.key {
@@ -257,6 +260,14 @@ fn build_format_args(
                             format!("unknown field `{name}` in format string"),
                         )
                     })?;
+                if matches!(field.strategy, Strategy::WalkDefault) {
+                    return Err(syn::Error::new(
+                        placeholder.span,
+                        format!(
+                            "field `{name}` must be annotated with #[sensitive(Policy)] or #[not_sensitive]"
+                        ),
+                    ));
+                }
                 let arg_ident = format_ident!("__redacted_{}", name);
                 let entry = named_args.entry(name.to_string()).or_insert((
                     arg_ident,
@@ -275,6 +286,14 @@ fn build_format_args(
                         format!("unknown positional field index {index} in format string"),
                     )
                 })?;
+                if matches!(field.strategy, Strategy::WalkDefault) {
+                    return Err(syn::Error::new(
+                        placeholder.span,
+                        format!(
+                            "field {index} must be annotated with #[sensitive(Policy)] or #[not_sensitive]"
+                        ),
+                    ));
+                }
                 let arg_ident = format_ident!("__redacted_{index}");
                 let entry =
                     positional_args[index].get_or_insert((arg_ident, field, placeholder.mode));
@@ -295,8 +314,8 @@ fn build_format_args(
             generics,
             &mut display_generics,
             &mut debug_generics,
-            &mut clone_generics,
-            &mut nested_generics,
+            &mut policy_ref_generics,
+            &nested_generics,
         );
         prelude_bindings.push(quote! {
             let #arg_ident = #expr;
@@ -313,8 +332,8 @@ fn build_format_args(
             generics,
             &mut display_generics,
             &mut debug_generics,
-            &mut clone_generics,
-            &mut nested_generics,
+            &mut policy_ref_generics,
+            &nested_generics,
         );
         prelude_bindings.push(quote! {
             let #arg_ident = #expr;
@@ -340,7 +359,7 @@ fn build_format_args(
         prelude,
         display_generics,
         debug_generics,
-        clone_generics,
+        policy_ref_generics,
         nested_generics,
     })
 }
@@ -349,27 +368,20 @@ fn redacted_expr_for_field(field: &FieldInfo<'_>) -> TokenStream {
     let ident = &field.ident;
     let span = field.span;
     let scalar_path = crate_path("ScalarRedaction");
-    let apply_policy_path = crate_path("apply_policy");
-    let redactable_error_path = crate_path("RedactableError");
+    let apply_policy_ref_path = crate_path("apply_policy_ref");
     match &field.strategy {
-        Strategy::WalkDefault => quote_spanned! { span =>
+        Strategy::WalkDefault | Strategy::NotSensitive => quote_spanned! { span =>
             #ident
         },
-        Strategy::Classify(policy) => {
-            // Default policy on scalars uses ScalarRedaction
+        Strategy::Policy(policy) => {
             if is_scalar_type(field.ty) && policy.is_ident("Default") {
                 quote_spanned! { span =>
                     #scalar_path::redact(*#ident)
                 }
-            } else if policy.is_ident("Error") {
-                // Error policy for nested error types
-                quote_spanned! { span =>
-                    #redactable_error_path::redacted_error(#ident)
-                }
             } else {
                 let policy = policy.clone();
                 quote_spanned! { span =>
-                    #apply_policy_path::<#policy, _>((*#ident).clone())
+                    #apply_policy_ref_path::<#policy, _>(#ident)
                 }
             }
         }
@@ -382,11 +394,12 @@ fn collect_bounds(
     generics: &syn::Generics,
     display_generics: &mut Vec<Ident>,
     debug_generics: &mut Vec<Ident>,
-    clone_generics: &mut Vec<Ident>,
-    nested_generics: &mut Vec<Ident>,
+    policy_ref_generics: &mut Vec<Ident>,
+    nested_generics: &Vec<Ident>,
 ) {
+    let _ = nested_generics;
     match &field.strategy {
-        Strategy::WalkDefault => match mode {
+        Strategy::WalkDefault | Strategy::NotSensitive => match mode {
             FormatMode::Display => collect_generics_from_type(field.ty, generics, display_generics),
             FormatMode::Debug => collect_generics_from_type(field.ty, generics, debug_generics),
             FormatMode::Both => {
@@ -394,17 +407,11 @@ fn collect_bounds(
                 collect_generics_from_type(field.ty, generics, debug_generics);
             }
         },
-        Strategy::Classify(policy) => {
-            // Default policy on scalars doesn't need bounds
+        Strategy::Policy(policy) => {
             if is_scalar_type(field.ty) && policy.is_ident("Default") {
                 return;
             }
-            // Error policy uses RedactableError bound
-            if policy.is_ident("Error") {
-                collect_generics_from_type(field.ty, generics, nested_generics);
-                return;
-            }
-            collect_generics_from_type(field.ty, generics, clone_generics);
+            collect_generics_from_type(field.ty, generics, policy_ref_generics);
             match mode {
                 FormatMode::Display => {
                     collect_generics_from_type(field.ty, generics, display_generics);
