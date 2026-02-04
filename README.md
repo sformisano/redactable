@@ -19,6 +19,8 @@ are the most common use cases, but redaction is not tied to any logging framewor
   - [Wrapper types for foreign types](#wrapper-types-for-foreign-types)
 - [Outputs (structured vs logging)](#outputs-structured-vs-logging)
 - [Sensitive vs SensitiveDisplay](#sensitive-vs-sensitivedisplay)
+  - [Sensitive (structured redaction)](#sensitive-structured-redaction)
+  - [SensitiveDisplay (string formatting)](#sensitivedisplay-string-formatting)
 - [SensitiveDisplay in depth](#sensitivedisplay-in-depth)
   - [Template syntax](#template-syntax)
   - [Field annotations](#field-annotations)
@@ -49,9 +51,10 @@ are the most common use cases, but redaction is not tied to any logging framewor
 
 ## Design philosophy
 
-- **Traversal is automatic**: when a `RedactableContainer` contains other `RedactableContainer` types, the nested containers are walked automatically. No annotation required.
-- **Redaction is opt-in**: leaf values (scalars, strings) are unchanged unless explicitly marked with `#[sensitive(Policy)]`. Redaction only happens where you ask for it.
-- **Types are preserved**: `.redact()` returns the same type, not a string or wrapper.
+- **Traversal is automatic**: nested containers are handled automatically. For `Sensitive`, they're walked via `RedactableContainer`. For `SensitiveDisplay`, they're formatted via `RedactableDisplay`.
+- **Redaction is opt-in**: leaf values (scalars, strings) pass through unchanged unless explicitly marked with `#[sensitive(Policy)]`. Redaction only happens where you ask for it.
+- **Consistent annotation workflow**: both `Sensitive` and `SensitiveDisplay` follow the same pattern—unannotated scalars pass through, unannotated containers are handled via their trait, and `#[sensitive(Policy)]` applies redaction.
+- **Types are preserved**: `Sensitive`'s `.redact()` returns the same type, not a string or wrapper.
 
 ## How it works
 
@@ -74,6 +77,8 @@ struct User {
 ```
 
 This is why every field must implement `RedactableContainer`: containers need it for traversal, and leaves provide passthrough implementations that satisfy the requirement without doing anything.
+
+`SensitiveDisplay` follows the same principle but uses `RedactableDisplay` instead: nested types format via their `fmt_redacted()` method, and scalars pass through unchanged. See [SensitiveDisplay in depth](#sensitivedisplay-in-depth) for details.
 
 ## Walkthrough
 
@@ -356,8 +361,9 @@ There are two derive macros for redaction. Pick the one that matches your constr
 |---|---|---|
 | **Output** | Same type with redacted leaves | Redacted string |
 | **Requires `Clone`** | Yes | No |
-| **Traverses containers** | Yes | No |
-| **Unannotated fields** | Passthrough (unchanged) | Compile error (must annotate) |
+| **Traverses containers** | Yes (walks all fields) | No (only template placeholders) |
+| **Unannotated scalars** | Passthrough | Passthrough |
+| **Unannotated containers** | Walked via `RedactableContainer` | Formatted via `RedactableDisplay` |
 | **Best for** | Structured data | Display strings, non-Clone types |
 
 ### Sensitive (structured redaction)
@@ -385,9 +391,7 @@ assert_eq!(redacted.password, "[REDACTED]");
 
 ### SensitiveDisplay (string formatting)
 
-Use `SensitiveDisplay` when you need a redacted string representation without `Clone`. It formats from a template; **it does not traverse containers**.
-
-Every field referenced in the template **must** be explicitly annotated:
+Use `SensitiveDisplay` when you need a redacted string representation without `Clone`. It formats from a template and uses `RedactableDisplay` for unannotated placeholders. Common scalar-like types implement `RedactableDisplay` as passthrough.
 
 ```rust
 use redactable::SensitiveDisplay;
@@ -396,8 +400,7 @@ use redactable::SensitiveDisplay;
 enum LoginError {
     #[error("login failed for {user} {password}")]
     Invalid {
-        #[not_sensitive]            // explicit: render raw
-        user: String,
+        user: String,               // passthrough by default
         #[sensitive(Default)]       // redacted to "[REDACTED]"
         password: String,
     },
@@ -412,9 +415,42 @@ let err = LoginError::Invalid {
 
 See [SensitiveDisplay in depth](#sensitivedisplay-in-depth) for template syntax and field annotations.
 
+Nested `SensitiveDisplay` types are redacted automatically without extra annotations:
+
+```rust
+use redactable::{Default as RedactableDefault, SensitiveDisplay};
+
+#[derive(SensitiveDisplay)]
+enum InnerError {
+    #[error("db password {password}")]
+    BadPassword {
+        #[sensitive(RedactableDefault)]
+        password: String,
+    },
+}
+
+#[derive(SensitiveDisplay)]
+enum OuterError {
+    #[error("request failed: {source}")]
+    RequestFailed { source: InnerError },
+}
+
+let err = OuterError::RequestFailed {
+    source: InnerError::BadPassword {
+        password: "secret".into(),
+    },
+};
+// err.redacted_display() → "request failed: db password [REDACTED]"
+```
+
 ## SensitiveDisplay in depth
 
 `SensitiveDisplay` derives `RedactableDisplay`, which provides `fmt_redacted()` and `redacted_display()`. Unlike `Sensitive`, it produces a string rather than a redacted copy of the same type.
+
+The annotation workflow mirrors `Sensitive`:
+- **Unannotated scalars** → passthrough (unchanged)
+- **Unannotated nested types** → use their `RedactableDisplay` implementation
+- **`#[sensitive(Policy)]`** → apply redaction policy
 
 ### Template syntax
 
@@ -426,10 +462,7 @@ The display template comes from one of two sources:
 #[derive(SensitiveDisplay)]
 enum ApiError {
     #[error("auth failed for {user}")]
-    AuthFailed {
-        #[not_sensitive]
-        user: String,
-    },
+    AuthFailed { user: String },
 }
 ```
 
@@ -439,10 +472,7 @@ enum ApiError {
 #[derive(SensitiveDisplay)]
 enum ApiError {
     /// auth failed for {user}
-    AuthFailed {
-        #[not_sensitive]
-        user: String,
-    },
+    AuthFailed { user: String },
 }
 ```
 
@@ -453,27 +483,38 @@ Both support:
 
 ### Field annotations
 
-Every field referenced in a template must have an explicit annotation:
+Unannotated placeholders use `RedactableDisplay`:
 
 | Annotation | Behavior |
 |---|---|
-| `#[not_sensitive]` | Renders with raw `Display` (or `Debug` if `{:?}`) |
+| *(none)* | Uses `RedactableDisplay`: scalars pass through unchanged; nested `SensitiveDisplay` types are redacted |
+| `#[not_sensitive]` | Renders with raw `Display` (or `Debug` if `{:?}`) — use for types without `RedactableDisplay` |
 | `#[sensitive(Default)]` | Scalars → default value; strings → `"[REDACTED]"` |
 | `#[sensitive(Policy)]` | Applies the policy's redaction rules |
 
-Unannotated fields produce a compile error:
+This matches `Sensitive` behavior: scalars pass through, nested containers use their redaction trait.
+
+Unannotated fields that do not implement `RedactableDisplay` produce a compile error:
 
 ```rust
+struct ExternalContext;
+
+impl std::fmt::Display for ExternalContext {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("external")
+    }
+}
+
 #[derive(SensitiveDisplay)]
 enum LoginError {
     #[error("context {ctx}")]
     Failed {
-        ctx: String,  // ❌ ERROR: must be annotated with #[sensitive(Policy)] or #[not_sensitive]
+        ctx: ExternalContext,  // ❌ ERROR: does not implement RedactableDisplay
     },
 }
 ```
 
-This prevents accidental exposure when adding new fields.
+This prevents accidental exposure when adding new fields while still making nested redaction ergonomic.
 
 ## Decision guide
 
@@ -851,7 +892,7 @@ trace_safe!("email" = user.email);                 // ❌ Won't compile - raw St
 
 | Trait | Purpose | Implemented By |
 |---|---|---|
-| `RedactableDisplay` | Redacted string formatting | `SensitiveDisplay` derive |
+| `RedactableDisplay` | Redacted string formatting | `SensitiveDisplay` derive, scalars (passthrough) |
 | `SlogRedactedExt` | slog structured JSON logging | Types implementing `Redactable + Serialize` |
 | `TracingRedactedExt` | tracing display string logging | Types implementing `ToRedactedOutput` |
 | `TracingValuableExt` | tracing structured logging via `valuable` | Types implementing `Redactable + Valuable` |
@@ -867,6 +908,10 @@ Note: `SensitiveDisplay` also generates `slog::Value` when the `slog` feature is
 
 **Scalars** (with `#[sensitive(Default)]`):
 - Integers → `0`, floats → `0.0`, `bool` → `false`, `char` → `'*'`
+
+**Scalars** (implement `RedactableDisplay` as passthrough):
+- `String`, `str`, `bool`, `char`, integers, floats, `Cow<str>`, `PhantomData`, `()`
+- Feature-gated: `chrono` types, `time` types, `Uuid`
 
 **Containers** (implement `RedactableContainer`):
 - `Option<T>`, `Vec<T>`, `Box<T>`, `Arc<T>`, `Result<T, E>`
