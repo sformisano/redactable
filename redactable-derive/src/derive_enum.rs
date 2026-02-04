@@ -141,7 +141,7 @@ fn derive_named_variant(
         let ty = &field.ty;
         bindings.push(ident);
 
-        let is_sensitive = matches!(&strategy, Strategy::Classify(_));
+        let is_sensitive = matches!(&strategy, Strategy::Policy(_));
         let transform = generate_field_transform(derive_ctx, ty, &binding, span, &strategy)?;
 
         let debug_redacted_field = if is_sensitive {
@@ -207,7 +207,7 @@ fn derive_unnamed_variant(
         let strategy = parse_field_strategy(&field.attrs)?;
         bindings.push(ident);
 
-        let is_sensitive = matches!(&strategy, Strategy::Classify(_));
+        let is_sensitive = matches!(&strategy, Strategy::Policy(_));
         let transform = generate_field_transform(derive_ctx, ty, &binding, span, &strategy)?;
 
         let debug_redacted_field = if is_sensitive {

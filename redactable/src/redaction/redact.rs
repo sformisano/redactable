@@ -149,6 +149,18 @@ where
     value.apply_policy::<P, _>(&mapper)
 }
 
+/// Applies a redaction policy to a policy-applicable value by reference.
+///
+/// This avoids cloning the input value and is used for redacted display formatting.
+pub fn apply_policy_ref<P, V>(value: &V) -> V::Output
+where
+    P: RedactionPolicy,
+    V: PolicyApplicableRef,
+{
+    let mapper = PolicyMapper;
+    value.apply_policy_ref::<P, _>(&mapper)
+}
+
 // =============================================================================
 // PolicyApplicable - Recursive policy application
 // =============================================================================
@@ -192,6 +204,23 @@ pub trait PolicyApplicable {
         M: RedactableMapper;
 }
 
+/// A type that can have a redaction policy applied recursively by reference.
+///
+/// This mirrors [`PolicyApplicable`] but avoids cloning the input. It is used
+/// primarily for redacted display formatting.
+#[doc(hidden)]
+pub trait PolicyApplicableRef {
+    /// The redacted output type.
+    type Output;
+
+    /// Applies a redaction policy through the type structure by reference.
+    #[must_use]
+    fn apply_policy_ref<P, M>(&self, mapper: &M) -> Self::Output
+    where
+        P: RedactionPolicy,
+        M: RedactableMapper;
+}
+
 // =============================================================================
 // PolicyApplicable: Base case implementations (leaf types)
 // =============================================================================
@@ -217,6 +246,49 @@ impl PolicyApplicable for Cow<'_, str> {
 }
 
 // =============================================================================
+// PolicyApplicableRef: Base case implementations (leaf types)
+// =============================================================================
+
+impl PolicyApplicableRef for String {
+    type Output = String;
+
+    fn apply_policy_ref<P, M>(&self, _mapper: &M) -> Self::Output
+    where
+        P: RedactionPolicy,
+        M: RedactableMapper,
+    {
+        let policy = P::policy();
+        policy.apply_to(self.as_str())
+    }
+}
+
+impl PolicyApplicableRef for Cow<'_, str> {
+    type Output = Cow<'static, str>;
+
+    fn apply_policy_ref<P, M>(&self, _mapper: &M) -> Self::Output
+    where
+        P: RedactionPolicy,
+        M: RedactableMapper,
+    {
+        let policy = P::policy();
+        Cow::Owned(policy.apply_to(self.as_ref()))
+    }
+}
+
+impl PolicyApplicableRef for &str {
+    type Output = String;
+
+    fn apply_policy_ref<P, M>(&self, _mapper: &M) -> Self::Output
+    where
+        P: RedactionPolicy,
+        M: RedactableMapper,
+    {
+        let policy = P::policy();
+        policy.apply_to(self)
+    }
+}
+
+// =============================================================================
 // PolicyApplicable: Recursive implementations (wrapper types)
 // =============================================================================
 
@@ -227,6 +299,76 @@ impl<T: PolicyApplicable> PolicyApplicable for Option<T> {
         M: RedactableMapper,
     {
         self.map(|v| v.apply_policy::<P, M>(mapper))
+    }
+}
+
+// =============================================================================
+// PolicyApplicableRef: Recursive implementations (wrapper types)
+// =============================================================================
+
+impl<T> PolicyApplicableRef for Option<T>
+where
+    T: PolicyApplicableRef,
+{
+    type Output = Option<T::Output>;
+
+    fn apply_policy_ref<P, M>(&self, mapper: &M) -> Self::Output
+    where
+        P: RedactionPolicy,
+        M: RedactableMapper,
+    {
+        self.as_ref().map(|v| v.apply_policy_ref::<P, M>(mapper))
+    }
+}
+
+impl<T> PolicyApplicableRef for Vec<T>
+where
+    T: PolicyApplicableRef,
+{
+    type Output = Vec<T::Output>;
+
+    fn apply_policy_ref<P, M>(&self, mapper: &M) -> Self::Output
+    where
+        P: RedactionPolicy,
+        M: RedactableMapper,
+    {
+        self.iter()
+            .map(|v| v.apply_policy_ref::<P, M>(mapper))
+            .collect()
+    }
+}
+
+impl<T> PolicyApplicableRef for Box<T>
+where
+    T: PolicyApplicableRef,
+{
+    type Output = Box<T::Output>;
+
+    fn apply_policy_ref<P, M>(&self, mapper: &M) -> Self::Output
+    where
+        P: RedactionPolicy,
+        M: RedactableMapper,
+    {
+        Box::new((**self).apply_policy_ref::<P, M>(mapper))
+    }
+}
+
+impl<T, E> PolicyApplicableRef for Result<T, E>
+where
+    T: PolicyApplicableRef,
+    E: PolicyApplicableRef,
+{
+    type Output = Result<T::Output, E::Output>;
+
+    fn apply_policy_ref<P, M>(&self, mapper: &M) -> Self::Output
+    where
+        P: RedactionPolicy,
+        M: RedactableMapper,
+    {
+        match self {
+            Ok(v) => Ok(v.apply_policy_ref::<P, M>(mapper)),
+            Err(e) => Err(e.apply_policy_ref::<P, M>(mapper)),
+        }
     }
 }
 
@@ -274,15 +416,14 @@ impl<K, V, S> PolicyApplicable for HashMap<K, V, S>
 where
     K: Hash + Eq,
     V: PolicyApplicable,
-    S: BuildHasher + Clone,
+    S: BuildHasher + Default,
 {
     fn apply_policy<P, M>(self, mapper: &M) -> Self
     where
         P: RedactionPolicy,
         M: RedactableMapper,
     {
-        let hasher = self.hasher().clone();
-        let mut result = HashMap::with_hasher(hasher);
+        let mut result = HashMap::with_capacity_and_hasher(self.len(), S::default());
         result.extend(
             self.into_iter()
                 .map(|(k, v)| (k, v.apply_policy::<P, M>(mapper))),
@@ -307,19 +448,62 @@ where
     }
 }
 
-// Sets: apply policy to elements
+impl<K, V, S> PolicyApplicableRef for HashMap<K, V, S>
+where
+    K: Hash + Eq + Clone,
+    V: PolicyApplicableRef,
+    S: BuildHasher + Default,
+{
+    type Output = HashMap<K, V::Output, S>;
+
+    fn apply_policy_ref<P, M>(&self, mapper: &M) -> Self::Output
+    where
+        P: RedactionPolicy,
+        M: RedactableMapper,
+    {
+        let mut result = HashMap::with_capacity_and_hasher(self.len(), S::default());
+        result.extend(
+            self.iter()
+                .map(|(k, v)| (k.clone(), v.apply_policy_ref::<P, M>(mapper))),
+        );
+        result
+    }
+}
+
+impl<K, V> PolicyApplicableRef for BTreeMap<K, V>
+where
+    K: Ord + Clone,
+    V: PolicyApplicableRef,
+{
+    type Output = BTreeMap<K, V::Output>;
+
+    fn apply_policy_ref<P, M>(&self, mapper: &M) -> Self::Output
+    where
+        P: RedactionPolicy,
+        M: RedactableMapper,
+    {
+        self.iter()
+            .map(|(k, v)| (k.clone(), v.apply_policy_ref::<P, M>(mapper)))
+            .collect()
+    }
+}
+
+// Sets: apply policy to elements.
+//
+// **Warning**: Sets may shrink after redaction. If multiple distinct values redact
+// to the same string (e.g., all to `"[REDACTED]"`), the resulting set will have
+// fewer elements. If cardinality matters, use `Vec` instead.
 impl<T, S> PolicyApplicable for HashSet<T, S>
 where
     T: PolicyApplicable + Hash + Eq,
-    S: BuildHasher + Clone,
+    S: BuildHasher + Default,
 {
     fn apply_policy<P, M>(self, mapper: &M) -> Self
     where
         P: RedactionPolicy,
         M: RedactableMapper,
     {
-        let hasher = self.hasher().clone();
-        let mut result = HashSet::with_hasher(hasher);
+        let mut result = HashSet::with_capacity_and_hasher(self.len(), S::default());
         result.extend(self.into_iter().map(|v| v.apply_policy::<P, M>(mapper)));
         result
     }
@@ -340,11 +524,48 @@ where
     }
 }
 
+impl<T, S> PolicyApplicableRef for HashSet<T, S>
+where
+    T: PolicyApplicableRef,
+    T::Output: Hash + Eq,
+    S: BuildHasher + Default,
+{
+    type Output = HashSet<T::Output, S>;
+
+    fn apply_policy_ref<P, M>(&self, mapper: &M) -> Self::Output
+    where
+        P: RedactionPolicy,
+        M: RedactableMapper,
+    {
+        let mut result = HashSet::with_capacity_and_hasher(self.len(), S::default());
+        result.extend(self.iter().map(|v| v.apply_policy_ref::<P, M>(mapper)));
+        result
+    }
+}
+
+impl<T> PolicyApplicableRef for BTreeSet<T>
+where
+    T: PolicyApplicableRef,
+    T::Output: Ord,
+{
+    type Output = BTreeSet<T::Output>;
+
+    fn apply_policy_ref<P, M>(&self, mapper: &M) -> Self::Output
+    where
+        P: RedactionPolicy,
+        M: RedactableMapper,
+    {
+        self.iter()
+            .map(|v| v.apply_policy_ref::<P, M>(mapper))
+            .collect()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::collections::HashMap;
 
-    use super::redact;
+    use super::{apply_policy_ref, redact};
     use crate::{Default, Sensitive};
 
     #[test]
@@ -507,5 +728,19 @@ mod tests {
             redacted.data.get("secrets"),
             Some(&vec!["[REDACTED]".to_string(), "[REDACTED]".to_string()])
         );
+    }
+
+    #[test]
+    fn apply_policy_ref_to_str() {
+        let value = "secret";
+        let redacted = apply_policy_ref::<Default, _>(&value);
+        assert_eq!(redacted, "[REDACTED]");
+    }
+
+    #[test]
+    fn apply_policy_ref_to_option_str() {
+        let value: Option<&str> = Some("secret");
+        let redacted = apply_policy_ref::<Default, _>(&value);
+        assert_eq!(redacted, Some("[REDACTED]".to_string()));
     }
 }

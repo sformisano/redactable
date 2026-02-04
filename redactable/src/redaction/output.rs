@@ -109,7 +109,7 @@ where
         let redacted = self.0.clone().redact();
         match serde_json::to_value(redacted) {
             Ok(json) => RedactedOutput::Json(json),
-            Err(_) => RedactedOutput::Text("Failed to serialize redacted value".to_string()),
+            Err(err) => RedactedOutput::Text(format!("Failed to serialize redacted value: {err}")),
         }
     }
 }

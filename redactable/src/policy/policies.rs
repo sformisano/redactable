@@ -110,30 +110,6 @@ impl RedactionPolicy for IpAddress {
     }
 }
 
-/// Policy marker for error sources in `SensitiveError`.
-///
-/// Use `#[sensitive(Error)]` on error fields that implement `RedactableError` to
-/// format them via `RedactableError::redacted_error()`. This is typically used for
-/// error chaining where the inner error also contains sensitive data.
-///
-/// This marker does not have a `RedactionPolicy` implementation as it's handled
-/// specially by the derive macro.
-///
-/// # Example
-///
-/// ```ignore
-/// #[derive(SensitiveError)]
-/// enum OuterError {
-///     #[error("operation failed: {inner}")]
-///     Wrapped {
-///         #[sensitive(Error)]
-///         inner: InnerError,
-///     },
-/// }
-/// ```
-#[derive(Clone, Copy)]
-pub struct Error;
-
 /// Policy marker for phone numbers.
 ///
 /// Keeps the last 4 digits visible (e.g., `"+1-555-123-4567"` → `"***********4567"`).

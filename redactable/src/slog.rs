@@ -22,8 +22,8 @@ use slog::{Key, Record, Result as SlogResult, Serializer, Value as SlogValue};
 use crate::{
     policy::RedactionPolicy,
     redaction::{
-        NotSensitiveDebug, NotSensitiveDisplay, NotSensitiveJson, Redactable, RedactableError,
-        RedactableLeaf, RedactedJsonRef, RedactedOutput, RedactedOutputRef, SensitiveValue,
+        NotSensitiveDebug, NotSensitiveDisplay, NotSensitiveJson, Redactable, RedactableDisplay,
+        RedactableWithPolicy, RedactedJsonRef, RedactedOutput, RedactedOutputRef, SensitiveValue,
         ToRedactedOutput,
     },
 };
@@ -104,8 +104,8 @@ pub trait SlogRedactedExt: Redactable + fmt::Debug + Serialize + Sized {
     /// `"Failed to serialize redacted value"`.
     fn slog_redacted_json(self) -> RedactedJson {
         let redacted = self.redact();
-        let json_value = serde_json::to_value(redacted).unwrap_or_else(|_| {
-            JsonValue::String("Failed to serialize redacted value".to_string())
+        let json_value = serde_json::to_value(redacted).unwrap_or_else(|err| {
+            JsonValue::String(format!("Failed to serialize redacted value: {err}"))
         });
         RedactedJson::new(json_value)
     }
@@ -128,7 +128,7 @@ impl<T> IntoRedactedJson for T where T: SlogRedactedExt {}
 
 impl<T, P> SlogValue for SensitiveValue<T, P>
 where
-    T: RedactableLeaf,
+    T: RedactableWithPolicy<P>,
     P: RedactionPolicy,
 {
     fn serialize(
@@ -211,12 +211,12 @@ where
     }
 }
 
-/// Wrapper for values that implement `RedactableError` to participate in slog logging.
-pub struct RedactedErrorValue<'a, T: ?Sized>(&'a T);
+/// Wrapper for values that implement `RedactableDisplay` to participate in slog logging.
+pub struct RedactedDisplayValue<'a, T: ?Sized>(&'a T);
 
-impl<T> SlogValue for RedactedErrorValue<'_, T>
+impl<T> SlogValue for RedactedDisplayValue<'_, T>
 where
-    T: RedactableError,
+    T: RedactableDisplay,
 {
     fn serialize(
         &self,

@@ -27,9 +27,10 @@ use crate::policy::RedactionPolicy;
 /// wrap the value in `SensitiveValue<T, P>` to apply the policy.
 ///
 /// **Serialization:** when the `json` feature is enabled, `serde::Serialize`
-/// emits the raw inner value unchanged. This is intentional; call `.redact()`,
-/// `.redacted()`, or `.to_redacted_output()` before serialization if you need
-/// redacted output.
+/// emits the raw inner value unchanged. This is intentional. If you need
+/// redacted JSON, use `.redacted()`, `.to_redacted_output()`, or
+/// `redacted_json()` (from `RedactedJsonExt`) at the logging/serialization
+/// boundary instead of serializing the wrapper directly.
 ///
 /// Leaf values are **atomic**: if `T` implements `RedactableLeaf` (even if `T`
 /// is a struct), its fields are not traversed.

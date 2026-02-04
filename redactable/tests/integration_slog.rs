@@ -10,9 +10,9 @@
 use std::{cell::RefCell, collections::HashMap, fmt, fmt::Arguments};
 
 use redactable::{
-    Default, Email, NotSensitiveJsonExt, PhoneNumber, Pii, RedactableContainer, RedactableMapper,
-    RedactedJsonExt, RedactedOutput, RedactionPolicy, SensitiveData, SensitiveError,
-    TextRedactionPolicy, ToRedactedOutput, Token, slog::SlogRedactedExt,
+    Default, Email, NotSensitiveJsonExt, PhoneNumber, Pii, RedactableContainer, RedactableDisplay,
+    RedactableMapper, RedactedJsonExt, RedactedOutput, RedactionPolicy, SensitiveData,
+    SensitiveDisplay, TextRedactionPolicy, ToRedactedOutput, Token, slog::SlogRedactedExt,
 };
 use serde::Serialize;
 use serde_json::Value as JsonValue;
@@ -277,7 +277,7 @@ fn test_redacted_json_wrapper_produces_json() {
 }
 
 #[test]
-fn test_sensitive_error_emits_redacted_string() {
+fn test_sensitive_display_emits_redacted_string() {
     #[derive(Debug)]
     struct NonSerializable {
         _detail: String,
@@ -289,13 +289,15 @@ fn test_sensitive_error_emits_redacted_string() {
         }
     }
 
-    #[derive(SensitiveError)]
+    #[derive(SensitiveDisplay)]
     enum LoginError {
         #[error("invalid login for {username} {password} {context:?} {attempts}")]
         InvalidCredentials {
+            #[not_sensitive]
             username: String,
             #[sensitive(Default)]
             password: String,
+            #[not_sensitive]
             context: NonSerializable,
             #[sensitive(Default)]
             attempts: usize,
@@ -325,11 +327,12 @@ fn test_sensitive_error_emits_redacted_string() {
 }
 
 #[test]
-fn test_log_redacted_bound_accepts_sensitive_error() {
-    #[derive(SensitiveError)]
+fn test_log_redacted_bound_accepts_sensitive_display() {
+    #[derive(SensitiveDisplay)]
     enum LoginError {
         #[error("login failed for {user} {password}")]
         Invalid {
+            #[not_sensitive]
             user: String,
             #[sensitive(Default)]
             password: String,
@@ -349,8 +352,8 @@ fn test_log_redacted_bound_accepts_sensitive_error() {
 }
 
 #[test]
-fn test_sensitive_error_nested_and_policy_display() {
-    #[derive(SensitiveError)]
+fn test_sensitive_display_nested_and_policy_display() {
+    #[derive(SensitiveDisplay)]
     enum InnerError {
         #[error("invalid api_key {api_key}")]
         InvalidApiKey {
@@ -359,13 +362,20 @@ fn test_sensitive_error_nested_and_policy_display() {
         },
     }
 
-    #[derive(SensitiveError)]
+    impl fmt::Display for InnerError {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            self.fmt_redacted(f)
+        }
+    }
+
+    #[derive(SensitiveDisplay)]
     enum OuterError {
         #[error("user {user} {inner}")]
         Failure {
+            #[not_sensitive]
             user: String,
-            #[sensitive(Error)]
-            inner: InnerError, // Nested errors are formatted via RedactableError
+            #[not_sensitive]
+            inner: InnerError,
         },
     }
 
@@ -388,11 +398,45 @@ fn test_sensitive_error_nested_and_policy_display() {
 }
 
 #[test]
-fn test_sensitive_error_doc_comment_template() {
-    #[derive(SensitiveError)]
+fn test_sensitive_display_raw_opt_out() {
+    struct RawContext;
+
+    impl fmt::Display for RawContext {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            f.write_str("raw-context")
+        }
+    }
+
+    #[derive(SensitiveDisplay)]
+    enum RawError {
+        #[error("context {context}")]
+        Failure {
+            #[not_sensitive]
+            context: RawContext,
+        },
+    }
+
+    let err = RawError::Failure {
+        context: RawContext,
+    };
+
+    let mut serializer = CapturingSerializer::new();
+    serialize_to_capture(&err, "error", &mut serializer);
+
+    if let Some(CapturedValue::Str(value)) = serializer.get("error") {
+        assert_eq!(value, "context raw-context");
+    } else {
+        panic!("Expected Str value for 'error' key");
+    }
+}
+
+#[test]
+fn test_sensitive_display_doc_comment_template() {
+    #[derive(SensitiveDisplay)]
     enum DocError {
         /// user {user} {secret}
         Variant {
+            #[not_sensitive]
             user: String,
             #[sensitive(Default)]
             secret: String,
@@ -415,7 +459,7 @@ fn test_sensitive_error_doc_comment_template() {
 }
 
 #[test]
-fn test_sensitive_error_error_attr_named_and_debug_specifiers() {
+fn test_sensitive_display_error_attr_named_and_debug_specifiers() {
     struct ModeValue;
 
     impl fmt::Display for ModeValue {
@@ -436,12 +480,15 @@ fn test_sensitive_error_error_attr_named_and_debug_specifiers() {
         }
     }
 
-    #[derive(SensitiveError)]
+    #[derive(SensitiveDisplay)]
     enum LoginError {
         #[error("user {user} mode {mode} ctx {context:?} secret {password}")]
         Invalid {
+            #[not_sensitive]
             user: String,
+            #[not_sensitive]
             mode: ModeValue,
+            #[not_sensitive]
             context: ModeValue,
             #[sensitive(Default)]
             password: String,
@@ -466,11 +513,11 @@ fn test_sensitive_error_error_attr_named_and_debug_specifiers() {
 }
 
 #[test]
-fn test_sensitive_error_error_attr_positional_fields() {
-    #[derive(SensitiveError)]
+fn test_sensitive_display_error_attr_positional_fields() {
+    #[derive(SensitiveDisplay)]
     enum PositionalError {
         #[error("code {0} secret {1}")]
-        Invalid(String, #[sensitive(Default)] String),
+        Invalid(#[not_sensitive] String, #[sensitive(Default)] String),
     }
 
     let err = PositionalError::Invalid("E123".into(), "super_secret".into());
@@ -486,11 +533,11 @@ fn test_sensitive_error_error_attr_positional_fields() {
 }
 
 #[test]
-fn test_sensitive_error_doc_comment_positional_fields() {
-    #[derive(SensitiveError)]
+fn test_sensitive_display_doc_comment_positional_fields() {
+    #[derive(SensitiveDisplay)]
     enum DocPositionalError {
         /// code {0} name {1:?}
-        Invalid(String, #[sensitive(Pii)] String),
+        Invalid(#[not_sensitive] String, #[sensitive(Pii)] String),
     }
 
     let err = DocPositionalError::Invalid("E42".into(), "John Smith".into());
