@@ -378,15 +378,30 @@ fn expand(input: DeriveInput, slog_mode: SlogMode) -> Result<TokenStream> {
                         serializer.emit_arguments(key, &format_args!("{}", redacted))
                     }
                 }
+
+                impl #slog_impl_generics #crate_root::slog::SlogRedacted for #ident #slog_ty_generics #slog_where_clause {}
             }
         };
 
         #[cfg(not(feature = "slog"))]
         let slog_impl = quote! {};
 
+        #[cfg(feature = "tracing")]
+        let tracing_impl = {
+            let (tracing_impl_generics, tracing_ty_generics, tracing_where_clause) =
+                redacted_display_generics.split_for_impl();
+            quote! {
+                impl #tracing_impl_generics #crate_root::tracing::TracingRedacted for #ident #tracing_ty_generics #tracing_where_clause {}
+            }
+        };
+
+        #[cfg(not(feature = "tracing"))]
+        let tracing_impl = quote! {};
+
         return Ok(quote! {
             #redacted_display_impl
             #slog_impl
+            #tracing_impl
         });
     }
 
@@ -573,6 +588,8 @@ fn expand(input: DeriveInput, slog_mode: SlogMode) -> Result<TokenStream> {
                             #slog_crate::Value::serialize(&redacted, _record, key, serializer)
                         }
                     }
+
+                    impl #slog_impl_generics #crate_root::slog::SlogRedacted for #ident #slog_ty_generics #slog_where_clause {}
                 }
             }
             SlogMode::RedactedDisplay => {
@@ -593,6 +610,8 @@ fn expand(input: DeriveInput, slog_mode: SlogMode) -> Result<TokenStream> {
                             serializer.emit_arguments(key, &format_args!("{}", redacted))
                         }
                     }
+
+                    impl #slog_impl_generics #crate_root::slog::SlogRedacted for #ident #slog_ty_generics #slog_where_clause {}
                 }
             }
         }
@@ -600,6 +619,14 @@ fn expand(input: DeriveInput, slog_mode: SlogMode) -> Result<TokenStream> {
 
     #[cfg(not(feature = "slog"))]
     let slog_impl = quote! {};
+
+    #[cfg(feature = "tracing")]
+    let tracing_impl = quote! {
+        impl #impl_generics #crate_root::tracing::TracingRedacted for #ident #ty_generics #where_clause {}
+    };
+
+    #[cfg(not(feature = "tracing"))]
+    let tracing_impl = quote! {};
 
     let trait_impl = quote! {
         impl #impl_generics #crate_root::RedactableContainer for #ident #ty_generics #where_clause {
@@ -614,6 +641,8 @@ fn expand(input: DeriveInput, slog_mode: SlogMode) -> Result<TokenStream> {
         #redacted_display_impl
 
         #slog_impl
+
+        #tracing_impl
 
         // `slog` already provides `impl<V: Value> Value for &V`, so a reference
         // impl here would conflict with the blanket impl.

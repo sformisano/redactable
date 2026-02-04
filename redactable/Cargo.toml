@@ -19,7 +19,7 @@ policy = []
 redaction = ["policy"]
 json = ["redaction", "dep:serde", "dep:serde_json"]
 slog = ["json", "dep:slog", "redactable-derive/slog"]
-tracing = ["json", "dep:tracing"]
+tracing = ["json", "dep:tracing", "redactable-derive/tracing"]
 tracing-valuable = ["tracing", "dep:valuable", "tracing/valuable"]
 testing = []
 chrono = ["dep:chrono"]
@@ -29,7 +29,7 @@ uuid = ["dep:uuid"]
 extras = ["chrono", "time", "uuid", "ip-address"]
 
 [dependencies]
-redactable-derive = { version = "0.2.1", path = "../redactable-derive" }
+redactable-derive = { version = "0.2.2", path = "../redactable-derive" }
 serde = { version = "1", optional = true, features = ["derive"] }
 serde_json = { version = "1", optional = true }
 slog = { version = "2.8", optional = true, features = ["nested-values"] }

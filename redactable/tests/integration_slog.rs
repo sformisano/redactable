@@ -12,7 +12,8 @@ use std::{cell::RefCell, collections::HashMap, fmt, fmt::Arguments};
 use redactable::{
     Default, Email, NotSensitiveJsonExt, PhoneNumber, Pii, RedactableContainer, RedactableDisplay,
     RedactableMapper, RedactedJsonExt, RedactedOutput, RedactionPolicy, SensitiveData,
-    SensitiveDisplay, TextRedactionPolicy, ToRedactedOutput, Token, slog::SlogRedactedExt,
+    SensitiveDisplay, TextRedactionPolicy, ToRedactedOutput, Token,
+    slog::{SlogRedacted, SlogRedactedExt},
 };
 use serde::Serialize;
 use serde_json::Value as JsonValue;
@@ -130,6 +131,19 @@ fn serialize_to_capture<V: slog::Value, S: slog::Serializer>(
 
 fn log_redacted<T: ToRedactedOutput>(value: &T) -> RedactedOutput {
     value.to_redacted_output()
+}
+
+#[test]
+fn sensitive_type_implements_slog_redacted() {
+    #[derive(Clone, SensitiveData, Serialize)]
+    struct Account {
+        #[sensitive(Email)]
+        email: String,
+    }
+
+    fn assert_slog_redacted<T: SlogRedacted>() {}
+
+    assert_slog_redacted::<Account>();
 }
 
 // ============================================================================
