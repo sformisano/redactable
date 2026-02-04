@@ -175,6 +175,20 @@ pub(crate) fn add_policy_applicable_bounds(
     generics
 }
 
+/// Adds `PolicyApplicableRef` bounds to generic parameters used in policy-annotated fields.
+pub(crate) fn add_policy_applicable_ref_bounds(
+    mut generics: syn::Generics,
+    used_generics: &[Ident],
+) -> syn::Generics {
+    for param in generics.type_params_mut() {
+        if used_generics.iter().any(|g| g == &param.ident) {
+            let policy_applicable_path = crate_path("PolicyApplicableRef");
+            param.bounds.push(parse_quote!(#policy_applicable_path));
+        }
+    }
+    generics
+}
+
 pub(crate) fn add_debug_bounds(
     mut generics: syn::Generics,
     used_generics: &[Ident],
@@ -199,25 +213,13 @@ pub(crate) fn add_display_bounds(
     generics
 }
 
-pub(crate) fn add_clone_bounds(
-    mut generics: syn::Generics,
-    used_generics: &[Ident],
-) -> syn::Generics {
-    for param in generics.type_params_mut() {
-        if used_generics.iter().any(|g| g == &param.ident) {
-            param.bounds.push(parse_quote!(::core::clone::Clone));
-        }
-    }
-    generics
-}
-
 pub(crate) fn add_redacted_display_bounds(
     mut generics: syn::Generics,
     used_generics: &[Ident],
 ) -> syn::Generics {
     for param in generics.type_params_mut() {
         if used_generics.iter().any(|g| g == &param.ident) {
-            let redacted_display_path = crate_path("RedactableError");
+            let redacted_display_path = crate_path("RedactableDisplay");
             param.bounds.push(parse_quote!(#redacted_display_path));
         }
     }

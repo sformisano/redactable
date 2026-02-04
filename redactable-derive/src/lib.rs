@@ -1,7 +1,7 @@
 //! Derive macros for `redactable`.
 //!
 //! This crate generates traversal code behind `#[derive(Sensitive)]` and
-//! `#[derive(SensitiveError)]`. It:
+//! `#[derive(SensitiveDisplay)]`. It:
 //! - reads `#[sensitive(...)]` field attributes
 //! - emits a `RedactableContainer` implementation that calls into a mapper
 //!
@@ -86,8 +86,8 @@ use container::{ContainerOptions, parse_container_options};
 use derive_enum::derive_enum;
 use derive_struct::derive_struct;
 use generics::{
-    add_clone_bounds, add_container_bounds, add_debug_bounds, add_display_bounds,
-    add_policy_applicable_bounds, add_redacted_display_bounds,
+    add_container_bounds, add_debug_bounds, add_display_bounds, add_policy_applicable_bounds,
+    add_policy_applicable_ref_bounds, add_redacted_display_bounds,
 };
 use redacted_display::derive_redacted_display;
 
@@ -211,23 +211,22 @@ pub fn derive_not_sensitive(input: proc_macro::TokenStream) -> proc_macro::Token
     tokens.into()
 }
 
-/// Derives `redactable::RedactableContainer` for types that should log without `Serialize`.
+/// Derives `redactable::RedactableDisplay` using a display template.
 ///
-/// This emits the same traversal and redacted `Debug` impls as `Sensitive`, but uses
-/// a `slog::Value` implementation that logs a redacted string derived from a
-/// display template.
+/// This generates a redacted string representation without requiring `Clone`.
+/// Every field referenced in the template **must** be explicitly annotated:
+///
+/// - `#[sensitive(Policy)]`: Apply the policy's redaction rules
+/// - `#[not_sensitive]`: Render raw (explicit opt-out)
 ///
 /// The display template is taken from `#[error("...")]` (thiserror-style) or from
-/// doc comments (displaydoc-style). If neither is present, the derive fails with a
-/// compile error to avoid accidental exposure of sensitive fields.
+/// doc comments (displaydoc-style). If neither is present, the derive fails.
 ///
-/// Classified fields referenced in the template are redacted by applying the
-/// policy to an owned copy of the field value, so those field types must
-/// implement `Clone`.
-#[proc_macro_derive(SensitiveError, attributes(sensitive, error))]
-pub fn derive_sensitive_error(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
+/// Fields are redacted by reference, so field types do not need `Clone`.
+#[proc_macro_derive(SensitiveDisplay, attributes(sensitive, not_sensitive, error))]
+pub fn derive_sensitive_display(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
-    match expand(input, SlogMode::RedactableErrorString) {
+    match expand(input, SlogMode::RedactedDisplay) {
         Ok(tokens) => tokens.into(),
         Err(err) => err.into_compile_error().into(),
     }
@@ -298,13 +297,13 @@ struct DeriveOutput {
     redacted_display_body: Option<TokenStream>,
     redacted_display_generics: Vec<Ident>,
     redacted_display_debug_generics: Vec<Ident>,
-    redacted_display_clone_generics: Vec<Ident>,
+    redacted_display_policy_ref_generics: Vec<Ident>,
     redacted_display_nested_generics: Vec<Ident>,
 }
 
 enum SlogMode {
     RedactedJson,
-    RedactableErrorString,
+    RedactedDisplay,
 }
 
 #[allow(clippy::too_many_lines)]
@@ -321,7 +320,73 @@ fn expand(input: DeriveInput, slog_mode: SlogMode) -> Result<TokenStream> {
 
     let crate_root = crate_root();
 
-    let redacted_display_output = if matches!(slog_mode, SlogMode::RedactableErrorString) {
+    if matches!(slog_mode, SlogMode::RedactedDisplay) {
+        let redacted_display_output = derive_redacted_display(&ident, &data, &attrs, &generics)?;
+        let redacted_display_generics =
+            add_display_bounds(generics.clone(), &redacted_display_output.display_generics);
+        let redacted_display_generics = add_debug_bounds(
+            redacted_display_generics,
+            &redacted_display_output.debug_generics,
+        );
+        let redacted_display_generics = add_policy_applicable_ref_bounds(
+            redacted_display_generics,
+            &redacted_display_output.policy_ref_generics,
+        );
+        let redacted_display_generics = add_redacted_display_bounds(
+            redacted_display_generics,
+            &redacted_display_output.nested_generics,
+        );
+        let (display_impl_generics, display_ty_generics, display_where_clause) =
+            redacted_display_generics.split_for_impl();
+        let redacted_display_body = redacted_display_output.body;
+        let redacted_display_impl = quote! {
+            impl #display_impl_generics #crate_root::RedactableDisplay for #ident #display_ty_generics #display_where_clause {
+                fn fmt_redacted(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+                    #redacted_display_body
+                }
+            }
+        };
+
+        // Only generate slog impl when the slog feature is enabled on redactable-derive.
+        // If slog is not available, emit a clear error with instructions.
+        #[cfg(feature = "slog")]
+        let slog_impl = {
+            let slog_crate = slog_crate()?;
+            let mut slog_generics = generics;
+            // Get ty_generics first (immutable borrow) before make_where_clause (mutable borrow)
+            let (_, ty_generics, _) = slog_generics.split_for_impl();
+            let self_ty: syn::Type = parse_quote!(#ident #ty_generics);
+            slog_generics
+                .make_where_clause()
+                .predicates
+                .push(parse_quote!(#self_ty: #crate_root::RedactableDisplay));
+            let (slog_impl_generics, slog_ty_generics, slog_where_clause) =
+                slog_generics.split_for_impl();
+            quote! {
+                impl #slog_impl_generics #slog_crate::Value for #ident #slog_ty_generics #slog_where_clause {
+                    fn serialize(
+                        &self,
+                        _record: &#slog_crate::Record<'_>,
+                        key: #slog_crate::Key,
+                        serializer: &mut dyn #slog_crate::Serializer,
+                    ) -> #slog_crate::Result {
+                        let redacted = #crate_root::RedactableDisplay::redacted_display(self);
+                        serializer.emit_arguments(key, &format_args!("{}", redacted))
+                    }
+                }
+            }
+        };
+
+        #[cfg(not(feature = "slog"))]
+        let slog_impl = quote! {};
+
+        return Ok(quote! {
+            #redacted_display_impl
+            #slog_impl
+        });
+    }
+
+    let redacted_display_output = if matches!(slog_mode, SlogMode::RedactedDisplay) {
         Some(derive_redacted_display(&ident, &data, &attrs, &generics)?)
     } else {
         None
@@ -349,9 +414,9 @@ fn expand(input: DeriveInput, slog_mode: SlogMode) -> Result<TokenStream> {
                     .as_ref()
                     .map(|output| output.debug_generics.clone())
                     .unwrap_or_default(),
-                redacted_display_clone_generics: redacted_display_output
+                redacted_display_policy_ref_generics: redacted_display_output
                     .as_ref()
-                    .map(|output| output.clone_generics.clone())
+                    .map(|output| output.policy_ref_generics.clone())
                     .unwrap_or_default(),
                 redacted_display_nested_generics: redacted_display_output
                     .as_ref()
@@ -380,9 +445,9 @@ fn expand(input: DeriveInput, slog_mode: SlogMode) -> Result<TokenStream> {
                     .as_ref()
                     .map(|output| output.debug_generics.clone())
                     .unwrap_or_default(),
-                redacted_display_clone_generics: redacted_display_output
+                redacted_display_policy_ref_generics: redacted_display_output
                     .as_ref()
-                    .map(|output| output.clone_generics.clone())
+                    .map(|output| output.policy_ref_generics.clone())
                     .unwrap_or_default(),
                 redacted_display_nested_generics: redacted_display_output
                     .as_ref()
@@ -438,16 +503,16 @@ fn expand(input: DeriveInput, slog_mode: SlogMode) -> Result<TokenStream> {
     };
 
     let redacted_display_body = derive_output.redacted_display_body.as_ref();
-    let redacted_display_impl = if matches!(slog_mode, SlogMode::RedactableErrorString) {
+    let redacted_display_impl = if matches!(slog_mode, SlogMode::RedactedDisplay) {
         let redacted_display_generics =
             add_display_bounds(generics.clone(), &derive_output.redacted_display_generics);
         let redacted_display_generics = add_debug_bounds(
             redacted_display_generics,
             &derive_output.redacted_display_debug_generics,
         );
-        let redacted_display_generics = add_clone_bounds(
+        let redacted_display_generics = add_policy_applicable_ref_bounds(
             redacted_display_generics,
-            &derive_output.redacted_display_clone_generics,
+            &derive_output.redacted_display_policy_ref_generics,
         );
         let redacted_display_generics = add_redacted_display_bounds(
             redacted_display_generics,
@@ -459,7 +524,7 @@ fn expand(input: DeriveInput, slog_mode: SlogMode) -> Result<TokenStream> {
             .cloned()
             .unwrap_or_else(TokenStream::new);
         quote! {
-            impl #display_impl_generics #crate_root::RedactableError for #ident #display_ty_generics #display_where_clause {
+            impl #display_impl_generics #crate_root::RedactableDisplay for #ident #display_ty_generics #display_where_clause {
                 fn fmt_redacted(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
                     #redacted_display_body
                 }
@@ -506,10 +571,10 @@ fn expand(input: DeriveInput, slog_mode: SlogMode) -> Result<TokenStream> {
                     }
                 }
             }
-            SlogMode::RedactableErrorString => {
+            SlogMode::RedactedDisplay => {
                 slog_where_clause
                     .predicates
-                    .push(parse_quote!(#self_ty: #crate_root::RedactableError));
+                    .push(parse_quote!(#self_ty: #crate_root::RedactableDisplay));
                 let (slog_impl_generics, slog_ty_generics, slog_where_clause) =
                     slog_generics.split_for_impl();
                 quote! {
@@ -520,7 +585,7 @@ fn expand(input: DeriveInput, slog_mode: SlogMode) -> Result<TokenStream> {
                             key: #slog_crate::Key,
                             serializer: &mut dyn #slog_crate::Serializer,
                         ) -> #slog_crate::Result {
-                            let redacted = #crate_root::RedactableError::redacted_error(self);
+                            let redacted = #crate_root::RedactableDisplay::redacted_display(self);
                             serializer.emit_arguments(key, &format_args!("{}", redacted))
                         }
                     }

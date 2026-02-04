@@ -119,7 +119,9 @@ where
     fn to_redacted_output(&self) -> RedactedOutput {
         match serde_json::to_value(self.0) {
             Ok(json) => RedactedOutput::Json(json),
-            Err(_) => RedactedOutput::Text("Failed to serialize not-sensitive value".to_string()),
+            Err(err) => {
+                RedactedOutput::Text(format!("Failed to serialize not-sensitive value: {err}"))
+            }
         }
     }
 }

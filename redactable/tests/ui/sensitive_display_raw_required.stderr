@@ -1,0 +1,5 @@
+error: field `context` must be annotated with #[sensitive(Policy)] or #[not_sensitive]
+ --> tests/ui/sensitive_display_raw_required.rs:5:13
+  |
+5 |     #[error("context {context}")]
+  |             ^^^^^^^^^^^^^^^^^^^

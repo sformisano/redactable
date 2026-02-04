@@ -73,7 +73,7 @@
 // Allow some lints while testing
 #![cfg_attr(test, allow(clippy::non_ascii_literal, clippy::unwrap_used))]
 
-pub use redactable_derive::{NotSensitive, Sensitive, SensitiveData, SensitiveError};
+pub use redactable_derive::{NotSensitive, Sensitive, SensitiveData, SensitiveDisplay};
 
 #[allow(unused_extern_crates)]
 extern crate self as redactable;
@@ -91,9 +91,9 @@ pub mod tracing;
 // Re-exports from policy module
 #[cfg(feature = "policy")]
 pub use policy::{
-    BlockchainAddress, CreditCard, Default, Email, EmailConfig, Error, IpAddress, KeepConfig,
-    MASK_CHAR, MaskConfig, PhoneNumber, Pii, REDACTED_PLACEHOLDER, RedactionPolicy,
-    TextRedactionPolicy, Token,
+    BlockchainAddress, CreditCard, Default, Email, EmailConfig, IpAddress, KeepConfig, MASK_CHAR,
+    MaskConfig, PhoneNumber, Pii, REDACTED_PLACEHOLDER, RedactionPolicy, TextRedactionPolicy,
+    Token,
 };
 // Re-exports from redaction module
 #[doc(hidden)]
@@ -102,11 +102,12 @@ pub use redaction::PolicyApplicable;
 #[cfg(feature = "redaction")]
 pub use redaction::{
     NotSensitiveDebug, NotSensitiveDebugExt, NotSensitiveDisplay, NotSensitiveExt,
-    NotSensitiveValue, Redactable, RedactableContainer, RedactableError, RedactableLeaf,
-    RedactableMapper, RedactableWithPolicy, RedactedErrorRef, RedactedOutput, RedactedOutputExt,
-    RedactedOutputRef, ScalarRedaction, SensitiveValue, ToRedactedOutput, apply_policy, redact,
+    NotSensitiveValue, PolicyApplicableRef, Redactable, RedactableContainer, RedactableDisplay,
+    RedactableLeaf, RedactableMapper, RedactableWithPolicy, RedactedDisplayRef, RedactedOutput,
+    RedactedOutputExt, RedactedOutputRef, ScalarRedaction, SensitiveValue, ToRedactedOutput,
+    apply_policy, apply_policy_ref, redact,
 };
 #[cfg(feature = "json")]
 pub use redaction::{NotSensitiveJson, NotSensitiveJsonExt, RedactedJsonExt, RedactedJsonRef};
 #[cfg(feature = "slog")]
-pub use slog::{RedactedErrorValue, SlogRedactedExt};
+pub use slog::{RedactedDisplayValue, SlogRedactedExt};
