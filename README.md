@@ -17,7 +17,6 @@ are the most common use cases, but redaction is not tied to any logging framewor
   - [How `RedactableLeaf` fits in](#how-redactableleaf-fits-in)
   - [Opting out with `NotSensitive`](#opting-out-with-notsensitive)
   - [Wrapper types for foreign types](#wrapper-types-for-foreign-types)
-- [Outputs (structured vs logging)](#outputs-structured-vs-logging)
 - [Sensitive vs SensitiveDisplay](#sensitive-vs-sensitivedisplay)
   - [Sensitive (structured redaction)](#sensitive-structured-redaction)
   - [SensitiveDisplay (string formatting)](#sensitivedisplay-string-formatting)
@@ -26,15 +25,18 @@ are the most common use cases, but redaction is not tied to any logging framewor
   - [Field annotations](#field-annotations)
 - [Decision guide](#decision-guide)
 - [Logging output (explicit boundary)](#logging-output-explicit-boundary)
+  - [Wrapper safety at the boundary](#wrapper-safety-at-the-boundary)
 - [Integrations](#integrations)
   - [slog](#slog)
   - [tracing](#tracing)
+  - [Sink-specific safety traits](#sink-specific-safety-traits)
 - [Logging with maximum security](#logging-with-maximum-security)
   - [The logging footgun](#the-logging-footgun)
-  - [Option A: Enforce `ToRedactedOutput` at the logging boundary](#option-a-enforce-toredactedoutput-at-the-logging-boundary-recommended)
-  - [Option B: Use `SensitiveValue<T, P>` wrappers for sensitive leaves](#option-b-use-sensitivevaluet-p-wrappers-for-sensitive-leaves)
+  - [Built-in safety with slog and tracing](#built-in-safety-with-slog-and-tracing)
+  - [Enforcing safety with trait bounds](#enforcing-safety-with-trait-bounds)
+  - [Alternative: `SensitiveValue<T, P>` wrappers](#alternative-sensitivevaluet-p-wrappers)
   - [Trade-offs: attributes vs wrappers](#trade-offs-attributes-vs-wrappers)
-  - [Practical wrappers for slog and tracing](#practical-wrappers-for-slog-and-tracing)
+  - [Choosing an approach](#choosing-an-approach)
 - [Reference](#reference)
   - [Trait map](#trait-map)
   - [Supported types](#supported-types)
@@ -332,27 +334,6 @@ let wrapped = SensitiveForeignId::from(ForeignId("external".into()));
 
 💡 **These wrappers can also be used for types you own** to provide additional logging safety guarantees. See [Logging with maximum security](#logging-with-maximum-security) for details.
 
-## Outputs (structured vs logging)
-
-- **Structured redaction** (`Redactable` trait, `.redact()` method): returns the same type with sensitive leaves redacted
-- **Logging output** (`ToRedactedOutput` trait, `RedactedOutput` enum): converts to a safe-to-log representation
-- **Structured logging adapters**: see [Integrations](#integrations) for slog and tracing
-
-The `RedactedOutput` enum represents safe-to-log output:
-
-```rust
-use redactable::{RedactedOutput, ToRedactedOutput};
-
-let output: RedactedOutput = sensitive_value.to_redacted_output();
-match output {
-    RedactedOutput::Text(s) => /* Debug-like string */,
-    #[cfg(feature = "json")]
-    RedactedOutput::Json(v) => /* serde_json::Value - works with slog::Serde */,
-}
-```
-
-⚠️ **The Json variant uses `serde_json::Value`**, which integrates well with slog's structured logging. For tracing, the Json variant is converted to a string since tracing's `Value` trait is sealed.
-
 ## Sensitive vs SensitiveDisplay
 
 There are two derive macros for redaction. Pick the one that matches your constraints:
@@ -360,7 +341,7 @@ There are two derive macros for redaction. Pick the one that matches your constr
 | | `Sensitive` | `SensitiveDisplay` |
 |---|---|---|
 | **Output** | Same type with redacted leaves | Redacted string |
-| **Requires `Clone`** | Yes | No |
+| **Ownership** | Consumes `self` (clone if you need the original) | Borrows `self` |
 | **Traverses containers** | Yes (walks all fields) | No (only template placeholders) |
 | **Unannotated scalars** | Passthrough | Passthrough |
 | **Unannotated containers** | Walked via `RedactableContainer` | Formatted via `RedactableDisplay` |
@@ -368,7 +349,7 @@ There are two derive macros for redaction. Pick the one that matches your constr
 
 ### Sensitive (structured redaction)
 
-Use `Sensitive` when you can guarantee `Clone`. Nested containers are traversed automatically; leaves are only redacted when annotated with `#[sensitive(Policy)]`.
+Use `Sensitive` when you can consume the value (or clone it if you need the original). Nested containers are traversed automatically; leaves are only redacted when annotated with `#[sensitive(Policy)]`.
 
 ```rust
 use redactable::Sensitive;
@@ -522,8 +503,8 @@ This prevents accidental exposure when adding new fields while still making nest
 
 | Situation | Use |
 |---|---|
-| Structured data with `Clone` | `#[derive(Sensitive)]` |
-| Types without `Clone` | `#[derive(SensitiveDisplay)]` |
+| Structured data you can consume (or clone) | `#[derive(Sensitive)]` |
+| Types you only want to borrow | `#[derive(SensitiveDisplay)]` |
 | Type with no sensitive data | `#[derive(NotSensitive)]` |
 
 **Error types** are a common case: use `Sensitive` if your error type implements `Clone`, otherwise use `SensitiveDisplay`.
@@ -551,6 +532,8 @@ This prevents accidental exposure when adding new fields while still making nest
 - `RedactedOutput::Text(String)`
 - `RedactedOutput::Json(serde_json::Value)` (requires the `json` feature)
 
+⚠️ **The Json variant uses `serde_json::Value`**, which integrates well with slog's structured logging. For tracing, the Json variant is converted to a string since tracing's `Value` trait is sealed.
+
 Several wrappers produce `RedactedOutput`:
 
 - `SensitiveValue<T, Policy>` (Text)
@@ -559,6 +542,20 @@ Several wrappers produce `RedactedOutput`:
 - `NotSensitiveDisplay` / `.not_sensitive()` (Text)
 - `NotSensitiveDebug` / `.not_sensitive_debug()` (Text)
 - `NotSensitiveJson` / `.not_sensitive_json()` (Json, `json` feature)
+
+### Wrapper safety at the boundary
+
+Types that guarantee redaction for a sink implement the sink marker traits
+(`SlogRedacted`, `TracingRedacted`). In practice:
+
+- Guaranteed redaction (by definition or adapter): `SensitiveValue<T, Policy>`, `RedactedOutput`, `RedactedOutputRef`,
+  `RedactedJsonRef` (json), plus sink-specific wrappers like `slog::RedactedJson` and
+  `tracing::RedactedValuable` (with `tracing-valuable`)
+- Derived types: `Sensitive` and `SensitiveDisplay` implement the marker traits when the sink
+  feature is enabled
+- Explicitly non-sensitive: `NotSensitiveDisplay`, `NotSensitiveDebug`, `NotSensitiveJson`
+  (you are asserting safety)
+- Not a guarantee: raw `String`/scalars and passthrough `RedactableDisplay` types
 
 ```rust
 use redactable::{
@@ -617,7 +614,7 @@ The `slog` feature enables automatic redaction - just log your values and they'r
 
 ```toml
 [dependencies]
-redactable = { version = "0.1", features = ["slog"] }
+redactable = { version = "0.2.2", features = ["slog"] }
 ```
 
 **Containers** - the `Sensitive` derive generates `slog::Value` automatically:
@@ -653,7 +650,7 @@ slog::info!(logger, "auth"; "token" => &api_token);
 // Logged: "*********-key"
 ```
 
-Both work because they implement `slog::Value` - containers via the derive macro, wrappers via a manual implementation. No explicit conversion needed.
+Both work because they implement `slog::Value` - containers via the derive macro, wrappers via a manual implementation. No explicit conversion needed. `SensitiveDisplay` types also derive `slog::Value` when the feature is enabled, emitting the redacted display string.
 
 ### tracing
 
@@ -661,7 +658,7 @@ For structured logging with tracing, use the `valuable` integration:
 
 ```toml
 [dependencies]
-redactable = { version = "0.1", features = ["tracing-valuable"] }
+redactable = { version = "0.2.2", features = ["tracing-valuable"] }
 ```
 
 ```rust
@@ -707,13 +704,27 @@ tracing::info!(
 
 ⚠️ **Note:** The `valuable` integration in tracing is still marked as unstable and requires a compatible subscriber.
 
+### Sink-specific safety traits
+
+`SlogRedacted` and `TracingRedacted` are marker traits that certify a type's output is redacted
+for a specific sink. They indicate that the sink adapter uses the redacted path; they do not
+validate policy choices.
+
+They live in `redactable::slog` and `redactable::tracing` because the adapters differ
+(`slog::Value` JSON vs tracing display/valuable). A type might be safe for one sink and not
+the other.
+
+The traits are implemented only next to the sink adapters (derive-generated impls and specific
+wrappers), not as blanket impls for raw types or `ToRedactedOutput`. See
+[Wrapper safety at the boundary](#wrapper-safety-at-the-boundary) for the covered wrappers.
+
 ## Logging with maximum security
 
-For high-security domains (finance, healthcare, compliance-sensitive systems), you need guarantees that sensitive data can't be accidentally logged. This section covers two approaches to achieve that.
+For high-security domains (finance, healthcare, compliance-sensitive systems), you need guarantees that sensitive data can't be accidentally logged. This section explains the safety guarantees the library provides and how to leverage them.
 
 ### The logging footgun
 
-With `#[sensitive(P)]` attributes, the value is still the bare type at runtime:
+With `#[sensitive(P)]` attributes, the field is still the bare type at runtime:
 
 ```rust
 #[derive(Clone, Sensitive)]
@@ -724,60 +735,98 @@ struct User {
 
 let user = User { email: "alice@example.com".into() };
 
-// ❌ Nothing stops you from logging the value directly
+// ❌ Nothing stops you from logging the field directly
 log::info!("Email: {}", user.email);  // Logs "alice@example.com" unredacted!
-
-// You must remember to redact the container first
-let redacted = user.redact();
-log::info!("Email: {}", redacted.email);  // Now it's "al***@example.com"
 ```
 
-### Option A: Enforce `ToRedactedOutput` at the logging boundary (recommended)
+This is the core problem: `#[sensitive(P)]` marks intent but doesn't change the runtime type.
 
-The strongest approach is to make it **impossible to log raw types** by requiring `T: ToRedactedOutput` at the logging boundary:
+### Built-in safety with slog and tracing
+
+The library provides **automatic safety** when you use the slog or tracing integrations correctly. Types deriving `Sensitive` or `SensitiveDisplay` automatically implement `slog::Value` and the `SlogRedacted`/`TracingRedacted` marker traits.
+
+**slog** - Just log containers directly:
 
 ```rust
-use redactable::{RedactedOutput, ToRedactedOutput};
+#[derive(Clone, Sensitive, Serialize)]
+struct User {
+    #[sensitive(Pii)]
+    email: String,
+}
 
-// This function ONLY accepts types that implement ToRedactedOutput
-fn log_safe<T: ToRedactedOutput>(value: &T) {
-    match value.to_redacted_output() {
-        RedactedOutput::Text(text) => log::info!("{}", text),
-        #[cfg(feature = "json")]
-        RedactedOutput::Json(json) => log::info!("{}", json),
-    }
+let user = User { email: "alice@example.com".into() };
+
+// ✅ Safe: slog::Value impl auto-redacts before logging
+slog::info!(logger, "user logged in"; "user" => &user);
+// Logged: {"email":"al***@example.com"}
+```
+
+**tracing** - Use the extension traits:
+
+```rust
+use redactable::tracing::TracingValuableExt;
+
+// ✅ Safe: redacts before logging as structured data
+tracing::info!(user = user.tracing_redacted_valuable());
+```
+
+The footgun only happens when you bypass these integrations by logging individual fields directly (`user.email` instead of `&user`).
+
+### Enforcing safety with trait bounds
+
+The library provides marker traits that certify a type's output is redacted for a specific sink:
+
+- `SlogRedacted` - implemented by types safe to log via slog
+- `TracingRedacted` - implemented by types safe to log via tracing
+
+These traits are implemented for:
+- Types deriving `Sensitive` or `SensitiveDisplay` (when the feature is enabled)
+- `SensitiveValue<T, P>` wrappers
+- `RedactedOutput`, `RedactedOutputRef`, `RedactedJsonRef`
+- `NotSensitiveDisplay`, `NotSensitiveDebug`, `NotSensitiveJson` (you assert safety)
+
+**Use these traits as bounds** to enforce safety in your own logging macros:
+
+```rust
+use redactable::slog::SlogRedacted;
+
+// Macro that only accepts types certified as slog-safe
+macro_rules! slog_safe {
+    ($logger:expr, $msg:literal; $($key:literal => $value:expr),* $(,)?) => {{
+        // The trait bound is enforced by this function call
+        fn assert_slog_safe<T: SlogRedacted + slog::Value>(_: &T) {}
+        $(assert_slog_safe(&$value);)*
+        slog::info!($logger, $msg; $($key => &$value),*);
+    }};
+}
+
+// ✅ Works: Sensitive-derived types implement SlogRedacted
+slog_safe!(logger, "user logged in"; "user" => &user);
+
+// ✅ Works: SensitiveValue implements SlogRedacted  
+slog_safe!(logger, "auth"; "token" => &api_token);  // SensitiveValue<String, Token>
+
+// ❌ Won't compile: raw String doesn't implement SlogRedacted
+slog_safe!(logger, "user"; "email" => &user.email);
+```
+
+For tracing:
+
+```rust
+use redactable::tracing::TracingRedacted;
+
+macro_rules! trace_safe {
+    ($($key:ident = $value:expr),* $(,)?) => {{
+        fn assert_tracing_safe<T: TracingRedacted>(_: &T) {}
+        $(assert_tracing_safe(&$value);)*
+        tracing::info!($($key = tracing::field::debug(&$value)),*);
+    }};
 }
 ```
 
-Now the compiler enforces what you can pass:
+### Alternative: `SensitiveValue<T, P>` wrappers
 
-```rust
-// ✅ Containers: .redacted_output() redacts first, then produces safe output
-log_safe(&user.redacted_output());
-
-// ✅ SensitiveValue wrappers: they carry their policy and redact on output
-log_safe(&api_token);  // where api_token: SensitiveValue<String, Token>
-
-// ✅ Known non-sensitive values: explicitly mark them as safe to log
-// Use this for values you KNOW are not sensitive (IDs, timestamps, status codes)
-log_safe(&request_id.not_sensitive());
-log_safe(&"Operation completed".not_sensitive());
-
-// ❌ Raw types won't compile - forces you to make an explicit choice
-log_safe(&user);        // ERROR: User doesn't implement ToRedactedOutput
-log_safe(&user.email);  // ERROR: String doesn't implement ToRedactedOutput
-```
-
-**Why `.not_sensitive()` matters:** Raw `String` and primitives don't implement `ToRedactedOutput` because the compiler can't know if they're sensitive. By calling `.not_sensitive()`, you're explicitly declaring "I've reviewed this value and it's safe to log." This creates an audit trail in your code.
-
-**To adopt this pattern:**
-1. Create logging helpers that require `T: ToRedactedOutput`
-2. Disallow direct use of `log::info!("{}", value)` for potentially sensitive data (via code review or lints)
-3. All logging goes through your safe helpers
-
-### Option B: Use `SensitiveValue<T, P>` wrappers for sensitive leaves
-
-If you can't enforce trait bounds at the logging boundary, you can use `SensitiveValue<T, P>` wrappers instead of `#[sensitive(P)]` attributes:
+If you want field-level protection even outside the logging integrations, use `SensitiveValue<T, P>` wrappers instead of `#[sensitive(P)]` attributes:
 
 ```rust
 #[derive(Clone, Sensitive)]
@@ -794,7 +843,7 @@ log::info!("Email: {:?}", user.email);
 log::info!("Email: {}", user.email.redacted());
 
 // ⚠️ Intentional: .expose() for raw access (code review catches this)
-log::info!("Email: {}", user.email.expose());
+let raw = user.email.expose();
 ```
 
 ### Trade-offs: attributes vs wrappers
@@ -802,55 +851,21 @@ log::info!("Email: {}", user.email.expose());
 | | `#[sensitive(P)]` | `SensitiveValue<T, P>` |
 |---|---|---|
 | **Ergonomics** | ✅ Work with actual types | ❌ Need `.expose()` everywhere |
-| **Display (`{}`)** | ❌ Shows raw value | ✅ Not implemented (won't compile) |
-| **Debug (`{:?}`)** | ❌ Shows raw value | ✅ Shows `[REDACTED]` |
+| **Display (`{}`)** | Shows raw value | ✅ Not implemented (won't compile) |
+| **Debug (`{:?}`)** | ✅ Shows `[REDACTED]`* | ✅ Shows `[REDACTED]` |
 | **Serialization** | Shows raw value | Shows raw value |
+| **slog/tracing safety** | ✅ Via container | ✅ Direct |
 
-⚠️ **Neither approach protects serialization.** Both `#[sensitive(P)]` and `SensitiveValue<T, P>` serialize to raw values. This is intentional: serialization is used for much more than logging (API responses, database persistence, message queues, caching, etc.). Automatic redaction during serialization would break these use cases. If you need redacted serialization, call `.redact()` before serializing, or build wrapper functions/traits that enforce this for your specific context.
+\* The `Sensitive` derive generates a `Debug` impl that shows `[REDACTED]` for sensitive fields (disabled in test mode via `cfg(test)` or `feature = "testing"`).
 
-### Practical wrappers for slog and tracing
+⚠️ **Neither approach protects serialization.** Both serialize to raw values. This is intentional: serialization is used for API responses, database persistence, message queues, etc. If you need redacted serialization, call `.redact()` before serializing.
 
-You can enforce `ToRedactedOutput` at the logging boundary using macros (which enforce the bound by calling `.to_redacted_output()`).
+### Choosing an approach
 
-**slog:**
-
-```rust
-macro_rules! slog_safe {
-    ($logger:expr, $msg:literal; $key:literal => $value:expr) => {{
-        let output: redactable::RedactedOutput = ($value).to_redacted_output();
-        slog::info!($logger, $msg; $key => output.to_string());
-    }};
-}
-
-slog_safe!(logger, "event"; "user" => user.redacted_output());  // ✅
-slog_safe!(logger, "event"; "user" => user);                    // ❌ Won't compile
-slog_safe!(logger, "event"; "email" => user.email);             // ❌ Won't compile
-```
-
-**tracing:**
-
-```rust
-macro_rules! trace_safe {
-    ($field:literal = $value:expr) => {{
-        // Calling .to_redacted_output() enforces the trait bound at compile time
-        let output: redactable::RedactedOutput = ($value).to_redacted_output();
-        tracing::info!({ $field } = %output);
-    }};
-}
-
-trace_safe!("user" = user.redacted_output());      // ✅ Container via .redacted_output()
-trace_safe!("token" = sensitive_token);            // ✅ SensitiveValue<T, P>
-trace_safe!("id" = request_id.not_sensitive());    // ✅ Explicitly non-sensitive
-trace_safe!("user" = user);                        // ❌ Won't compile - raw container
-trace_safe!("email" = user.email);                 // ❌ Won't compile - raw String
-```
-
-💡 **Tip:** Combine these wrappers with code review rules or clippy lints that flag direct use of `tracing::info!` or `slog::info!` with potentially sensitive data.
-
-**When to use which:**
-- **Option A (`ToRedactedOutput` enforcement)** - Strongest guarantee. Use when you control the logging layer and can enforce the trait bound.
-- **Option B (`SensitiveValue` wrappers)** - Field-level protection. Debug shows redacted, Display won't compile. Use when you can't control the logging layer.
-- **`#[sensitive(P)]` attributes** - Most ergonomic. Use when your team logs containers (not individual values) and enforces this via code review.
+- **Use the slog/tracing integrations** - Log containers via `&user` (slog) or `.tracing_redacted_valuable()` (tracing). Safety is automatic.
+- **Use `SlogRedacted`/`TracingRedacted` bounds** - Enforce safety in your own helpers. Only certified types compile.
+- **Use `SensitiveValue<T, P>` wrappers** - When you need field-level protection outside logging, or can't control the logging layer.
+- **Use `#[sensitive(P)]` attributes** - Most ergonomic. Safe when logging containers through the integrations.
 
 ## Reference
 
@@ -877,7 +892,7 @@ trace_safe!("email" = user.email);                 // ❌ Won't compile - raw St
 | `PolicyApplicable` | Applies policy through wrappers | `String`, `Option`, `Vec`, etc. |
 | `Redactable` | User-facing `.redact()` | Auto-implemented for `RedactableContainer` |
 | `RedactableWithPolicy` | Policy-aware leaf redaction | `RedactableLeaf` types and external types |
-| `ToRedactedOutput` | Logging output boundary | `SensitiveValue<T,P>`, `RedactedOutputRef`, `RedactedJsonRef`, `NotSensitive*`, `RedactableDisplay` |
+| `ToRedactedOutput` | Logging output boundary | `RedactedOutput`, `SensitiveValue<T,P>`, `RedactedOutputRef`, `RedactedJsonRef`, `NotSensitive*`, `RedactableDisplay` |
 | `RedactableMapper` | Internal traversal | `#[doc(hidden)]` |
 
 **Types**:
@@ -893,11 +908,11 @@ trace_safe!("email" = user.email);                 // ❌ Won't compile - raw St
 | Trait | Purpose | Implemented By |
 |---|---|---|
 | `RedactableDisplay` | Redacted string formatting | `SensitiveDisplay` derive, scalars (passthrough) |
-| `SlogRedactedExt` | slog structured JSON logging | Types implementing `Redactable + Serialize` |
+| `SlogRedacted` | slog redaction safety marker | Derived types and safe slog wrappers |
+| `TracingRedacted` | tracing redaction safety marker | Derived types and safe tracing wrappers |
+| `SlogRedactedExt` | slog structured JSON logging | Types implementing `Redactable + Debug + Serialize` |
 | `TracingRedactedExt` | tracing display string logging | Types implementing `ToRedactedOutput` |
-| `TracingValuableExt` | tracing structured logging via `valuable` | Types implementing `Redactable + Valuable` |
-
-Note: `SensitiveDisplay` also generates `slog::Value` when the `slog` feature is enabled, emitting the redacted display string.
+| `TracingValuableExt` | tracing structured logging via `valuable` | Types implementing `Redactable + Clone + Valuable` |
 
 ### Supported types
 
