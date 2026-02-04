@@ -214,10 +214,14 @@ pub fn derive_not_sensitive(input: proc_macro::TokenStream) -> proc_macro::Token
 /// Derives `redactable::RedactableDisplay` using a display template.
 ///
 /// This generates a redacted string representation without requiring `Clone`.
-/// Every field referenced in the template **must** be explicitly annotated:
+/// Unannotated fields use `RedactableDisplay` by default (passthrough for scalars,
+/// redacted display for nested `SensitiveDisplay` types).
 ///
+/// # Field Annotations
+///
+/// - *(none)*: Uses `RedactableDisplay` (requires the field type to implement it)
 /// - `#[sensitive(Policy)]`: Apply the policy's redaction rules
-/// - `#[not_sensitive]`: Render raw (explicit opt-out)
+/// - `#[not_sensitive]`: Render raw via `Display` (use for types without `RedactableDisplay`)
 ///
 /// The display template is taken from `#[error("...")]` (thiserror-style) or from
 /// doc comments (displaydoc-style). If neither is present, the derive fails.
