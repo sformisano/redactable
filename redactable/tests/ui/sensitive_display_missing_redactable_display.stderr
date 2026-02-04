@@ -12,12 +12,12 @@ help: the trait `RedactableDisplay` is not implemented for `ExternalContext`
    = help: the following other types implement trait `RedactableDisplay`:
              &T
              ()
+             Arc<T>
+             BTreeMap<K, V>
+             BTreeSet<T>
+             Box<T>
+             Cell<T>
              Cow<'_, str>
-             LoginError
-             PhantomData<T>
-             String
-             bool
-             char
            and $N others
 
 error[E0277]: the trait bound `ExternalContext: RedactableDisplay` is not satisfied
@@ -40,11 +40,11 @@ help: the trait `RedactableDisplay` is not implemented for `ExternalContext`
    = help: the following other types implement trait `RedactableDisplay`:
              &T
              ()
+             Arc<T>
+             BTreeMap<K, V>
+             BTreeSet<T>
+             Box<T>
+             Cell<T>
              Cow<'_, str>
-             LoginError
-             PhantomData<T>
-             String
-             bool
-             char
            and $N others
    = note: required for `RedactedDisplayRef<'_, ExternalContext>` to implement `std::fmt::Display`

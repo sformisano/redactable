@@ -614,7 +614,7 @@ The `slog` feature enables automatic redaction - just log your values and they'r
 
 ```toml
 [dependencies]
-redactable = { version = "0.2.2", features = ["slog"] }
+redactable = { version = "0.2.3", features = ["slog"] }
 ```
 
 **Containers** - the `Sensitive` derive generates `slog::Value` automatically:
@@ -658,7 +658,7 @@ For structured logging with tracing, use the `valuable` integration:
 
 ```toml
 [dependencies]
-redactable = { version = "0.2.2", features = ["tracing-valuable"] }
+redactable = { version = "0.2.3", features = ["tracing-valuable"] }
 ```
 
 ```rust
@@ -907,7 +907,7 @@ let raw = user.email.expose();
 
 | Trait | Purpose | Implemented By |
 |---|---|---|
-| `RedactableDisplay` | Redacted string formatting | `SensitiveDisplay` derive, scalars (passthrough) |
+| `RedactableDisplay` | Redacted string formatting | `SensitiveDisplay` derive, scalars (passthrough), containers (delegate to contents) |
 | `SlogRedacted` | slog redaction safety marker | Derived types and safe slog wrappers |
 | `TracingRedacted` | tracing redaction safety marker | Derived types and safe tracing wrappers |
 | `SlogRedactedExt` | slog structured JSON logging | Types implementing `Redactable + Debug + Serialize` |
@@ -928,10 +928,13 @@ let raw = user.email.expose();
 - `String`, `str`, `bool`, `char`, integers, floats, `Cow<str>`, `PhantomData`, `()`
 - Feature-gated: `chrono` types, `time` types, `Uuid`
 
-**Containers** (implement `RedactableContainer`):
-- `Option<T>`, `Vec<T>`, `Box<T>`, `Arc<T>`, `Result<T, E>`
+**Containers** (implement `RedactableContainer` and `RedactableDisplay`):
+- `Option<T>`, `Vec<T>`, `VecDeque<T>`, `Box<T>`, `Arc<T>`, `Rc<T>`, `Result<T, E>`, slices `[T]`
 - `HashMap`, `BTreeMap`, `HashSet`, `BTreeSet`
-- All walked automatically; policy annotations apply through them
+- `Cell<T>`, `RefCell<T>`
+- For `Sensitive`: walked automatically; policy annotations apply through them
+- For `SensitiveDisplay`: formatted via `RedactableDisplay`, delegating to inner types
+- Map keys are formatted with `Debug` and are not redacted
 
 **External types**: `NotSensitiveValue<T>` for passthrough, `SensitiveValue<T, Policy>` with `RedactableWithPolicy` for redaction.
 
