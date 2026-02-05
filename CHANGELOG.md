@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.4.0 - 2026-02-05
+
+### Added
+- `serde_json::Value` support: `Value` is now treated as an opaque leaf type that fully redacts to `Value::String("[REDACTED]")` on any policy application
+- Implementations for `PolicyApplicable`, `PolicyApplicableRef`, `RedactableContainer`, and `RedactableDisplay` for `serde_json::Value` (behind `json` feature flag)
+- Safe-by-default behavior: unannotated `Value` fields in `#[derive(Sensitive)]` structs are fully redacted
+- Support for nested types like `Option<Value>`, `Vec<Value>`, `HashMap<K, Value>`, etc.
+
 ## 0.3.0 - 2026-02-05
 
 ### Added

@@ -293,6 +293,20 @@ impl<T: RedactableDisplay + ?Sized> RedactableDisplay for std::cell::RefCell<T> 
 }
 
 // =============================================================================
+// serde_json::Value support (feature-gated)
+// =============================================================================
+//
+// serde_json::Value always displays as "[REDACTED]" since it's an opaque type
+// that could contain arbitrary sensitive data.
+
+#[cfg(feature = "json")]
+impl RedactableDisplay for serde_json::Value {
+    fn fmt_redacted(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "[REDACTED]")
+    }
+}
+
+// =============================================================================
 // Tests
 // =============================================================================
 
