@@ -46,6 +46,8 @@ use crate::{
 /// ```
 pub trait SlogRedacted: SlogValue {}
 
+impl<T: SlogRedacted + ?Sized> SlogRedacted for &T {}
+
 /// A `slog::Value` that emits an owned redacted payload as structured JSON.
 ///
 /// The payload is stored as a `serde_json::Value` and emitted via
