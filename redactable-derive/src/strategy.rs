@@ -21,7 +21,7 @@ pub(crate) enum Strategy {
     WalkDefault,
     /// `#[sensitive(Policy)]`: apply redaction policy.
     ///
-    /// The policy type (e.g., `Default`, `Token`, `Pii`) determines how
+    /// The policy type (e.g., `Secret`, `Token`, `Pii`) determines how
     /// the value is redacted via `RedactionPolicy`.
     Policy(syn::Path),
     /// `#[not_sensitive]`: explicit passthrough, no traversal or transformation.
@@ -67,11 +67,11 @@ pub(crate) fn parse_field_strategy(attrs: &[Attribute]) -> Result<Strategy> {
                 return Err(syn::Error::new(
                     attr.span(),
                     "missing policy: use #[sensitive(Policy)] \
-                     (e.g., #[sensitive(Default)], #[sensitive(Token)])",
+                     (e.g., #[sensitive(Secret)], #[sensitive(Token)])",
                 ));
             }
             Meta::List(list) => {
-                // Parse as a policy path (e.g., #[sensitive(Default)])
+                // Parse as a policy path (e.g., #[sensitive(Secret)])
                 match syn::parse2::<syn::Path>(list.tokens.clone()) {
                     Ok(path) => {
                         set_strategy(&mut strategy, Strategy::Policy(path), attr.span())?;
@@ -79,7 +79,7 @@ pub(crate) fn parse_field_strategy(attrs: &[Attribute]) -> Result<Strategy> {
                     Err(_) => {
                         return Err(syn::Error::new(
                             attr.span(),
-                            "expected a policy type (e.g., #[sensitive(Default)])",
+                            "expected a policy type (e.g., #[sensitive(Secret)])",
                         ));
                     }
                 }
@@ -88,7 +88,7 @@ pub(crate) fn parse_field_strategy(attrs: &[Attribute]) -> Result<Strategy> {
                 return Err(syn::Error::new(
                     attr.span(),
                     "expected #[sensitive(Policy)] syntax \
-                     (e.g., #[sensitive(Default)], #[sensitive(Token)])",
+                     (e.g., #[sensitive(Secret)], #[sensitive(Token)])",
                 ));
             }
         }
@@ -131,11 +131,11 @@ mod tests {
 
     #[test]
     fn sensitive_with_policy_returns_classify() {
-        let attrs = parse_attrs(quote! { #[sensitive(Default)] });
+        let attrs = parse_attrs(quote! { #[sensitive(Secret)] });
         let strategy = parse_field_strategy(&attrs).unwrap();
         match strategy {
             Strategy::Policy(path) => {
-                assert!(path.is_ident("Default"));
+                assert!(path.is_ident("Secret"));
             }
             _ => panic!("expected Policy"),
         }
@@ -156,7 +156,7 @@ mod tests {
     #[test]
     fn multiple_sensitive_attributes_error() {
         let attrs = parse_attrs(quote! {
-            #[sensitive(Default)]
+            #[sensitive(Full)]
             #[sensitive(Token)]
         });
         let result = parse_field_strategy(&attrs);
@@ -223,7 +223,7 @@ mod tests {
     #[test]
     fn sensitive_and_not_sensitive_errors() {
         let attrs = parse_attrs(quote! {
-            #[sensitive(Default)]
+            #[sensitive(Full)]
             #[not_sensitive]
         });
         let result = parse_field_strategy(&attrs);

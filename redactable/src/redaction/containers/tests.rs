@@ -7,12 +7,12 @@ use std::{
     sync::Arc,
 };
 
-use crate::{Default, Sensitive, redaction::traits::Redactable};
+use crate::{Secret, Sensitive, redaction::traits::Redactable};
 
 #[derive(Clone, Sensitive)]
 #[cfg_attr(feature = "json", derive(serde::Serialize))]
 struct SensitiveString {
-    #[sensitive(Default)]
+    #[sensitive(Secret)]
     value: String,
 }
 
@@ -195,7 +195,7 @@ fn map_keys_are_never_redacted() {
     #[derive(Clone, Hash, Eq, PartialEq, Sensitive)]
     #[cfg_attr(feature = "json", derive(serde::Serialize))]
     struct SensitiveKey {
-        #[sensitive(Default)]
+        #[sensitive(Secret)]
         value: String,
     }
 

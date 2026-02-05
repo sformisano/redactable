@@ -1,10 +1,10 @@
-use redactable::{Default as RedactableDefault, SensitiveDisplay};
+use redactable::{Secret, SensitiveDisplay};
 
 #[derive(SensitiveDisplay)]
 enum InnerError {
     #[error("db password {password}")]
     BadPassword {
-        #[sensitive(RedactableDefault)]
+        #[sensitive(Secret)]
         password: String,
     },
 }

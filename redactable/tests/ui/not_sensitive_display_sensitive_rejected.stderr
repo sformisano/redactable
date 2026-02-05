@@ -1,0 +1,11 @@
+error: `#[sensitive]` attributes are not allowed on `NotSensitiveDisplay` types
+ --> tests/ui/not_sensitive_display_sensitive_rejected.rs:8:5
+  |
+8 |     #[sensitive(redactable::Secret)]
+  |     ^
+
+error: cannot find attribute `sensitive` in this scope
+ --> tests/ui/not_sensitive_display_sensitive_rejected.rs:8:7
+  |
+8 |     #[sensitive(redactable::Secret)]
+  |       ^^^^^^^^^ help: a built-in attribute with a similar name exists: `sanitize`

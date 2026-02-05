@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.5.0 - 2026-02-05
+
+### Added
+- `NotSensitiveDisplay` derive macro for types with no sensitive data that need logging integration
+  - Provides symmetry with `SensitiveDisplay`: generates `RedactableDisplay`, `Debug`, `slog::Value`, `SlogRedacted`, and `TracingRedacted`
+  - Requires `T: Display` and delegates `RedactableDisplay` to the existing `Display` implementation
+  - Supports `#[not_sensitive_display(skip_debug)]` attribute to opt out of `Debug` impl generation
+  - Also generates `RedactableContainer` impl (no-op passthrough), so types can be used inside `#[derive(Sensitive)]` containers without also deriving `NotSensitive`
+  - Supports template-based formatting (displaydoc/thiserror style) when a display template is present on the container
+- `NotSensitive<T>` wrapper and `.not_sensitive()` escape hatch with no formatting preference
+- `NotSensitive<T>` implements `slog::Value` when `T: slog::Value` and `SlogRedacted`/`TracingRedacted` when the inner type does
+- `.not_sensitive_display()` for explicit `Display` formatting at logging boundaries
+- Conditional `Debug` impl for `SensitiveDisplay` (redacted in production, unredacted in tests)
+
+### Fixed
+- `PhantomData<T>` fields no longer require `T: RedactableContainer` bound; they are automatically
+  treated as passthrough without the need for `#[not_sensitive]` annotation
+
+### Breaking
+- `.not_sensitive()` no longer implies `Display` formatting; use `.not_sensitive_display()` for
+  text output or `.not_sensitive_debug()` for `Debug` formatting
+
 ## 0.4.0 - 2026-02-05
 
 ### Added

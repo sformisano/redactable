@@ -95,6 +95,7 @@ fn derive_struct_display(
         Fields::Unit => quote! { Self },
     };
     let body = quote! {
+        #[allow(unused_variables, unused_assignments)]
         match self {
             #pattern => {
                 #format_prelude
@@ -146,6 +147,7 @@ fn derive_enum_display(
     }
 
     let body = quote! {
+        #[allow(unused_variables, unused_assignments)]
         match self {
             #(#arms),*
         }
@@ -363,7 +365,7 @@ fn redacted_expr_for_field(field: &FieldInfo<'_>) -> TokenStream {
             #ident
         },
         Strategy::Policy(policy) => {
-            if is_scalar_type(field.ty) && policy.is_ident("Default") {
+            if is_scalar_type(field.ty) && policy.is_ident("Secret") {
                 quote_spanned! { span =>
                     #scalar_path::redact(*#ident)
                 }
@@ -399,7 +401,7 @@ fn collect_bounds(
             }
         },
         Strategy::Policy(policy) => {
-            if is_scalar_type(field.ty) && policy.is_ident("Default") {
+            if is_scalar_type(field.ty) && policy.is_ident("Secret") {
                 return;
             }
             collect_generics_from_type(field.ty, generics, policy_ref_generics);
@@ -479,6 +481,17 @@ fn doc_template_from_attrs(attrs: &[Attribute]) -> Option<LitStr> {
     }
     let text = lines.join("\n");
     Some(LitStr::new(text.trim(), Span::call_site()))
+}
+
+/// Returns `true` if the attributes contain a display template (`#[error("...")]` or doc comment).
+///
+/// This is used by `NotSensitiveDisplay` to determine whether to use template-based formatting
+/// (like `SensitiveDisplay`) or delegate directly to `Display`.
+pub(crate) fn has_display_template(attrs: &[Attribute]) -> Result<bool> {
+    if error_template_from_attrs(attrs)?.is_some() {
+        return Ok(true);
+    }
+    Ok(doc_template_from_attrs(attrs).is_some())
 }
 
 fn parse_placeholders(template: &LitStr) -> Result<Vec<Placeholder>> {
