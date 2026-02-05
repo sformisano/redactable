@@ -14,7 +14,7 @@ use syn::{Attribute, Meta, Result, spanned::Spanned};
 /// |------------------------|-----------------------|---------------------------------------|
 /// | None                   | `WalkDefault`         | Walk containers; scalars pass through |
 /// | `#[sensitive(Policy)]` | `Policy(policy_path)` | Apply redaction policy                |
-/// | `#[not_sensitive]`     | `NotSensitive`        | Explicit opt-out (SensitiveDisplay only) |
+/// | `#[not_sensitive]`     | `NotSensitive`        | Explicit passthrough (no traversal)      |
 #[derive(Clone, Debug)]
 pub(crate) enum Strategy {
     /// No annotation: walk containers, scalars pass through unchanged.
@@ -24,7 +24,7 @@ pub(crate) enum Strategy {
     /// The policy type (e.g., `Default`, `Token`, `Pii`) determines how
     /// the value is redacted via `RedactionPolicy`.
     Policy(syn::Path),
-    /// `#[not_sensitive]`: explicit opt-out, renders raw (SensitiveDisplay only).
+    /// `#[not_sensitive]`: explicit passthrough, no traversal or transformation.
     NotSensitive,
 }
 

@@ -11,7 +11,7 @@ use std::{cell::RefCell, collections::HashMap, fmt, fmt::Arguments};
 
 use redactable::{
     Default, Email, NotSensitiveJsonExt, PhoneNumber, Pii, RedactableContainer, RedactableDisplay,
-    RedactableMapper, RedactedJsonExt, RedactedOutput, RedactionPolicy, SensitiveData,
+    RedactableMapper, RedactedJsonExt, RedactedOutput, RedactionPolicy, Sensitive,
     SensitiveDisplay, TextRedactionPolicy, ToRedactedOutput, Token,
     slog::{SlogRedacted, SlogRedactedExt},
 };
@@ -135,7 +135,7 @@ fn log_redacted<T: ToRedactedOutput>(value: &T) -> RedactedOutput {
 
 #[test]
 fn sensitive_type_implements_slog_redacted() {
-    #[derive(Clone, SensitiveData, Serialize)]
+    #[derive(Clone, Sensitive, Serialize)]
     struct Account {
         #[sensitive(Email)]
         email: String,
@@ -152,7 +152,7 @@ fn sensitive_type_implements_slog_redacted() {
 
 #[test]
 fn test_slog_redacted_json_simple_struct() {
-    #[derive(Clone, SensitiveData, Serialize)]
+    #[derive(Clone, Sensitive, Serialize)]
     struct User {
         username: String,
         #[sensitive(Default)]
@@ -182,7 +182,7 @@ fn test_slog_redacted_json_simple_struct() {
 
 #[test]
 fn test_slog_redacted_json_with_policies() {
-    #[derive(Clone, SensitiveData, Serialize)]
+    #[derive(Clone, Sensitive, Serialize)]
     struct Contact {
         #[sensitive(Email)]
         email: String,
@@ -269,7 +269,7 @@ fn test_log_redacted_bound_accepts_not_sensitive_json() {
 
 #[test]
 fn test_redacted_json_wrapper_produces_json() {
-    #[derive(Clone, SensitiveData, Serialize)]
+    #[derive(Clone, Sensitive, Serialize)]
     struct Event {
         #[sensitive(Default)]
         token: String,
@@ -569,14 +569,14 @@ fn test_sensitive_display_doc_comment_positional_fields() {
 
 #[test]
 fn test_slog_redacted_json_nested_struct() {
-    #[derive(Clone, SensitiveData, Serialize)]
+    #[derive(Clone, Sensitive, Serialize)]
     struct Address {
         #[sensitive(Pii)]
         street: String,
         city: String,
     }
 
-    #[derive(Clone, SensitiveData, Serialize)]
+    #[derive(Clone, Sensitive, Serialize)]
     struct Person {
         name: String,
         #[sensitive(Default)]
@@ -618,7 +618,7 @@ fn test_slog_redacted_json_nested_struct() {
 
 #[test]
 fn test_slog_redacted_json_with_vec() {
-    #[derive(Clone, SensitiveData, Serialize)]
+    #[derive(Clone, Sensitive, Serialize)]
     struct ApiKeys {
         #[sensitive(Token)]
         keys: Vec<String>,
@@ -652,7 +652,7 @@ fn test_slog_redacted_json_with_vec() {
 
 #[test]
 fn test_slog_redacted_json_with_option() {
-    #[derive(Clone, SensitiveData, Serialize)]
+    #[derive(Clone, Sensitive, Serialize)]
     struct OptionalSensitive {
         #[sensitive(Default)]
         secret: Option<String>,
@@ -698,7 +698,7 @@ fn test_slog_redacted_json_with_option() {
 fn test_slog_redacted_json_with_hashmap() {
     use std::collections::HashMap;
 
-    #[derive(Clone, SensitiveData, Serialize)]
+    #[derive(Clone, Sensitive, Serialize)]
     struct Config {
         #[sensitive(Default)]
         secrets: HashMap<String, String>,
@@ -732,7 +732,7 @@ fn test_slog_redacted_json_with_hashmap() {
 
 #[test]
 fn test_slog_redacted_json_enum() {
-    #[derive(Clone, SensitiveData, Serialize)]
+    #[derive(Clone, Sensitive, Serialize)]
     enum Credential {
         ApiKey {
             #[sensitive(Token)]
@@ -786,7 +786,7 @@ fn test_slog_redacted_json_enum() {
 
 #[test]
 fn test_slog_redacted_json_empty_string() {
-    #[derive(Clone, SensitiveData, Serialize)]
+    #[derive(Clone, Sensitive, Serialize)]
     struct Data {
         #[sensitive(Default)]
         value: String,
@@ -809,7 +809,7 @@ fn test_slog_redacted_json_empty_string() {
 #[test]
 fn test_slog_redacted_json_unicode() {
     // Test that unicode characters in PII (like names) are handled correctly
-    #[derive(Clone, SensitiveData, Serialize)]
+    #[derive(Clone, Sensitive, Serialize)]
     struct UnicodeData {
         #[sensitive(Pii)]
         name: String,
@@ -835,7 +835,7 @@ fn test_slog_redacted_json_unicode() {
 
 #[test]
 fn test_slog_redacted_json_no_sensitive_fields() {
-    #[derive(Clone, SensitiveData, Serialize)]
+    #[derive(Clone, Sensitive, Serialize)]
     struct PublicData {
         name: String,
         count: i32,
@@ -876,7 +876,7 @@ fn test_slog_redacted_json_custom_policy() {
         }
     }
 
-    #[derive(Clone, SensitiveData, Serialize)]
+    #[derive(Clone, Sensitive, Serialize)]
     struct Payment {
         #[sensitive(CustomCreditCard)]
         card_number: String,
@@ -909,7 +909,7 @@ fn test_slog_redacted_json_custom_policy() {
 #[test]
 fn test_redaction_happens_before_serialization() {
     // This test verifies that the original sensitive data never reaches slog
-    #[derive(Clone, SensitiveData, Serialize)]
+    #[derive(Clone, Sensitive, Serialize)]
     struct Canary {
         #[sensitive(Default)]
         secret: String,

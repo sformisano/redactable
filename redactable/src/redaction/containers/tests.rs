@@ -31,6 +31,50 @@ fn passthrough_integers_unchanged() {
 }
 
 #[test]
+fn passthrough_nonzero_integers_unchanged() {
+    use std::num::{NonZeroI32, NonZeroU64};
+
+    let signed = NonZeroI32::new(42).unwrap();
+    let unsigned = NonZeroU64::new(100).unwrap();
+
+    assert_eq!(signed.redact(), signed);
+    assert_eq!(unsigned.redact(), unsigned);
+}
+
+#[test]
+fn passthrough_duration_unchanged() {
+    use std::time::Duration;
+
+    let duration = Duration::from_secs(60);
+    assert_eq!(duration.redact(), duration);
+}
+
+#[test]
+fn passthrough_instant_unchanged() {
+    use std::time::Instant;
+
+    let instant = Instant::now();
+    assert_eq!(instant.redact(), instant);
+}
+
+#[test]
+fn passthrough_system_time_unchanged() {
+    use std::time::SystemTime;
+
+    let system_time = SystemTime::now();
+    assert_eq!(system_time.redact(), system_time);
+}
+
+#[test]
+fn passthrough_ordering_unchanged() {
+    use std::cmp::Ordering;
+
+    assert_eq!(Ordering::Less.redact(), Ordering::Less);
+    assert_eq!(Ordering::Equal.redact(), Ordering::Equal);
+    assert_eq!(Ordering::Greater.redact(), Ordering::Greater);
+}
+
+#[test]
 fn option_traversal_redacts_inner() {
     let value = Some(SensitiveString {
         value: "secret".to_string(),
@@ -232,4 +276,75 @@ fn socketaddr_redacts_ip_only() {
     let redacted = addr.redact();
 
     assert_eq!(redacted, "0.0.0.3:443".parse::<SocketAddr>().unwrap());
+}
+
+// =============================================================================
+// chrono passthrough tests
+// =============================================================================
+
+#[cfg(feature = "chrono")]
+#[test]
+fn passthrough_chrono_duration_unchanged() {
+    use chrono::Duration;
+
+    let duration = Duration::seconds(3600);
+    assert_eq!(duration.redact(), duration);
+}
+
+#[cfg(feature = "chrono")]
+#[test]
+fn passthrough_chrono_month_unchanged() {
+    use chrono::Month;
+
+    assert_eq!(Month::January.redact(), Month::January);
+    assert_eq!(Month::December.redact(), Month::December);
+}
+
+#[cfg(feature = "chrono")]
+#[test]
+fn passthrough_chrono_weekday_unchanged() {
+    use chrono::Weekday;
+
+    assert_eq!(Weekday::Mon.redact(), Weekday::Mon);
+    assert_eq!(Weekday::Sun.redact(), Weekday::Sun);
+}
+
+// =============================================================================
+// time crate passthrough tests
+// =============================================================================
+
+#[cfg(feature = "time")]
+#[test]
+fn passthrough_time_duration_unchanged() {
+    use time::Duration;
+
+    let duration = Duration::hours(2);
+    assert_eq!(duration.redact(), duration);
+}
+
+#[cfg(feature = "time")]
+#[test]
+fn passthrough_time_utc_offset_unchanged() {
+    use time::UtcOffset;
+
+    let offset = UtcOffset::from_hms(5, 30, 0).unwrap();
+    assert_eq!(offset.redact(), offset);
+}
+
+#[cfg(feature = "time")]
+#[test]
+fn passthrough_time_month_unchanged() {
+    use time::Month;
+
+    assert_eq!(Month::January.redact(), Month::January);
+    assert_eq!(Month::December.redact(), Month::December);
+}
+
+#[cfg(feature = "time")]
+#[test]
+fn passthrough_time_weekday_unchanged() {
+    use time::Weekday;
+
+    assert_eq!(Weekday::Monday.redact(), Weekday::Monday);
+    assert_eq!(Weekday::Sunday.redact(), Weekday::Sunday);
 }

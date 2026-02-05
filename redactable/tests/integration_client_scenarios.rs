@@ -8,8 +8,7 @@
 use std::{fmt, marker::PhantomData};
 
 use redactable::{
-    Default, Email, PhoneNumber, Pii, Redactable, RedactionPolicy, SensitiveData,
-    TextRedactionPolicy,
+    Default, Email, PhoneNumber, Pii, Redactable, RedactionPolicy, Sensitive, TextRedactionPolicy,
 };
 
 // =============================================================================
@@ -18,7 +17,7 @@ use redactable::{
 //
 // ORIGINAL PROBLEM:
 // ```rust
-// #[derive(SensitiveData)]
+// #[derive(Sensitive)]
 // struct UserProfile {
 //     #[sensitive(Pii)]
 //     nickname: Option<String>,  // ERROR: Option<String> doesn't implement RedactableLeaf
@@ -50,7 +49,7 @@ impl RedactionPolicy for PartiallyVisible {
 
 #[test]
 fn issue1_option_string_with_policy() {
-    #[derive(Clone, SensitiveData)]
+    #[derive(Clone, Sensitive)]
     #[cfg_attr(feature = "slog", derive(serde::Serialize))]
     struct UserProfile {
         username: String,
@@ -87,7 +86,7 @@ fn issue1_option_string_with_policy() {
 
 #[test]
 fn issue1_vec_string_with_policy() {
-    #[derive(Clone, SensitiveData)]
+    #[derive(Clone, Sensitive)]
     #[cfg_attr(feature = "slog", derive(serde::Serialize))]
     struct AuditLog {
         event_type: String,
@@ -131,7 +130,7 @@ fn issue1_vec_string_with_policy() {
 
 #[test]
 fn issue1_box_string_with_policy() {
-    #[derive(Clone, SensitiveData)]
+    #[derive(Clone, Sensitive)]
     #[cfg_attr(feature = "slog", derive(serde::Serialize))]
     struct EncryptedPayload {
         algorithm: String,
@@ -157,8 +156,8 @@ fn issue1_box_string_with_policy() {
 fn issue1_mixed_wrapper_types() {
     // Real-world scenario: a configuration struct with various optional sensitive fields
     // Note: Only single-level wrappers are supported (Option<String>, Vec<String>, Box<String>)
-    // Nested wrappers like Option<Vec<String>> require the inner type to derive SensitiveData
-    #[derive(Clone, SensitiveData)]
+    // Nested wrappers like Option<Vec<String>> require the inner type to derive Sensitive
+    #[derive(Clone, Sensitive)]
     #[cfg_attr(feature = "slog", derive(serde::Serialize))]
     struct DatabaseConfig {
         host: String,
@@ -207,17 +206,17 @@ fn issue1_mixed_wrapper_types() {
 // #[derive(Debug)]  // Custom Debug for safety
 // struct SecureToken { ... }
 //
-// #[derive(SensitiveData)]  // ERROR: conflicting Debug impl
+// #[derive(Sensitive)]  // ERROR: conflicting Debug impl
 // struct SecureToken { ... }
 // ```
-// The SensitiveData derive always generated a Debug impl, conflicting with existing ones.
+// The Sensitive derive always generated a Debug impl, conflicting with existing ones.
 //
 // EXPECTED BEHAVIOR:
 // `#[sensitive(skip_debug)]` allows opting out of Debug generation.
 
 #[test]
 fn issue2_skip_debug_with_manual_impl() {
-    #[derive(Clone, SensitiveData)]
+    #[derive(Clone, Sensitive)]
     #[cfg_attr(feature = "slog", derive(serde::Serialize))]
     #[sensitive(skip_debug)]
     struct SecureToken {
@@ -260,7 +259,7 @@ fn issue2_skip_debug_with_manual_impl() {
 
 #[test]
 fn issue2_skip_debug_enum() {
-    #[derive(Clone, SensitiveData)]
+    #[derive(Clone, Sensitive)]
     #[cfg_attr(feature = "slog", derive(serde::Serialize))]
     #[sensitive(skip_debug)]
     enum Credential {
@@ -329,7 +328,7 @@ fn issue2_skip_debug_enum() {
 //
 // ORIGINAL PROBLEM:
 // ```rust
-// #[derive(SensitiveData)]
+// #[derive(Sensitive)]
 // struct TypedId<T> {
 //     id: String,
 //     _marker: PhantomData<T>,  // ERROR: PhantomData doesn't implement RedactionWalker
@@ -342,7 +341,7 @@ fn issue2_skip_debug_enum() {
 
 #[test]
 fn issue5_phantom_data_in_generic_struct() {
-    #[derive(Clone, SensitiveData)]
+    #[derive(Clone, Sensitive)]
     #[cfg_attr(feature = "slog", derive(serde::Serialize))]
     struct TypedId<T> {
         #[sensitive(PartiallyVisible)]
@@ -375,7 +374,7 @@ fn issue5_phantom_data_in_generic_struct() {
 
 #[test]
 fn issue5_phantom_data_with_lifetime() {
-    #[derive(Clone, SensitiveData)]
+    #[derive(Clone, Sensitive)]
     #[cfg_attr(feature = "slog", derive(serde::Serialize))]
     struct BorrowedRef<'a, T> {
         name: String,
@@ -397,7 +396,7 @@ fn issue5_phantom_data_with_lifetime() {
 
 #[test]
 fn issue5_multiple_phantom_data() {
-    #[derive(Clone, SensitiveData)]
+    #[derive(Clone, Sensitive)]
     #[cfg_attr(feature = "slog", derive(serde::Serialize))]
     struct MultiPhantom<A, B, C> {
         #[sensitive(Default)]
@@ -426,8 +425,8 @@ fn issue5_multiple_phantom_data() {
 #[test]
 fn realworld_user_account_model() {
     // Note: For nested wrappers like Option<Vec<String>>, you need to create
-    // a wrapper type that derives SensitiveData. Single-level wrappers work directly.
-    #[derive(Clone, SensitiveData)]
+    // a wrapper type that derives Sensitive. Single-level wrappers work directly.
+    #[derive(Clone, Sensitive)]
     #[cfg_attr(feature = "slog", derive(serde::Serialize))]
     #[sensitive(skip_debug)]
     struct UserAccount<Id: Clone> {
@@ -513,14 +512,14 @@ fn realworld_api_response_logging() {
     // Simulating sanitizing an API response before logging
 
     // For nested wrappers like Option<Vec<String>>, create a dedicated type
-    #[derive(Clone, SensitiveData)]
+    #[derive(Clone, Sensitive)]
     #[cfg_attr(feature = "slog", derive(serde::Serialize))]
     struct BillingAddress {
         #[sensitive(Default)]
         lines: Vec<String>,
     }
 
-    #[derive(Clone, SensitiveData)]
+    #[derive(Clone, Sensitive)]
     #[cfg_attr(feature = "slog", derive(serde::Serialize))]
     struct PaymentResponse {
         transaction_id: String,

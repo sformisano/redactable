@@ -11,7 +11,7 @@ use std::collections::{BTreeMap, HashMap};
 
 use redactable::{
     Default, NotSensitive, NotSensitiveDebugExt, NotSensitiveExt, Redactable, RedactableLeaf,
-    RedactableWithPolicy, RedactedOutput, RedactedOutputExt, RedactionPolicy, SensitiveData,
+    RedactableWithPolicy, RedactedOutput, RedactedOutputExt, RedactionPolicy, Sensitive,
     SensitiveValue, TextRedactionPolicy, ToRedactedOutput, Token,
 };
 
@@ -29,7 +29,7 @@ fn test_text_policy_apply() {
 
 #[test]
 fn test_engine_redacts_classified() {
-    #[derive(Clone, SensitiveData)]
+    #[derive(Clone, Sensitive)]
     #[cfg_attr(feature = "slog", derive(serde::Serialize))]
     struct Token {
         #[sensitive(Default)]
@@ -45,7 +45,7 @@ fn test_engine_redacts_classified() {
 
 #[test]
 fn test_engine_redacts_nested_maps() {
-    #[derive(Clone, SensitiveData)]
+    #[derive(Clone, Sensitive)]
     #[cfg_attr(feature = "slog", derive(serde::Serialize))]
     struct ApiKeyEntry {
         #[sensitive(Token)]
@@ -66,7 +66,7 @@ fn test_engine_redacts_nested_maps() {
 
 #[test]
 fn test_derive_policy_struct() {
-    #[derive(Clone, SensitiveData)]
+    #[derive(Clone, Sensitive)]
     #[cfg_attr(feature = "slog", derive(serde::Serialize))]
     struct User {
         #[sensitive(Default)]
@@ -87,7 +87,7 @@ fn test_derive_policy_struct() {
 
 #[test]
 fn test_enum_derive() {
-    #[derive(Clone, SensitiveData)]
+    #[derive(Clone, Sensitive)]
     #[cfg_attr(feature = "slog", derive(serde::Serialize))]
     enum Credential {
         ApiKey {
@@ -127,14 +127,14 @@ fn test_enum_derive() {
 
 #[test]
 fn test_redacted_guard_type() {
-    #[derive(Clone, SensitiveData)]
+    #[derive(Clone, Sensitive)]
     #[cfg_attr(feature = "slog", derive(serde::Serialize))]
-    struct SensitiveData2 {
+    struct Sensitive2 {
         #[sensitive(Default)]
         data: String,
     }
 
-    let secret = SensitiveData2 {
+    let secret = Sensitive2 {
         data: "confidential".into(),
     };
 
@@ -144,7 +144,7 @@ fn test_redacted_guard_type() {
 
 #[test]
 fn test_nested_struct_derive() {
-    #[derive(Clone, SensitiveData)]
+    #[derive(Clone, Sensitive)]
     #[cfg_attr(feature = "slog", derive(serde::Serialize))]
     struct Address {
         #[sensitive(Default)]
@@ -152,7 +152,7 @@ fn test_nested_struct_derive() {
         city: String,
     }
 
-    #[derive(Clone, SensitiveData)]
+    #[derive(Clone, Sensitive)]
     #[cfg_attr(feature = "slog", derive(serde::Serialize))]
     struct Person {
         #[sensitive(Default)]
@@ -177,7 +177,7 @@ fn test_nested_struct_derive() {
 
 #[test]
 fn test_btreemap_traversal() {
-    #[derive(Clone, SensitiveData)]
+    #[derive(Clone, Sensitive)]
     #[cfg_attr(feature = "slog", derive(serde::Serialize))]
     struct SensitiveValue2 {
         #[sensitive(Default)]
@@ -208,7 +208,7 @@ fn test_custom_policy() {
         }
     }
 
-    #[derive(Clone, SensitiveData)]
+    #[derive(Clone, Sensitive)]
     #[cfg_attr(feature = "slog", derive(serde::Serialize))]
     struct Record {
         #[sensitive(InternalId)]
@@ -232,7 +232,7 @@ fn test_custom_policy() {
 
 #[test]
 fn test_tuple_struct() {
-    #[derive(Clone, SensitiveData)]
+    #[derive(Clone, Sensitive)]
     #[cfg_attr(feature = "slog", derive(serde::Serialize))]
     struct TupleSensitive(#[sensitive(Default)] String, String);
 
@@ -245,7 +245,7 @@ fn test_tuple_struct() {
 
 #[test]
 fn test_tuple_struct_multiple_sensitive() {
-    #[derive(Clone, SensitiveData)]
+    #[derive(Clone, Sensitive)]
     #[cfg_attr(feature = "slog", derive(serde::Serialize))]
     struct AuthCredentials(
         #[sensitive(Default)] String, // password
@@ -263,7 +263,7 @@ fn test_tuple_struct_multiple_sensitive() {
 
 #[test]
 fn test_enum_tuple_variant() {
-    #[derive(Clone, SensitiveData)]
+    #[derive(Clone, Sensitive)]
     #[cfg_attr(feature = "slog", derive(serde::Serialize))]
     enum Auth {
         ApiKey(#[sensitive(Token)] String),
@@ -302,7 +302,7 @@ fn test_enum_tuple_variant() {
 
 #[test]
 fn test_unit_struct() {
-    #[derive(Clone, SensitiveData)]
+    #[derive(Clone, Sensitive)]
     #[cfg_attr(feature = "slog", derive(serde::Serialize))]
     struct UnitMarker;
 
@@ -314,7 +314,7 @@ fn test_unit_struct() {
 
 #[test]
 fn test_box_traversal() {
-    #[derive(Clone, SensitiveData)]
+    #[derive(Clone, Sensitive)]
     #[cfg_attr(feature = "slog", derive(serde::Serialize))]
     struct BoxedSensitive {
         #[sensitive(Default)]
@@ -331,7 +331,7 @@ fn test_box_traversal() {
 
 #[test]
 fn test_nested_box_traversal() {
-    #[derive(Clone, SensitiveData)]
+    #[derive(Clone, Sensitive)]
     #[cfg_attr(feature = "slog", derive(serde::Serialize))]
     struct DeepSensitive {
         #[sensitive(Default)]
@@ -349,7 +349,7 @@ fn test_nested_box_traversal() {
 #[test]
 fn test_nested_generics() {
     // Test nested structs with concrete types - walked by default
-    #[derive(Clone, SensitiveData)]
+    #[derive(Clone, Sensitive)]
     #[cfg_attr(feature = "slog", derive(serde::Serialize))]
     struct Inner {
         #[sensitive(Default)]
@@ -357,7 +357,7 @@ fn test_nested_generics() {
         public: i32,
     }
 
-    #[derive(Clone, SensitiveData)]
+    #[derive(Clone, Sensitive)]
     #[cfg_attr(feature = "slog", derive(serde::Serialize))]
     struct Outer {
         inner: Inner, // Nested containers are walked automatically
@@ -381,15 +381,15 @@ fn test_nested_generics() {
 
 #[test]
 fn test_generic_container_with_sensitive() {
-    // Test that generic containers work with SensitiveData types
-    #[derive(Clone, SensitiveData)]
+    // Test that generic containers work with Sensitive types
+    #[derive(Clone, Sensitive)]
     #[cfg_attr(feature = "slog", derive(serde::Serialize))]
     struct SensitiveWrapper {
         #[sensitive(Default)]
         value: String,
     }
 
-    // Vec<T> where T: SensitiveData
+    // Vec<T> where T: Sensitive
     let vec_data = vec![
         SensitiveWrapper {
             value: "secret1".into(),
@@ -402,14 +402,14 @@ fn test_generic_container_with_sensitive() {
     assert_eq!(redacted[0].value, "[REDACTED]");
     assert_eq!(redacted[1].value, "[REDACTED]");
 
-    // Option<T> where T: SensitiveData
+    // Option<T> where T: Sensitive
     let opt_data = Some(SensitiveWrapper {
         value: "secret".into(),
     });
     let redacted = opt_data.redact();
     assert_eq!(redacted.unwrap().value, "[REDACTED]");
 
-    // HashMap<K, V> where V: SensitiveData
+    // HashMap<K, V> where V: Sensitive
     let mut map_data: HashMap<String, SensitiveWrapper> = HashMap::new();
     map_data.insert(
         "key".into(),
@@ -423,7 +423,7 @@ fn test_generic_container_with_sensitive() {
 
 #[test]
 fn test_option_vec_nesting() {
-    #[derive(Clone, SensitiveData)]
+    #[derive(Clone, Sensitive)]
     #[cfg_attr(feature = "slog", derive(serde::Serialize))]
     struct SensitiveItem {
         #[sensitive(Default)]
@@ -449,7 +449,7 @@ fn test_option_vec_nesting() {
 
 #[test]
 fn test_scalar_redaction() {
-    #[derive(Clone, SensitiveData)]
+    #[derive(Clone, Sensitive)]
     #[cfg_attr(feature = "slog", derive(serde::Serialize))]
     struct ScalarData {
         #[sensitive(Default)]
@@ -478,7 +478,7 @@ fn test_scalar_redaction() {
 
 #[test]
 fn test_scalar_types_comprehensive() {
-    #[derive(Clone, SensitiveData)]
+    #[derive(Clone, Sensitive)]
     #[cfg_attr(feature = "slog", derive(serde::Serialize))]
     struct AllScalars {
         #[sensitive(Default)]
@@ -545,7 +545,7 @@ fn test_scalar_types_comprehensive() {
 
 #[test]
 fn test_mixed_named_and_sensitive_fields() {
-    #[derive(Clone, SensitiveData)]
+    #[derive(Clone, Sensitive)]
     #[cfg_attr(feature = "slog", derive(serde::Serialize))]
     struct MixedRecord {
         id: u64,
@@ -584,7 +584,7 @@ fn test_mixed_named_and_sensitive_fields() {
 
 #[test]
 fn test_nested_wrapper_option_vec() {
-    #[derive(Clone, SensitiveData)]
+    #[derive(Clone, Sensitive)]
     #[cfg_attr(feature = "slog", derive(serde::Serialize))]
     struct NestedWrappers {
         #[sensitive(Default)]
@@ -603,7 +603,7 @@ fn test_nested_wrapper_option_vec() {
 
 #[test]
 fn test_nested_wrapper_vec_option() {
-    #[derive(Clone, SensitiveData)]
+    #[derive(Clone, Sensitive)]
     #[cfg_attr(feature = "slog", derive(serde::Serialize))]
     struct NestedWrappers {
         #[sensitive(Default)]
@@ -622,7 +622,7 @@ fn test_nested_wrapper_vec_option() {
 
 #[test]
 fn test_nested_wrapper_deeply_nested() {
-    #[derive(Clone, SensitiveData)]
+    #[derive(Clone, Sensitive)]
     #[cfg_attr(feature = "slog", derive(serde::Serialize))]
     struct DeepNest {
         #[sensitive(Default)]
@@ -643,7 +643,7 @@ fn test_nested_wrapper_deeply_nested() {
 fn test_nested_wrapper_hashmap_vec() {
     use std::collections::HashMap;
 
-    #[derive(Clone, SensitiveData)]
+    #[derive(Clone, Sensitive)]
     #[cfg_attr(feature = "slog", derive(serde::Serialize))]
     struct MapWithVec {
         #[sensitive(Default)]
@@ -665,15 +665,15 @@ fn test_nested_wrapper_hashmap_vec() {
 #[test]
 fn test_external_types_pass_through() {
     // Simulate external types that implement RedactableContainer as pass-through
-    #[derive(Clone, PartialEq, SensitiveData)]
+    #[derive(Clone, PartialEq, Sensitive)]
     #[cfg_attr(feature = "slog", derive(serde::Serialize))]
     struct ExternalTimestamp(u64);
 
-    #[derive(Clone, PartialEq, SensitiveData)]
+    #[derive(Clone, PartialEq, Sensitive)]
     #[cfg_attr(feature = "slog", derive(serde::Serialize))]
     struct ExternalDecimal(f64);
 
-    #[derive(Clone, SensitiveData)]
+    #[derive(Clone, Sensitive)]
     #[cfg_attr(feature = "slog", derive(serde::Serialize))]
     struct Transaction {
         #[sensitive(Default)]
@@ -715,7 +715,7 @@ fn test_external_types_with_sensitive_wrapper() {
         }
     }
 
-    #[derive(Clone, SensitiveData)]
+    #[derive(Clone, Sensitive)]
     #[cfg_attr(feature = "slog", derive(serde::Serialize))]
     struct Record {
         #[sensitive(Default)]
@@ -761,7 +761,7 @@ fn test_external_types_with_policy_trait() {
         }
     }
 
-    #[derive(Clone, SensitiveData)]
+    #[derive(Clone, Sensitive)]
     #[cfg_attr(feature = "json", derive(serde::Serialize))]
     struct Record {
         id: SensitiveValue<ExternalType, ExternalTypePolicy>,
@@ -799,7 +799,7 @@ fn test_not_sensitive_derives_sensitive_type() {
 
 #[test]
 fn test_not_sensitive_does_not_walk_nested() {
-    #[derive(Clone, SensitiveData)]
+    #[derive(Clone, Sensitive)]
     #[cfg_attr(feature = "slog", derive(serde::Serialize))]
     struct Inner {
         #[sensitive(Default)]
@@ -837,6 +837,132 @@ fn test_not_sensitive_debug_wrapper() {
     );
 }
 
+// =============================================================================
+// #[not_sensitive] attribute on Sensitive derive
+// =============================================================================
+
+#[test]
+fn test_not_sensitive_attribute_on_sensitive_derive() {
+    // ForeignType doesn't implement RedactableContainer
+    #[derive(Clone, Debug, PartialEq)]
+    #[cfg_attr(feature = "slog", derive(serde::Serialize))]
+    struct ForeignType {
+        data: String,
+    }
+
+    #[derive(Clone, Sensitive)]
+    #[cfg_attr(feature = "slog", derive(serde::Serialize))]
+    struct Container {
+        #[not_sensitive]
+        foreign: ForeignType,
+        #[sensitive(Default)]
+        secret: String,
+    }
+
+    let value = Container {
+        foreign: ForeignType {
+            data: "external".into(),
+        },
+        secret: "hunter2".into(),
+    };
+
+    let redacted = value.clone().redact();
+
+    // Foreign type passes through unchanged
+    assert_eq!(redacted.foreign, value.foreign);
+    // Sensitive field is redacted
+    assert_eq!(redacted.secret, "[REDACTED]");
+}
+
+#[test]
+fn test_not_sensitive_attribute_does_not_walk_nested() {
+    // Even if the inner type has sensitive fields, #[not_sensitive] does NOT walk them
+    #[derive(Clone, Sensitive, PartialEq)]
+    #[cfg_attr(feature = "slog", derive(serde::Serialize))]
+    struct InnerSensitive {
+        #[sensitive(Default)]
+        password: String,
+    }
+
+    #[derive(Clone, Sensitive)]
+    #[cfg_attr(feature = "slog", derive(serde::Serialize))]
+    struct Outer {
+        // This will NOT redact password because #[not_sensitive] is passthrough
+        #[not_sensitive]
+        inner: InnerSensitive,
+        #[sensitive(Default)]
+        api_key: String,
+    }
+
+    let value = Outer {
+        inner: InnerSensitive {
+            password: "secret123".into(),
+        },
+        api_key: "sk_live_abc".into(),
+    };
+
+    let redacted = value.clone().redact();
+
+    // Password is NOT redacted because #[not_sensitive] skips traversal
+    assert_eq!(redacted.inner.password, "secret123");
+    // api_key is redacted normally
+    assert_eq!(redacted.api_key, "[REDACTED]");
+}
+
+#[test]
+fn test_not_sensitive_attribute_on_enum_variant() {
+    #[derive(Clone, Debug, PartialEq)]
+    #[cfg_attr(feature = "slog", derive(serde::Serialize))]
+    struct Metadata {
+        version: u32,
+    }
+
+    #[derive(Clone, Sensitive)]
+    #[cfg_attr(feature = "slog", derive(serde::Serialize))]
+    enum Event {
+        Success {
+            #[not_sensitive]
+            meta: Metadata,
+            #[sensitive(Default)]
+            token: String,
+        },
+        Failure {
+            #[not_sensitive]
+            code: u32,
+            message: String,
+        },
+    }
+
+    let success = Event::Success {
+        meta: Metadata { version: 1 },
+        token: "secret_token".into(),
+    };
+
+    let failure = Event::Failure {
+        code: 500,
+        message: "error".into(),
+    };
+
+    let redacted_success = success.clone().redact();
+    let redacted_failure = failure.clone().redact();
+
+    match redacted_success {
+        Event::Success { meta, token } => {
+            assert_eq!(meta, Metadata { version: 1 });
+            assert_eq!(token, "[REDACTED]");
+        }
+        _ => panic!("wrong variant"),
+    }
+
+    match redacted_failure {
+        Event::Failure { code, message } => {
+            assert_eq!(code, 500);
+            assert_eq!(message, "error");
+        }
+        _ => panic!("wrong variant"),
+    }
+}
+
 #[test]
 fn test_log_redacted_bound_accepts_escape_hatches() {
     #[derive(Clone)]
@@ -853,7 +979,7 @@ fn test_log_redacted_bound_accepts_escape_hatches() {
         }
     }
 
-    #[derive(Clone, SensitiveData)]
+    #[derive(Clone, Sensitive)]
     #[cfg_attr(feature = "json", derive(serde::Serialize))]
     struct Event {
         id: SensitiveValue<ExternalId, Default>,
@@ -888,7 +1014,7 @@ fn test_log_redacted_bound_accepts_escape_hatches() {
 
 #[test]
 fn test_redacted_output_wrapper_for_sensitive_data() {
-    #[derive(Clone, SensitiveData)]
+    #[derive(Clone, Sensitive)]
     #[cfg_attr(feature = "slog", derive(serde::Serialize))]
     struct Event {
         #[sensitive(Default)]
@@ -910,8 +1036,8 @@ fn test_redacted_output_wrapper_for_sensitive_data() {
 
 #[test]
 fn test_nested_struct_walks_by_default() {
-    // Nested structs that derive SensitiveData are walked by default.
-    #[derive(Clone, SensitiveData, PartialEq)]
+    // Nested structs that derive Sensitive are walked by default.
+    #[derive(Clone, Sensitive, PartialEq)]
     #[cfg_attr(feature = "slog", derive(serde::Serialize))]
     #[sensitive(skip_debug)]
     struct Credentials {
@@ -929,13 +1055,13 @@ fn test_nested_struct_walks_by_default() {
         }
     }
 
-    #[derive(Clone, SensitiveData)]
+    #[derive(Clone, Sensitive)]
     #[cfg_attr(feature = "slog", derive(serde::Serialize))]
     struct UserWithAnnotation {
         creds: Credentials, // Nested containers are walked automatically
     }
 
-    #[derive(Clone, SensitiveData)]
+    #[derive(Clone, Sensitive)]
     #[cfg_attr(feature = "slog", derive(serde::Serialize))]
     struct UserWithoutAnnotation {
         creds: Credentials,
@@ -973,7 +1099,7 @@ fn test_type_with_both_redactable_leaf_and_sensitive_container() {
     // Note: #[sensitive(Policy)] only works on String/Cow<str> via PolicyApplicable.
     // Custom RedactableLeaf types must use the SensitiveValue<T, Policy> wrapper.
 
-    #[derive(Clone, PartialEq, SensitiveData)]
+    #[derive(Clone, PartialEq, Sensitive)]
     #[cfg_attr(feature = "slog", derive(serde::Serialize))]
     #[sensitive(skip_debug)]
     struct UserId {
@@ -1007,14 +1133,14 @@ fn test_type_with_both_redactable_leaf_and_sensitive_container() {
     }
 
     // When used as an unannotated field, Sensitive is used (fields are traversed)
-    #[derive(Clone, SensitiveData)]
+    #[derive(Clone, Sensitive)]
     #[cfg_attr(feature = "slog", derive(serde::Serialize))]
     struct AccountTraversed {
         user_id: UserId, // No annotation -> walks into UserId's fields
     }
 
     // When wrapped in SensitiveValue<T, Policy>, RedactableLeaf is used (redacted as unit)
-    #[derive(Clone, SensitiveData)]
+    #[derive(Clone, Sensitive)]
     #[cfg_attr(feature = "slog", derive(serde::Serialize))]
     struct AccountAsLeaf {
         user_id: SensitiveValue<UserId, Token>, // SensitiveValue wrapper -> treats UserId as a leaf

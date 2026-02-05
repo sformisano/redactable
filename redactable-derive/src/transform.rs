@@ -38,7 +38,7 @@ fn is_default_policy(path: &syn::Path) -> bool {
 /// | None                    | Walk containers, scalars pass through                |
 /// | `#[sensitive(Default)]` | Scalars redact to default; strings to "[REDACTED]"   |
 /// | `#[sensitive(Policy)]`  | Apply policy recursively through wrappers            |
-/// | `#[not_sensitive]`      | Compile error (only valid for `SensitiveDisplay`)    |
+/// | `#[not_sensitive]`      | Explicit passthrough (no transformation)             |
 pub(crate) fn generate_field_transform(
     ctx: &mut DeriveContext<'_>,
     ty: &syn::Type,
@@ -61,10 +61,11 @@ pub(crate) fn generate_field_transform(
                 })
             }
         }
-        Strategy::NotSensitive => Err(syn::Error::new(
-            span,
-            "`#[not_sensitive]` is only valid for `SensitiveDisplay`",
-        )),
+        Strategy::NotSensitive => {
+            // Explicit opt-out: no transformation, passthrough unchanged.
+            // This is useful for foreign types that don't implement RedactableContainer.
+            Ok(TokenStream::new())
+        }
         Strategy::Policy(policy_path) => {
             if is_scalar_type(ty) {
                 if is_default_policy(policy_path) {
