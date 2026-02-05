@@ -37,6 +37,9 @@ use crate::{
 
 /// Marker trait for types whose `tracing` integration always emits redacted output.
 ///
+/// This marker indicates that the type will produce redacted output when used
+/// with tracing (via `TracingRedactedExt` or `TracingValuableExt`).
+///
 /// This trait is implemented only for sink adapters and wrappers that redact
 /// before logging. It is not a blanket impl for raw types.
 pub trait TracingRedacted {}

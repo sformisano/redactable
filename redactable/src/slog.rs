@@ -30,6 +30,10 @@ use crate::{
 
 /// Marker trait for types whose `slog` integration always emits redacted output.
 ///
+/// This trait requires `slog::Value` so the type can be logged with slog.
+/// The marker indicates that the type's `slog::Value` implementation produces
+/// redacted output rather than raw values.
+///
 /// This trait is implemented only for sink adapters and wrappers that redact
 /// before logging. It is not a blanket impl for raw types.
 ///
@@ -40,7 +44,7 @@ use crate::{
 ///
 /// assert_slog_redacted::<String>();
 /// ```
-pub trait SlogRedacted {}
+pub trait SlogRedacted: SlogValue {}
 
 /// A `slog::Value` that emits an owned redacted payload as structured JSON.
 ///
@@ -68,6 +72,12 @@ impl SlogValue for RedactedJson {
     ) -> SlogResult {
         let nested = slog::Serde(self.value.clone());
         SlogValue::serialize(&nested, record, key, serializer)
+    }
+}
+
+impl ToRedactedOutput for RedactedJson {
+    fn to_redacted_output(&self) -> RedactedOutput {
+        RedactedOutput::Json(self.value.clone())
     }
 }
 
