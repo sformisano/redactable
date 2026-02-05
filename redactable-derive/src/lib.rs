@@ -112,6 +112,10 @@ use redacted_display::derive_redacted_display;
 ///   values. Works for `String`, `Option<String>`, `Vec<String>`, `Box<String>`. Scalars can only
 ///   use `#[sensitive(Default)]`.
 ///
+/// - `#[not_sensitive]`: Explicit passthrough - the field is not transformed at all. Use this
+///   for foreign types that don't implement `RedactableContainer`. This is equivalent to wrapping
+///   the field type in `NotSensitiveValue<T>`, but without changing the type signature.
+///
 /// Unions are rejected at compile time.
 ///
 /// # Additional Generated Impls
@@ -124,18 +128,13 @@ use redacted_display::derive_redacted_display;
 ///   `serde::Serialize` because it emits structured JSON. The derive first looks for a top-level
 ///   `slog` crate; if not found, it checks the `REDACTABLE_SLOG_CRATE` env var for an alternate path
 ///   (e.g., `my_log::slog`). If neither is available, compilation fails with a clear error.
-#[proc_macro_derive(Sensitive, attributes(sensitive))]
+#[proc_macro_derive(Sensitive, attributes(sensitive, not_sensitive))]
 pub fn derive_sensitive_container(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
     match expand(input, SlogMode::RedactedJson) {
         Ok(tokens) => tokens.into(),
         Err(err) => err.into_compile_error().into(),
     }
-}
-
-#[proc_macro_derive(SensitiveData, attributes(sensitive))]
-pub fn derive_sensitive_data(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
-    derive_sensitive_container(input)
 }
 
 /// Derives a no-op `redactable::RedactableContainer` implementation.

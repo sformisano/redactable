@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.3.0 - 2026-02-05
+
+### Added
+- `#[not_sensitive]` attribute now supported on `Sensitive` derive macro (previously only `SensitiveDisplay`)
+- Both derive macros now have consistent field annotation options: `#[sensitive(Policy)]` and `#[not_sensitive]`
+
+### Changed
+- `#[not_sensitive]` attribute provides an alternative to `NotSensitiveValue<T>` wrapper for foreign types
+
+### Removed
+- `SensitiveData` derive macro alias (use `Sensitive` instead)
+
 ## 0.2.0 - 2026-02-04
 
 ### Added

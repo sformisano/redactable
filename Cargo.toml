@@ -3,7 +3,7 @@ members = ["redactable", "redactable-derive"]
 resolver = "2"
 
 [workspace.package]
-version = "0.2.3"
+version = "0.3.0"
 edition = "2024"
 license = "MIT"
 repository = "https://github.com/sformisano/redactable"
