@@ -73,7 +73,7 @@
 // Allow some lints while testing
 #![cfg_attr(test, allow(clippy::non_ascii_literal, clippy::unwrap_used))]
 
-pub use redactable_derive::{NotSensitive, Sensitive, SensitiveData, SensitiveDisplay};
+pub use redactable_derive::{NotSensitive, Sensitive, SensitiveDisplay};
 
 #[allow(unused_extern_crates)]
 extern crate self as redactable;

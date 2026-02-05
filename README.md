@@ -67,6 +67,7 @@ The `Sensitive` derive macro generates traversal code. For each field, it calls 
 | **Containers** (structs/enums deriving `Sensitive`) | Traversal walks into them recursively, visiting each field |
 | **Unannotated leaves** (String, primitives, etc.) | These implement `RedactableContainer` as a passthrough - they return themselves unchanged |
 | **Annotated leaves** (`#[sensitive(Policy)]`) | The macro generates transformation code that applies the policy, bypassing the normal `RedactableContainer::redact_with` call |
+| **Explicit passthrough** (`#[not_sensitive]`) | Field is left unchanged without requiring `RedactableContainer` — use for foreign types |
 
 ```rust
 #[derive(Clone, Sensitive)]
@@ -473,7 +474,7 @@ Unannotated placeholders use `RedactableDisplay`:
 | `#[sensitive(Default)]` | Scalars → default value; strings → `"[REDACTED]"` |
 | `#[sensitive(Policy)]` | Applies the policy's redaction rules |
 
-This matches `Sensitive` behavior: scalars pass through, nested containers use their redaction trait.
+This matches `Sensitive` behavior: scalars pass through, nested containers use their redaction trait. Both `Sensitive` and `SensitiveDisplay` support all these annotations.
 
 Unannotated fields that do not implement `RedactableDisplay` produce a compile error:
 
@@ -513,7 +514,7 @@ This prevents accidental exposure when adding new fields while still making nest
 
 | Situation | Use |
 |---|---|
-| Foreign type, no sensitive data | `NotSensitiveValue<T>` wrapper |
+| Foreign type, no sensitive data | `#[not_sensitive]` attribute or `NotSensitiveValue<T>` wrapper |
 | Foreign type, needs redaction | `SensitiveValue<T, Policy>` + `RedactableWithPolicy` |
 
 **How to produce logging output?**
