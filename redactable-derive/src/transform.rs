@@ -8,7 +8,10 @@ use quote::quote_spanned;
 use syn::Result;
 
 use crate::{
-    crate_path, generics::collect_generics_from_type, strategy::Strategy, types::is_scalar_type,
+    crate_path,
+    generics::collect_generics_from_type,
+    strategy::Strategy,
+    types::{is_phantom_data, is_scalar_type},
 };
 
 /// Accumulated state during field processing.
@@ -24,9 +27,9 @@ pub(crate) struct DeriveContext<'a> {
     pub(crate) debug_unredacted_generics: &'a mut Vec<Ident>,
 }
 
-/// Checks if a policy path refers to the `Default` policy.
-fn is_default_policy(path: &syn::Path) -> bool {
-    path.is_ident("Default")
+/// Checks if a policy path refers to the `Secret` policy.
+fn is_secret_policy(path: &syn::Path) -> bool {
+    path.is_ident("Secret")
 }
 
 /// Generates the transform token stream for a single field.
@@ -36,7 +39,7 @@ fn is_default_policy(path: &syn::Path) -> bool {
 /// | Annotation              | Behavior                                             |
 /// |-------------------------|------------------------------------------------------|
 /// | None                    | Walk containers, scalars pass through                |
-/// | `#[sensitive(Default)]` | Scalars redact to default; strings to "[REDACTED]"   |
+/// | `#[sensitive(Secret)]`  | Scalars redact to default; strings to "[REDACTED]"   |
 /// | `#[sensitive(Policy)]`  | Apply policy recursively through wrappers            |
 /// | `#[not_sensitive]`      | Explicit passthrough (no transformation)             |
 pub(crate) fn generate_field_transform(
@@ -50,7 +53,10 @@ pub(crate) fn generate_field_transform(
 
     match strategy {
         Strategy::WalkDefault => {
-            if is_scalar_type(ty) {
+            // PhantomData<T> is a zero-sized marker that never contains data.
+            // Scalars are primitive types that pass through unchanged.
+            // Both cases: return empty token stream (passthrough) without collecting generics.
+            if is_phantom_data(ty) || is_scalar_type(ty) {
                 Ok(TokenStream::new())
             } else {
                 collect_generics_from_type(ty, ctx.generics, ctx.used_generics);
@@ -68,14 +74,14 @@ pub(crate) fn generate_field_transform(
         }
         Strategy::Policy(policy_path) => {
             if is_scalar_type(ty) {
-                if is_default_policy(policy_path) {
+                if is_secret_policy(policy_path) {
                     Ok(quote_spanned! { span =>
                         let #binding = mapper.map_scalar(#binding);
                     })
                 } else {
                     Err(syn::Error::new(
                         span,
-                        "scalar fields can only use #[sensitive(Default)]; \
+                        "scalar fields can only use #[sensitive(Secret)]; \
                          other policies are for string-like types",
                     ))
                 }

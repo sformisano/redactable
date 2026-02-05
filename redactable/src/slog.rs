@@ -19,12 +19,13 @@ use serde::Serialize;
 use serde_json::Value as JsonValue;
 use slog::{Key, Record, Result as SlogResult, Serializer, Value as SlogValue};
 
+pub use crate::redaction::RedactedJson;
 use crate::{
     policy::RedactionPolicy,
     redaction::{
-        NotSensitiveDebug, NotSensitiveDisplay, NotSensitiveJson, Redactable, RedactableDisplay,
-        RedactableWithPolicy, RedactedJsonRef, RedactedOutput, RedactedOutputRef, SensitiveValue,
-        ToRedactedOutput,
+        NotSensitive, NotSensitiveDebug, NotSensitiveDisplay, NotSensitiveJson, Redactable,
+        RedactableDisplay, RedactableWithPolicy, RedactedJsonRef, RedactedOutput,
+        RedactedOutputRef, SensitiveValue, ToRedactedOutput,
     },
 };
 
@@ -48,23 +49,6 @@ pub trait SlogRedacted: SlogValue {}
 
 impl<T: SlogRedacted + ?Sized> SlogRedacted for &T {}
 
-/// A `slog::Value` that emits an owned redacted payload as structured JSON.
-///
-/// The payload is stored as a `serde_json::Value` and emitted via
-/// `slog`'s nested-value support.
-///
-/// This type does not return serialization errors to `slog`; if converting the
-/// redacted output into a JSON value fails, it falls back to a JSON string value.
-pub struct RedactedJson {
-    value: JsonValue,
-}
-
-impl RedactedJson {
-    fn new(value: JsonValue) -> Self {
-        Self { value }
-    }
-}
-
 impl SlogValue for RedactedJson {
     fn serialize(
         &self,
@@ -72,14 +56,8 @@ impl SlogValue for RedactedJson {
         key: Key,
         serializer: &mut dyn Serializer,
     ) -> SlogResult {
-        let nested = slog::Serde(self.value.clone());
+        let nested = slog::Serde(self.value().clone());
         SlogValue::serialize(&nested, record, key, serializer)
-    }
-}
-
-impl ToRedactedOutput for RedactedJson {
-    fn to_redacted_output(&self) -> RedactedOutput {
-        RedactedOutput::Json(self.value.clone())
     }
 }
 
@@ -178,9 +156,9 @@ where
 {
 }
 
-impl<T> SlogValue for NotSensitiveDisplay<'_, T>
+impl<T> SlogValue for NotSensitiveDisplay<T>
 where
-    T: fmt::Display + ?Sized,
+    T: fmt::Display,
 {
     fn serialize(
         &self,
@@ -192,11 +170,11 @@ where
     }
 }
 
-impl<T> SlogRedacted for NotSensitiveDisplay<'_, T> where T: fmt::Display + ?Sized {}
+impl<T> SlogRedacted for NotSensitiveDisplay<T> where T: fmt::Display {}
 
-impl<T> SlogValue for NotSensitiveDebug<'_, T>
+impl<T> SlogValue for NotSensitiveDebug<T>
 where
-    T: fmt::Debug + ?Sized,
+    T: fmt::Debug,
 {
     fn serialize(
         &self,
@@ -208,7 +186,23 @@ where
     }
 }
 
-impl<T> SlogRedacted for NotSensitiveDebug<'_, T> where T: fmt::Debug + ?Sized {}
+impl<T> SlogRedacted for NotSensitiveDebug<T> where T: fmt::Debug {}
+
+impl<T> SlogValue for NotSensitive<T>
+where
+    T: SlogValue,
+{
+    fn serialize(
+        &self,
+        record: &Record<'_>,
+        key: Key,
+        serializer: &mut dyn Serializer,
+    ) -> SlogResult {
+        self.0.serialize(record, key, serializer)
+    }
+}
+
+impl<T> SlogRedacted for NotSensitive<T> where T: SlogRedacted {}
 
 impl<T> SlogValue for NotSensitiveJson<'_, T>
 where

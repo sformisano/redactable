@@ -3,14 +3,18 @@
 //! This module provides wrappers and extension traits for marking values as
 //! explicitly non-sensitive at logging boundaries:
 //!
+//! - [`NotSensitive`]: Wrapper with no formatting preference
 //! - [`NotSensitiveDisplay`]: Wrapper using `Display` formatting
 //! - [`NotSensitiveDebug`]: Wrapper using `Debug` formatting
 //! - [`NotSensitiveJson`]: Wrapper using JSON serialization (requires `json` feature)
 //!
 //! And their corresponding extension traits:
 //! - [`NotSensitiveExt`]: Provides `.not_sensitive()`
+//! - [`NotSensitiveDisplayExt`]: Provides `.not_sensitive_display()`
 //! - [`NotSensitiveDebugExt`]: Provides `.not_sensitive_debug()`
 //! - [`NotSensitiveJsonExt`]: Provides `.not_sensitive_json()`
+
+use std::ops::{Deref, DerefMut};
 
 #[cfg(feature = "json")]
 use serde::Serialize;
@@ -18,39 +22,96 @@ use serde::Serialize;
 use super::output::{RedactedOutput, ToRedactedOutput};
 
 // =============================================================================
+// NotSensitive - Generic wrapper with no formatting preference
+// =============================================================================
+
+/// Wrapper for explicitly non-sensitive values without formatting opinions.
+///
+/// Use `.not_sensitive()` to mark a value as safe to log. For `ToRedactedOutput`
+/// boundaries, use `NotSensitiveDisplay` or `NotSensitiveDebug`.
+pub struct NotSensitive<T>(pub T);
+
+impl<T> NotSensitive<T> {
+    /// Returns the inner value.
+    #[must_use]
+    pub fn inner(&self) -> &T {
+        &self.0
+    }
+}
+
+impl<T> Deref for NotSensitive<T> {
+    type Target = T;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl<T> DerefMut for NotSensitive<T> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
+impl<T> std::fmt::Display for NotSensitive<T>
+where
+    T: std::fmt::Display,
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        std::fmt::Display::fmt(&self.0, f)
+    }
+}
+
+impl<T> std::fmt::Debug for NotSensitive<T>
+where
+    T: std::fmt::Debug,
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        std::fmt::Debug::fmt(&self.0, f)
+    }
+}
+
+// =============================================================================
 // NotSensitiveDisplay - Wrapper using Display
 // =============================================================================
 
 /// Wrapper for explicitly non-sensitive values using `Display`.
 ///
-/// Use `.not_sensitive()` to declare a value safe to log.
-pub struct NotSensitiveDisplay<'a, T: ?Sized>(&'a T);
+/// Use `.not_sensitive_display()` to declare a value safe to log.
+pub struct NotSensitiveDisplay<T>(pub T);
 
-impl<T: ?Sized> NotSensitiveDisplay<'_, T> {
+impl<T> NotSensitiveDisplay<T> {
     /// Returns the inner value.
     #[must_use]
     pub fn inner(&self) -> &T {
-        self.0
+        &self.0
     }
 }
 
-impl<T> ToRedactedOutput for NotSensitiveDisplay<'_, T>
+impl<T> ToRedactedOutput for NotSensitiveDisplay<T>
 where
-    T: std::fmt::Display + ?Sized,
+    T: std::fmt::Display,
 {
     fn to_redacted_output(&self) -> RedactedOutput {
         RedactedOutput::Text(self.0.to_string())
     }
 }
 
-impl<T> std::fmt::Debug for NotSensitiveDisplay<'_, T>
+impl<T> std::fmt::Display for NotSensitiveDisplay<T>
 where
-    T: std::fmt::Display + ?Sized,
+    T: std::fmt::Display,
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_tuple("NotSensitiveDisplay")
-            .field(&self.0.to_string())
-            .finish()
+        std::fmt::Display::fmt(&self.0, f)
+    }
+}
+
+impl<T> std::fmt::Debug for NotSensitiveDisplay<T>
+where
+    T: std::fmt::Display,
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        std::fmt::Display::fmt(&self.0, f)
     }
 }
 
@@ -62,28 +123,28 @@ where
 ///
 /// Use `.not_sensitive_debug()` to declare a value safe to log via `Debug`
 /// formatting.
-pub struct NotSensitiveDebug<'a, T: ?Sized>(&'a T);
+pub struct NotSensitiveDebug<T>(pub T);
 
-impl<T: ?Sized> NotSensitiveDebug<'_, T> {
+impl<T> NotSensitiveDebug<T> {
     /// Returns the inner value.
     #[must_use]
     pub fn inner(&self) -> &T {
-        self.0
+        &self.0
     }
 }
 
-impl<T> ToRedactedOutput for NotSensitiveDebug<'_, T>
+impl<T> ToRedactedOutput for NotSensitiveDebug<T>
 where
-    T: std::fmt::Debug + ?Sized,
+    T: std::fmt::Debug,
 {
     fn to_redacted_output(&self) -> RedactedOutput {
         RedactedOutput::Text(format!("{:?}", self.0))
     }
 }
 
-impl<T> std::fmt::Debug for NotSensitiveDebug<'_, T>
+impl<T> std::fmt::Debug for NotSensitiveDebug<T>
 where
-    T: std::fmt::Debug + ?Sized,
+    T: std::fmt::Debug,
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_tuple("NotSensitiveDebug")
@@ -143,38 +204,45 @@ where
 // =============================================================================
 
 /// Extension trait to mark values as explicitly non-sensitive for logging.
-pub trait NotSensitiveExt {
-    /// Wraps the value as explicitly non-sensitive for redacted logging.
-    fn not_sensitive(&self) -> NotSensitiveDisplay<'_, Self>
-    where
-        Self: Sized;
+pub trait NotSensitiveExt: Sized {
+    /// Wraps a reference to the value as explicitly non-sensitive.
+    fn not_sensitive(&self) -> NotSensitive<&Self> {
+        NotSensitive(self)
+    }
 }
 
-impl<T> NotSensitiveExt for T
-where
-    T: std::fmt::Display,
-{
-    fn not_sensitive(&self) -> NotSensitiveDisplay<'_, Self> {
+impl<T: Sized> NotSensitiveExt for T {}
+
+/// Extension trait to mark values as explicitly non-sensitive using `Display`.
+///
+/// ```compile_fail
+/// use redactable::NotSensitiveDisplayExt;
+///
+/// struct NoDisplay;
+///
+/// fn main() {
+///     let value = NoDisplay;
+///     let _ = value.not_sensitive_display();
+/// }
+/// ```
+pub trait NotSensitiveDisplayExt: Sized + std::fmt::Display {
+    /// Wraps a reference to the value as explicitly non-sensitive using `Display`.
+    fn not_sensitive_display(&self) -> NotSensitiveDisplay<&Self> {
         NotSensitiveDisplay(self)
     }
 }
 
-/// Extension trait to mark values as explicitly non-sensitive using `Debug`.
-pub trait NotSensitiveDebugExt {
-    /// Wraps the value as explicitly non-sensitive using `Debug`.
-    fn not_sensitive_debug(&self) -> NotSensitiveDebug<'_, Self>
-    where
-        Self: Sized;
-}
+impl<T> NotSensitiveDisplayExt for T where T: std::fmt::Display {}
 
-impl<T> NotSensitiveDebugExt for T
-where
-    T: std::fmt::Debug,
-{
-    fn not_sensitive_debug(&self) -> NotSensitiveDebug<'_, Self> {
+/// Extension trait to mark values as explicitly non-sensitive using `Debug`.
+pub trait NotSensitiveDebugExt: Sized + std::fmt::Debug {
+    /// Wraps a reference to the value as explicitly non-sensitive using `Debug`.
+    fn not_sensitive_debug(&self) -> NotSensitiveDebug<&Self> {
         NotSensitiveDebug(self)
     }
 }
+
+impl<T> NotSensitiveDebugExt for T where T: std::fmt::Debug {}
 
 /// Extension trait to mark values as explicitly non-sensitive using JSON.
 #[cfg(feature = "json")]

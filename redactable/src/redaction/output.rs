@@ -5,6 +5,7 @@
 //! - [`RedactedOutput`]: The output enum (Text or Json)
 //! - [`ToRedactedOutput`]: Trait for types that can produce redacted output
 //! - [`RedactedOutputRef`]: Wrapper for explicit redacted output
+//! - [`RedactedJson`]: Owned redacted JSON output
 //! - [`RedactedJsonRef`]: Wrapper for redacted JSON output
 
 #[cfg(feature = "json")]
@@ -13,6 +14,7 @@ use serde::Serialize;
 use serde_json::Value as JsonValue;
 
 use super::{
+    display::RedactableDisplay,
     traits::{Redactable, RedactableWithPolicy},
     wrappers::SensitiveValue,
 };
@@ -43,6 +45,15 @@ pub trait ToRedactedOutput {
 impl ToRedactedOutput for RedactedOutput {
     fn to_redacted_output(&self) -> RedactedOutput {
         self.clone()
+    }
+}
+
+impl<T> ToRedactedOutput for T
+where
+    T: RedactableDisplay,
+{
+    fn to_redacted_output(&self) -> RedactedOutput {
+        RedactedOutput::Text(format!("{}", self.redacted_display()))
     }
 }
 
@@ -89,6 +100,34 @@ where
 {
     fn redacted_output(&self) -> RedactedOutputRef<'_, Self> {
         RedactedOutputRef(self)
+    }
+}
+
+// =============================================================================
+// RedactedJson - Owned redacted JSON output
+// =============================================================================
+
+/// Owned redacted JSON output produced at logging boundaries.
+#[cfg(feature = "json")]
+pub struct RedactedJson {
+    value: JsonValue,
+}
+
+#[cfg(feature = "json")]
+impl RedactedJson {
+    pub(crate) fn new(value: JsonValue) -> Self {
+        Self { value }
+    }
+
+    pub(crate) fn value(&self) -> &JsonValue {
+        &self.value
+    }
+}
+
+#[cfg(feature = "json")]
+impl ToRedactedOutput for RedactedJson {
+    fn to_redacted_output(&self) -> RedactedOutput {
+        RedactedOutput::Json(self.value.clone())
     }
 }
 

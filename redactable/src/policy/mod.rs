@@ -28,7 +28,7 @@ pub mod text;
 
 // Re-export everything at the module level for convenience
 pub use policies::{
-    BlockchainAddress, CreditCard, Default, Email, IpAddress, PhoneNumber, Pii, RedactionPolicy,
+    BlockchainAddress, CreditCard, Email, IpAddress, PhoneNumber, Pii, RedactionPolicy, Secret,
     Token,
 };
 pub use text::{

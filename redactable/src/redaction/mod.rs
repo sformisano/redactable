@@ -15,6 +15,8 @@
 mod containers;
 mod display;
 mod escape_hatches;
+#[cfg(feature = "json")]
+mod json;
 mod output;
 mod redact;
 mod traits;
@@ -25,12 +27,13 @@ mod wrappers;
 pub use display::{RedactableDisplay, RedactedDisplayRef};
 // Re-export escape hatches
 pub use escape_hatches::{
-    NotSensitiveDebug, NotSensitiveDebugExt, NotSensitiveDisplay, NotSensitiveExt,
+    NotSensitive, NotSensitiveDebug, NotSensitiveDebugExt, NotSensitiveDisplay,
+    NotSensitiveDisplayExt, NotSensitiveExt,
 };
 #[cfg(feature = "json")]
 pub use escape_hatches::{NotSensitiveJson, NotSensitiveJsonExt};
 #[cfg(feature = "json")]
-pub use output::{RedactedJsonExt, RedactedJsonRef};
+pub use output::{RedactedJson, RedactedJsonExt, RedactedJsonRef};
 // Re-export output types
 pub use output::{RedactedOutput, RedactedOutputExt, RedactedOutputRef, ToRedactedOutput};
 // Re-export redaction machinery

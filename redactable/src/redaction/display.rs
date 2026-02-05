@@ -12,9 +12,16 @@
 //!
 //! Feature-gated types: `chrono` date/time types, `time` crate types, `Uuid`.
 
-use std::{borrow::Cow, marker::PhantomData};
-
-use super::output::{RedactedOutput, ToRedactedOutput};
+use std::{
+    borrow::Cow,
+    cmp::Ordering,
+    marker::PhantomData,
+    num::{
+        NonZeroI8, NonZeroI16, NonZeroI32, NonZeroI64, NonZeroI128, NonZeroIsize, NonZeroU8,
+        NonZeroU16, NonZeroU32, NonZeroU64, NonZeroU128, NonZeroUsize,
+    },
+    time::{Duration, Instant, SystemTime},
+};
 
 // =============================================================================
 // RedactableDisplay - Trait for redacted display formatting
@@ -59,15 +66,6 @@ impl<T: RedactableDisplay + ?Sized> std::fmt::Debug for RedactedDisplayRef<'_, T
     }
 }
 
-impl<T> ToRedactedOutput for T
-where
-    T: RedactableDisplay,
-{
-    fn to_redacted_output(&self) -> RedactedOutput {
-        RedactedOutput::Text(format!("{}", self.redacted_display()))
-    }
-}
-
 // =============================================================================
 // Passthrough RedactableDisplay implementations
 // =============================================================================
@@ -77,6 +75,16 @@ macro_rules! impl_redactable_display_passthrough {
         impl crate::redaction::display::RedactableDisplay for $ty {
             fn fmt_redacted(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
                 std::fmt::Display::fmt(self, f)
+            }
+        }
+    };
+}
+
+macro_rules! impl_redactable_display_passthrough_debug {
+    ($ty:ty) => {
+        impl crate::redaction::display::RedactableDisplay for $ty {
+            fn fmt_redacted(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                std::fmt::Debug::fmt(self, f)
             }
         }
     };
@@ -108,6 +116,26 @@ impl_redactable_display_passthrough!(f32);
 impl_redactable_display_passthrough!(f64);
 impl_redactable_display_passthrough!(Cow<'_, str>);
 
+// NonZero integer passthrough implementations
+impl_redactable_display_passthrough!(NonZeroI8);
+impl_redactable_display_passthrough!(NonZeroI16);
+impl_redactable_display_passthrough!(NonZeroI32);
+impl_redactable_display_passthrough!(NonZeroI64);
+impl_redactable_display_passthrough!(NonZeroI128);
+impl_redactable_display_passthrough!(NonZeroIsize);
+impl_redactable_display_passthrough!(NonZeroU8);
+impl_redactable_display_passthrough!(NonZeroU16);
+impl_redactable_display_passthrough!(NonZeroU32);
+impl_redactable_display_passthrough!(NonZeroU64);
+impl_redactable_display_passthrough!(NonZeroU128);
+impl_redactable_display_passthrough!(NonZeroUsize);
+
+// std::time and ordering passthrough implementations
+impl_redactable_display_passthrough_debug!(Duration);
+impl_redactable_display_passthrough_debug!(Instant);
+impl_redactable_display_passthrough_debug!(SystemTime);
+impl_redactable_display_passthrough_debug!(Ordering);
+
 impl RedactableDisplay for () {
     fn fmt_redacted(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str("()")
@@ -122,7 +150,10 @@ impl<T> RedactableDisplay for PhantomData<T> {
 
 #[cfg(feature = "chrono")]
 mod chrono_passthrough {
-    use chrono::{DateTime, FixedOffset, Local, NaiveDate, NaiveDateTime, NaiveTime, Utc};
+    use chrono::{
+        DateTime, Duration, FixedOffset, Local, Month, NaiveDate, NaiveDateTime, NaiveTime, Utc,
+        Weekday,
+    };
 
     impl_redactable_display_passthrough!(DateTime<Utc>);
     impl_redactable_display_passthrough!(DateTime<Local>);
@@ -131,16 +162,25 @@ mod chrono_passthrough {
     impl_redactable_display_passthrough!(NaiveDateTime);
     impl_redactable_display_passthrough!(NaiveDate);
     impl_redactable_display_passthrough!(NaiveTime);
+    impl_redactable_display_passthrough_debug!(Duration);
+    impl_redactable_display_passthrough_debug!(Month);
+    impl_redactable_display_passthrough_debug!(Weekday);
 }
 
 #[cfg(feature = "time")]
 mod time_passthrough {
-    use time::{Date, OffsetDateTime, PrimitiveDateTime, Time};
+    use time::{
+        Date, Duration, Month, OffsetDateTime, PrimitiveDateTime, Time, UtcOffset, Weekday,
+    };
 
     impl_redactable_display_passthrough!(OffsetDateTime);
     impl_redactable_display_passthrough!(PrimitiveDateTime);
     impl_redactable_display_passthrough!(Date);
     impl_redactable_display_passthrough!(Time);
+    impl_redactable_display_passthrough_debug!(Duration);
+    impl_redactable_display_passthrough_debug!(UtcOffset);
+    impl_redactable_display_passthrough_debug!(Month);
+    impl_redactable_display_passthrough_debug!(Weekday);
 }
 
 #[cfg(feature = "uuid")]

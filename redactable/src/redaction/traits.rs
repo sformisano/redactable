@@ -43,7 +43,7 @@ use crate::policy::{RedactionPolicy, TextRedactionPolicy};
 #[diagnostic::on_unimplemented(
     message = "`{Self}` is not a `RedactableLeaf`",
     label = "this type cannot have a policy applied directly",
-    note = "policies like `#[sensitive(Default)]` are for leaf values (String, etc.)",
+    note = "policies like `#[sensitive(Secret)]` are for leaf values (String, etc.)",
     note = "if `{Self}` is a struct that derives `Sensitive`, remove the policy and let traversal walk into it"
 )]
 pub trait RedactableLeaf: Sized {

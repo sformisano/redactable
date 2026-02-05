@@ -29,8 +29,11 @@
 
 use std::{
     borrow::Cow,
+    cell::{Cell, RefCell},
     collections::{BTreeMap, BTreeSet, HashMap, HashSet},
     hash::{BuildHasher, Hash},
+    rc::Rc,
+    sync::Arc,
 };
 
 use super::traits::{RedactableContainer, RedactableWithPolicy};
@@ -54,7 +57,7 @@ pub trait RedactableMapper {
 
     /// Maps a sensitive scalar value to its default.
     ///
-    /// Scalars are marked with bare `#[sensitive]` and can only use `#[sensitive(Default)]`.
+    /// Scalars are marked with bare `#[sensitive]` and can only use `#[sensitive(Secret)]`.
     fn map_scalar<S>(&self, value: S) -> S
     where
         S: Default + ScalarRedaction;
@@ -353,6 +356,68 @@ where
     }
 }
 
+impl<T> PolicyApplicableRef for Arc<T>
+where
+    T: PolicyApplicableRef,
+{
+    type Output = Arc<T::Output>;
+
+    fn apply_policy_ref<P, M>(&self, mapper: &M) -> Self::Output
+    where
+        P: RedactionPolicy,
+        M: RedactableMapper,
+    {
+        Arc::new((**self).apply_policy_ref::<P, M>(mapper))
+    }
+}
+
+impl<T> PolicyApplicableRef for Rc<T>
+where
+    T: PolicyApplicableRef,
+{
+    type Output = Rc<T::Output>;
+
+    fn apply_policy_ref<P, M>(&self, mapper: &M) -> Self::Output
+    where
+        P: RedactionPolicy,
+        M: RedactableMapper,
+    {
+        Rc::new((**self).apply_policy_ref::<P, M>(mapper))
+    }
+}
+
+impl<T> PolicyApplicableRef for RefCell<T>
+where
+    T: PolicyApplicableRef,
+{
+    type Output = RefCell<T::Output>;
+
+    fn apply_policy_ref<P, M>(&self, mapper: &M) -> Self::Output
+    where
+        P: RedactionPolicy,
+        M: RedactableMapper,
+    {
+        RefCell::new(self.borrow().apply_policy_ref::<P, M>(mapper))
+    }
+}
+
+impl<T> PolicyApplicableRef for Cell<T>
+where
+    T: PolicyApplicableRef + Copy,
+    T::Output: Copy,
+{
+    type Output = Cell<T::Output>;
+
+    fn apply_policy_ref<P, M>(&self, mapper: &M) -> Self::Output
+    where
+        P: RedactionPolicy,
+        M: RedactableMapper,
+    {
+        let value = self.get();
+        Cell::new(value.apply_policy_ref::<P, M>(mapper))
+    }
+}
+
 impl<T, E> PolicyApplicableRef for Result<T, E>
 where
     T: PolicyApplicableRef,
@@ -394,6 +459,58 @@ impl<T: PolicyApplicable> PolicyApplicable for Box<T> {
     }
 }
 
+impl<T> PolicyApplicable for Arc<T>
+where
+    T: PolicyApplicable + Clone,
+{
+    fn apply_policy<P, M>(self, mapper: &M) -> Self
+    where
+        P: RedactionPolicy,
+        M: RedactableMapper,
+    {
+        Arc::new((*self).clone().apply_policy::<P, M>(mapper))
+    }
+}
+
+impl<T> PolicyApplicable for Rc<T>
+where
+    T: PolicyApplicable + Clone,
+{
+    fn apply_policy<P, M>(self, mapper: &M) -> Self
+    where
+        P: RedactionPolicy,
+        M: RedactableMapper,
+    {
+        Rc::new((*self).clone().apply_policy::<P, M>(mapper))
+    }
+}
+
+impl<T> PolicyApplicable for RefCell<T>
+where
+    T: PolicyApplicable,
+{
+    fn apply_policy<P, M>(self, mapper: &M) -> Self
+    where
+        P: RedactionPolicy,
+        M: RedactableMapper,
+    {
+        RefCell::new(self.into_inner().apply_policy::<P, M>(mapper))
+    }
+}
+
+impl<T> PolicyApplicable for Cell<T>
+where
+    T: PolicyApplicable + Copy,
+{
+    fn apply_policy<P, M>(self, mapper: &M) -> Self
+    where
+        P: RedactionPolicy,
+        M: RedactableMapper,
+    {
+        Cell::new(self.get().apply_policy::<P, M>(mapper))
+    }
+}
+
 impl<T, E> PolicyApplicable for Result<T, E>
 where
     T: PolicyApplicable,
@@ -416,14 +533,15 @@ impl<K, V, S> PolicyApplicable for HashMap<K, V, S>
 where
     K: Hash + Eq,
     V: PolicyApplicable,
-    S: BuildHasher + Default,
+    S: BuildHasher + Clone,
 {
     fn apply_policy<P, M>(self, mapper: &M) -> Self
     where
         P: RedactionPolicy,
         M: RedactableMapper,
     {
-        let mut result = HashMap::with_capacity_and_hasher(self.len(), S::default());
+        let hasher = self.hasher().clone();
+        let mut result = HashMap::with_hasher(hasher);
         result.extend(
             self.into_iter()
                 .map(|(k, v)| (k, v.apply_policy::<P, M>(mapper))),
@@ -452,7 +570,7 @@ impl<K, V, S> PolicyApplicableRef for HashMap<K, V, S>
 where
     K: Hash + Eq + Clone,
     V: PolicyApplicableRef,
-    S: BuildHasher + Default,
+    S: BuildHasher + Clone,
 {
     type Output = HashMap<K, V::Output, S>;
 
@@ -461,7 +579,8 @@ where
         P: RedactionPolicy,
         M: RedactableMapper,
     {
-        let mut result = HashMap::with_capacity_and_hasher(self.len(), S::default());
+        let hasher = self.hasher().clone();
+        let mut result = HashMap::with_hasher(hasher);
         result.extend(
             self.iter()
                 .map(|(k, v)| (k.clone(), v.apply_policy_ref::<P, M>(mapper))),
@@ -496,14 +615,15 @@ where
 impl<T, S> PolicyApplicable for HashSet<T, S>
 where
     T: PolicyApplicable + Hash + Eq,
-    S: BuildHasher + Default,
+    S: BuildHasher + Clone,
 {
     fn apply_policy<P, M>(self, mapper: &M) -> Self
     where
         P: RedactionPolicy,
         M: RedactableMapper,
     {
-        let mut result = HashSet::with_capacity_and_hasher(self.len(), S::default());
+        let hasher = self.hasher().clone();
+        let mut result = HashSet::with_hasher(hasher);
         result.extend(self.into_iter().map(|v| v.apply_policy::<P, M>(mapper)));
         result
     }
@@ -528,7 +648,7 @@ impl<T, S> PolicyApplicableRef for HashSet<T, S>
 where
     T: PolicyApplicableRef,
     T::Output: Hash + Eq,
-    S: BuildHasher + Default,
+    S: BuildHasher + Clone,
 {
     type Output = HashSet<T::Output, S>;
 
@@ -537,7 +657,8 @@ where
         P: RedactionPolicy,
         M: RedactableMapper,
     {
-        let mut result = HashSet::with_capacity_and_hasher(self.len(), S::default());
+        let hasher = self.hasher().clone();
+        let mut result = HashSet::with_hasher(hasher);
         result.extend(self.iter().map(|v| v.apply_policy_ref::<P, M>(mapper)));
         result
     }
@@ -561,61 +682,19 @@ where
     }
 }
 
-// =============================================================================
-// serde_json::Value support (feature-gated)
-// =============================================================================
-//
-// serde_json::Value is treated as an opaque leaf type. Any policy application
-// fully redacts it to Value::String("[REDACTED]"). This is safe-by-default:
-// since Value can contain arbitrary data, we redact it entirely rather than
-// attempting to traverse its dynamic structure.
-
-#[cfg(feature = "json")]
-impl PolicyApplicable for serde_json::Value {
-    fn apply_policy<P, M>(self, _mapper: &M) -> Self
-    where
-        P: RedactionPolicy,
-        M: RedactableMapper,
-    {
-        // Treat as leaf: any policy fully redacts to a JSON string
-        serde_json::Value::String("[REDACTED]".to_string())
-    }
-}
-
-#[cfg(feature = "json")]
-impl PolicyApplicableRef for serde_json::Value {
-    type Output = serde_json::Value;
-
-    fn apply_policy_ref<P, M>(&self, _mapper: &M) -> Self::Output
-    where
-        P: RedactionPolicy,
-        M: RedactableMapper,
-    {
-        serde_json::Value::String("[REDACTED]".to_string())
-    }
-}
-
-#[cfg(feature = "json")]
-impl RedactableContainer for serde_json::Value {
-    fn redact_with<M: RedactableMapper>(self, _mapper: &M) -> Self {
-        // Safe-by-default: unannotated Value fields are fully redacted
-        serde_json::Value::String("[REDACTED]".to_string())
-    }
-}
-
 #[cfg(test)]
 mod tests {
-    use std::collections::HashMap;
+    use std::{collections::HashMap, sync::Arc};
 
-    use super::{apply_policy_ref, redact};
-    use crate::{Default, Sensitive};
+    use super::{apply_policy, apply_policy_ref, redact};
+    use crate::{Secret, Sensitive};
 
     #[test]
     fn redact_applies_policy() {
         #[derive(Clone, Sensitive)]
         #[cfg_attr(feature = "slog", derive(serde::Serialize))]
         struct DefaultValue {
-            #[sensitive(Default)]
+            #[sensitive(Secret)]
             value: String,
         }
 
@@ -631,7 +710,7 @@ mod tests {
         #[derive(Clone, Sensitive)]
         #[cfg_attr(feature = "slog", derive(serde::Serialize))]
         struct Simple {
-            #[sensitive(Default)]
+            #[sensitive(Secret)]
             value: String,
         }
 
@@ -647,7 +726,7 @@ mod tests {
         #[derive(Clone, Sensitive)]
         #[cfg_attr(feature = "slog", derive(serde::Serialize))]
         struct WithOption {
-            #[sensitive(Default)]
+            #[sensitive(Secret)]
             value: Option<String>,
         }
 
@@ -663,7 +742,7 @@ mod tests {
         #[derive(Clone, Sensitive)]
         #[cfg_attr(feature = "slog", derive(serde::Serialize))]
         struct WithVec {
-            #[sensitive(Default)]
+            #[sensitive(Secret)]
             values: Vec<String>,
         }
 
@@ -675,11 +754,18 @@ mod tests {
     }
 
     #[test]
+    fn apply_policy_to_arc_string() {
+        let value = Arc::new("secret".to_string());
+        let redacted = apply_policy::<Secret, _>(value);
+        assert_eq!(&*redacted, "[REDACTED]");
+    }
+
+    #[test]
     fn apply_policy_to_nested_option_vec() {
         #[derive(Clone, Sensitive)]
         #[cfg_attr(feature = "slog", derive(serde::Serialize))]
         struct Nested {
-            #[sensitive(Default)]
+            #[sensitive(Secret)]
             values: Option<Vec<String>>,
         }
 
@@ -698,7 +784,7 @@ mod tests {
         #[derive(Clone, Sensitive)]
         #[cfg_attr(feature = "slog", derive(serde::Serialize))]
         struct Nested {
-            #[sensitive(Default)]
+            #[sensitive(Secret)]
             values: Vec<Option<String>>,
         }
 
@@ -717,7 +803,7 @@ mod tests {
         #[derive(Clone, Sensitive)]
         #[cfg_attr(feature = "slog", derive(serde::Serialize))]
         struct DeepNest {
-            #[sensitive(Default)]
+            #[sensitive(Secret)]
             values: Option<Vec<Option<String>>>,
         }
 
@@ -733,7 +819,7 @@ mod tests {
         #[derive(Clone, Sensitive)]
         #[cfg_attr(feature = "slog", derive(serde::Serialize))]
         struct WithMap {
-            #[sensitive(Default)]
+            #[sensitive(Secret)]
             data: HashMap<String, String>,
         }
 
@@ -756,7 +842,7 @@ mod tests {
         #[derive(Clone, Sensitive)]
         #[cfg_attr(feature = "slog", derive(serde::Serialize))]
         struct ComplexNest {
-            #[sensitive(Default)]
+            #[sensitive(Secret)]
             data: HashMap<String, Vec<String>>,
         }
 
@@ -775,14 +861,14 @@ mod tests {
     #[test]
     fn apply_policy_ref_to_str() {
         let value = "secret";
-        let redacted = apply_policy_ref::<Default, _>(&value);
+        let redacted = apply_policy_ref::<Secret, _>(&value);
         assert_eq!(redacted, "[REDACTED]");
     }
 
     #[test]
     fn apply_policy_ref_to_option_str() {
         let value: Option<&str> = Some("secret");
-        let redacted = apply_policy_ref::<Default, _>(&value);
+        let redacted = apply_policy_ref::<Secret, _>(&value);
         assert_eq!(redacted, Some("[REDACTED]".to_string()));
     }
 }

@@ -46,16 +46,18 @@ pub trait RedactionPolicy {
 // Marker types and their policy implementations
 // =============================================================================
 
-/// Default policy: full redaction for strings, default value for scalars.
+/// Generic secret policy: complete redaction for strings, default value for scalars.
+///
+/// Use this for sensitive data that doesn't fit a specific category (Token, Email, etc.).
 ///
 /// - Strings redact to `"[REDACTED]"`
 /// - Integers and floats redact to `0`
 /// - Booleans redact to `false`
 /// - Characters redact to `'*'`
 #[derive(Clone, Copy)]
-pub struct Default;
+pub struct Secret;
 
-impl RedactionPolicy for Default {
+impl RedactionPolicy for Secret {
     fn policy() -> TextRedactionPolicy {
         TextRedactionPolicy::default_full()
     }
