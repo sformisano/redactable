@@ -30,8 +30,9 @@ use tracing::field::{DisplayValue, display};
 use crate::{
     policy::RedactionPolicy,
     redaction::{
-        NotSensitiveDebug, NotSensitiveDisplay, NotSensitiveJson, Redactable, RedactableWithPolicy,
-        RedactedJsonRef, RedactedOutput, RedactedOutputRef, SensitiveValue, ToRedactedOutput,
+        NotSensitive, NotSensitiveDebug, NotSensitiveDisplay, NotSensitiveJson, Redactable,
+        RedactableWithPolicy, RedactedJson, RedactedJsonRef, RedactedOutput, RedactedOutputRef,
+        SensitiveValue, ToRedactedOutput,
     },
 };
 
@@ -72,6 +73,9 @@ where
 
 impl TracingRedacted for RedactedOutput {}
 
+#[cfg(feature = "json")]
+impl TracingRedacted for RedactedJson {}
+
 impl<T, P> TracingRedacted for SensitiveValue<T, P>
 where
     T: RedactableWithPolicy<P>,
@@ -79,9 +83,11 @@ where
 {
 }
 
-impl<T> TracingRedacted for NotSensitiveDisplay<'_, T> where T: fmt::Display + ?Sized {}
+impl<T> TracingRedacted for NotSensitiveDisplay<T> where T: fmt::Display {}
 
-impl<T> TracingRedacted for NotSensitiveDebug<'_, T> where T: fmt::Debug + ?Sized {}
+impl<T> TracingRedacted for NotSensitiveDebug<T> where T: fmt::Debug {}
+
+impl<T> TracingRedacted for NotSensitive<T> where T: TracingRedacted {}
 
 impl<T> TracingRedacted for RedactedOutputRef<'_, T> where T: Redactable + Clone + fmt::Debug {}
 
@@ -143,7 +149,7 @@ impl<T> TracingRedacted for RedactedValuable<T> {}
 /// #[derive(Clone, Sensitive, valuable::Valuable)]
 /// struct User {
 ///     username: String,
-///     #[sensitive(Default)]
+///     #[sensitive(Secret)]
 ///     password: String,
 /// }
 ///

@@ -1,4 +1,4 @@
-use redactable::{Default as RedactableDefault, SensitiveDisplay};
+use redactable::{Secret, SensitiveDisplay};
 
 #[derive(SensitiveDisplay)]
 enum LoginError {
@@ -6,7 +6,7 @@ enum LoginError {
     Invalid {
         #[not_sensitive]
         user: String,
-        #[sensitive(RedactableDefault)]
+        #[sensitive(Secret)]
         password: String,
     },
 }
