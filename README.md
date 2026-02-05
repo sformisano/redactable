@@ -1,9 +1,6 @@
 # Redactable
 
-`redactable` is a redaction library for Rust. It lets you mark sensitive data in your
-structs and enums and produce a safe, redacted version of the same type.
-Logging and telemetry
-are the most common use cases, but redaction is not tied to any logging framework.
+`redactable` is a redaction library for Rust. It lets you mark sensitive data in your structs and enums and produce a safe, redacted version of the same type. Logging and telemetry are the most common use cases, but redaction is not tied to any logging framework.
 
 ## Table of Contents
 
@@ -55,7 +52,7 @@ are the most common use cases, but redaction is not tied to any logging framewor
 
 - **Traversal is automatic**: nested containers are handled automatically. For `Sensitive`, they're walked via `RedactableContainer`. For `SensitiveDisplay`, they're formatted via `RedactableDisplay`.
 - **Redaction is opt-in**: leaf values (scalars, strings) pass through unchanged unless explicitly marked with `#[sensitive(Policy)]`. Redaction only happens where you ask for it.
-- **Consistent annotation workflow**: both `Sensitive` and `SensitiveDisplay` follow the same pattern—unannotated scalars pass through, unannotated containers are handled via their trait, and `#[sensitive(Policy)]` applies redaction.
+- **Consistent annotation workflow**: both `Sensitive` and `SensitiveDisplay` follow the same pattern - unannotated scalars pass through, unannotated containers are handled via their trait, and `#[sensitive(Policy)]` applies redaction.
 - **Types are preserved**: `Sensitive`'s `.redact()` returns the same type, not a string or wrapper.
 
 ## How it works
@@ -67,7 +64,7 @@ The `Sensitive` derive macro generates traversal code. For each field, it calls 
 | **Containers** (structs/enums deriving `Sensitive`) | Traversal walks into them recursively, visiting each field |
 | **Unannotated leaves** (String, primitives, etc.) | These implement `RedactableContainer` as a passthrough - they return themselves unchanged |
 | **Annotated leaves** (`#[sensitive(Policy)]`) | The macro generates transformation code that applies the policy, bypassing the normal `RedactableContainer::redact_with` call |
-| **Explicit passthrough** (`#[not_sensitive]`) | Field is left unchanged without requiring `RedactableContainer` — use for foreign types |
+| **Explicit passthrough** (`#[not_sensitive]`) | Field is left unchanged without requiring `RedactableContainer` - use for foreign types |
 
 ```rust
 #[derive(Clone, Sensitive)]
@@ -236,7 +233,7 @@ impl RedactableLeaf for UserId {
 
 ### Opting out with `NotSensitive`
 
-Some types you own need to satisfy `Redactable` bounds but have no sensitive data. Use `#[derive(NotSensitive)]` to generate a no-op `RedactableContainer` impl:
+Some types you own need to satisfy `RedactableContainer` bounds but have no sensitive data. Use `#[derive(NotSensitive)]` to generate a no-op `RedactableContainer` impl:
 
 ```rust
 use redactable::{NotSensitive, Sensitive};
@@ -252,6 +249,8 @@ struct Config {
     metadata: PublicMetadata,  // ✅ Works because NotSensitive provides RedactableContainer
 }
 ```
+
+> **Note:** `NotSensitive` is for types used with the `Sensitive` derive. For `SensitiveDisplay`, use the `#[not_sensitive]` field attribute instead - there is no separate derive because `SensitiveDisplay` only requires `RedactableDisplay` on fields referenced in the template, not all fields.
 
 ### Wrapper types for foreign types
 
@@ -470,7 +469,7 @@ Unannotated placeholders use `RedactableDisplay`:
 | Annotation | Behavior |
 |---|---|
 | *(none)* | Uses `RedactableDisplay`: scalars pass through unchanged; nested `SensitiveDisplay` types are redacted |
-| `#[not_sensitive]` | Renders with raw `Display` (or `Debug` if `{:?}`) — use for types without `RedactableDisplay` |
+| `#[not_sensitive]` | Renders with raw `Display` (or `Debug` if `{:?}`) - use for types without `RedactableDisplay` |
 | `#[sensitive(Default)]` | Scalars → default value; strings → `"[REDACTED]"` |
 | `#[sensitive(Policy)]` | Applies the policy's redaction rules |
 
@@ -506,16 +505,23 @@ This prevents accidental exposure when adding new fields while still making nest
 |---|---|
 | Structured data you can consume (or clone) | `#[derive(Sensitive)]` |
 | Types you only want to borrow | `#[derive(SensitiveDisplay)]` |
-| Type with no sensitive data | `#[derive(NotSensitive)]` |
+| Type with no sensitive data (for `Sensitive` bounds) | `#[derive(NotSensitive)]` |
 
 **Error types** are a common case: use `Sensitive` if your error type implements `Clone`, otherwise use `SensitiveDisplay`.
 
-**How to handle foreign types?**
+**How to opt out of redaction?**
+
+| Context | Situation | Use |
+|---|---|---|
+| `Sensitive` | Type you own, no sensitive data | `#[derive(NotSensitive)]` |
+| `Sensitive` | Foreign type in a field | `#[not_sensitive]` attribute or `NotSensitiveValue<T>` wrapper |
+| `SensitiveDisplay` | Field without `RedactableDisplay` | `#[not_sensitive]` attribute (uses raw `Display`) |
+
+**How to handle foreign types that need redaction?**
 
 | Situation | Use |
 |---|---|
-| Foreign type, no sensitive data | `#[not_sensitive]` attribute or `NotSensitiveValue<T>` wrapper |
-| Foreign type, needs redaction | `SensitiveValue<T, Policy>` + `RedactableWithPolicy` |
+| Foreign leaf type with policy | `SensitiveValue<T, Policy>` + `RedactableWithPolicy` |
 
 **How to produce logging output?**
 
@@ -615,7 +621,7 @@ The `slog` feature enables automatic redaction - just log your values and they'r
 
 ```toml
 [dependencies]
-redactable = { version = "0.2.3", features = ["slog"] }
+redactable = { version = "0.4", features = ["slog"] }
 ```
 
 **Containers** - the `Sensitive` derive generates `slog::Value` automatically:
@@ -659,7 +665,7 @@ For structured logging with tracing, use the `valuable` integration:
 
 ```toml
 [dependencies]
-redactable = { version = "0.2.3", features = ["tracing-valuable"] }
+redactable = { version = "0.4", features = ["tracing-valuable"] }
 ```
 
 ```rust
@@ -936,6 +942,9 @@ let raw = user.email.expose();
 - For `Sensitive`: walked automatically; policy annotations apply through them
 - For `SensitiveDisplay`: formatted via `RedactableDisplay`, delegating to inner types
 - Map keys are formatted with `Debug` and are not redacted
+
+**Opaque types** (feature-gated):
+- `serde_json::Value` (requires `json` feature): treated as a leaf that fully redacts to `Value::String("[REDACTED]")`. This is safe-by-default - unannotated `Value` fields are fully redacted because the dynamic structure could contain anything sensitive.
 
 **External types**: `NotSensitiveValue<T>` for passthrough, `SensitiveValue<T, Policy>` with `RedactableWithPolicy` for redaction.
 
