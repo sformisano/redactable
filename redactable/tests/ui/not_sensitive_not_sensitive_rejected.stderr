@@ -1,0 +1,5 @@
+error: `#[not_sensitive]` attributes are not needed on `NotSensitive` types (the entire type is already non-sensitive)
+ --> tests/ui/not_sensitive_not_sensitive_rejected.rs:7:5
+  |
+7 |     #[not_sensitive]
+  |     ^

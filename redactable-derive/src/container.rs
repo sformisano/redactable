@@ -22,10 +22,12 @@ pub(crate) fn parse_container_options(attrs: &[Attribute]) -> Result<ContainerOp
 
         match &attr.meta {
             Meta::Path(_) => {
-                // Bare #[sensitive] on container - currently no meaning, ignore
+                return Err(syn::Error::new_spanned(
+                    attr,
+                    "bare `#[sensitive]` on the container has no effect; use `#[sensitive(skip_debug)]` to opt out of `Debug` generation",
+                ));
             }
             Meta::List(list) => {
-                // Parse the contents
                 list.parse_nested_meta(|meta| {
                     if meta.path.is_ident("skip_debug") {
                         options.skip_debug = true;
@@ -72,10 +74,12 @@ pub(crate) fn parse_not_sensitive_display_options(
 
         match &attr.meta {
             Meta::Path(_) => {
-                // Bare #[not_sensitive_display] on container - currently no meaning, ignore
+                return Err(syn::Error::new_spanned(
+                    attr,
+                    "bare `#[not_sensitive_display]` on the container has no effect; use `#[not_sensitive_display(skip_debug)]` to opt out of `Debug` generation",
+                ));
             }
             Meta::List(list) => {
-                // Parse the contents
                 list.parse_nested_meta(|meta| {
                     if meta.path.is_ident("skip_debug") {
                         options.skip_debug = true;
@@ -146,10 +150,16 @@ mod tests {
     }
 
     #[test]
-    fn bare_sensitive_on_container_is_ignored() {
+    fn bare_sensitive_on_container_is_rejected() {
         let attrs = parse_attrs(quote! { #[sensitive] });
-        let options = parse_container_options(&attrs).unwrap();
-        assert!(!options.skip_debug);
+        let result = parse_container_options(&attrs);
+        assert!(result.is_err());
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("bare `#[sensitive]` on the container has no effect")
+        );
     }
 
     #[test]
@@ -180,9 +190,15 @@ mod tests {
     }
 
     #[test]
-    fn not_sensitive_display_bare_attribute_is_ignored() {
+    fn not_sensitive_display_bare_attribute_is_rejected() {
         let attrs = parse_attrs(quote! { #[not_sensitive_display] });
-        let options = parse_not_sensitive_display_options(&attrs).unwrap();
-        assert!(!options.skip_debug);
+        let result = parse_not_sensitive_display_options(&attrs);
+        assert!(result.is_err());
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("bare `#[not_sensitive_display]` on the container has no effect")
+        );
     }
 }

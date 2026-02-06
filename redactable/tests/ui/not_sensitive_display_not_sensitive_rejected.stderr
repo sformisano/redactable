@@ -10,8 +10,8 @@ error: cannot find attribute `not_sensitive` in this scope
 7 |     Io(#[not_sensitive] std::io::Error),
   |          ^^^^^^^^^^^^^
   |
-help: `not_sensitive` is an attribute that can be used by the derive macros `Sensitive` and `SensitiveDisplay`, you might be missing a `derive` attribute
+help: `not_sensitive` is an attribute that can be used by the derive macros `NotSensitive`, `Sensitive` and `SensitiveDisplay`, you might be missing a `derive` attribute
   |
-6 + #[derive(Sensitive, SensitiveDisplay)]
+6 + #[derive(NotSensitive, Sensitive, SensitiveDisplay)]
 7 | enum MyError {
   |

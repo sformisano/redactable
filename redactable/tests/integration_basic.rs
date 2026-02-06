@@ -930,7 +930,7 @@ mod not_sensitive_derive {
 
     #[test]
     fn passes_through_all_fields_unchanged() {
-        #[derive(Clone, NotSensitive)]
+        #[derive(Clone, Debug, NotSensitive)]
         struct PublicInfo {
             id: u64,
             label: String,
@@ -955,7 +955,7 @@ mod not_sensitive_derive {
             secret: String,
         }
 
-        #[derive(Clone, NotSensitive)]
+        #[derive(Clone, Debug, NotSensitive)]
         struct Outer {
             inner: Inner,
         }
