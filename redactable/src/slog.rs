@@ -252,6 +252,23 @@ where
 
 impl<T> SlogRedacted for RedactedJsonRef<'_, T> where T: Redactable + Clone + Serialize {}
 
+/// Helper for `NotSensitive` derive-generated slog impls.
+///
+/// Serializes the value directly as structured JSON without redaction.
+/// Not intended for direct use — called by generated code.
+#[doc(hidden)]
+pub fn __slog_serialize_not_sensitive<T: Serialize>(
+    value: &T,
+    record: &Record<'_>,
+    key: Key,
+    serializer: &mut dyn Serializer,
+) -> SlogResult {
+    let json_value = serde_json::to_value(value)
+        .unwrap_or_else(|err| JsonValue::String(format!("Failed to serialize value: {err}")));
+    let nested = slog::Serde(json_value);
+    SlogValue::serialize(&nested, record, key, serializer)
+}
+
 /// Wrapper for values that implement `RedactableDisplay` to participate in slog logging.
 pub struct RedactedDisplayValue<'a, T: ?Sized>(&'a T);
 

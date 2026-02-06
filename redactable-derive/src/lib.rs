@@ -3,7 +3,7 @@
 //! This crate generates traversal code behind `#[derive(Sensitive)]`,
 //! `#[derive(SensitiveDisplay)]`, `#[derive(NotSensitive)]`, and
 //! `#[derive(NotSensitiveDisplay)]`. It:
-//! - reads `#[sensitive(...)]` and `#[not_sensitive_display(...)]` attributes
+//! - reads `#[sensitive(...)]` and `#[not_sensitive]` attributes
 //! - emits trait implementations for redaction and logging integration
 //!
 //! It does **not** define policy markers or text policies. Those live in the main
@@ -85,10 +85,7 @@ mod redacted_display;
 mod strategy;
 mod transform;
 mod types;
-use container::{
-    ContainerOptions, NotSensitiveDisplayOptions, parse_container_options,
-    parse_not_sensitive_display_options,
-};
+use container::{ContainerOptions, parse_container_options};
 use derive_enum::derive_enum;
 use derive_struct::derive_struct;
 use generics::{
@@ -153,20 +150,19 @@ pub fn derive_sensitive_container(input: proc_macro::TokenStream) -> proc_macro:
 /// # Generated Impls
 ///
 /// - `RedactableContainer`: no-op passthrough (the type has no sensitive data)
-/// - `slog::Value` and `SlogRedacted` (behind `cfg(feature = "slog")`): emits the `Debug`
-///   representation as a string. Requires the type to implement `Debug` (use `#[derive(Debug)]`).
+/// - `slog::Value` and `SlogRedacted` (behind `cfg(feature = "slog")`): serializes the value
+///   directly as structured JSON without redaction (same format as `Sensitive`, but skips
+///   the redaction step). Requires `Serialize` on the type.
 /// - `TracingRedacted` (behind `cfg(feature = "tracing")`): marker trait
 ///
-/// # Debug
+/// `NotSensitive` does **not** generate a `Debug` impl — there's nothing to redact.
+/// Use `#[derive(Debug)]` when needed.
 ///
-/// `NotSensitive` does **not** generate a `Debug` impl. Unlike `Sensitive` (which generates
-/// `Debug` to redact sensitive fields), `NotSensitive` types have nothing to redact — standard
-/// `#[derive(Debug)]` is the right tool. Add it alongside `NotSensitive`:
+/// # Rejected Attributes
 ///
-/// ```ignore
-/// #[derive(Clone, Debug, NotSensitive)]
-/// struct PublicData { ... }
-/// ```
+/// `#[sensitive]` and `#[not_sensitive]` attributes are rejected on both the container
+/// and its fields — the former is wrong (the type is explicitly non-sensitive), the
+/// latter is redundant (the entire type is already non-sensitive).
 ///
 /// Unions are rejected at compile time.
 #[proc_macro_derive(NotSensitive, attributes(not_sensitive))]
@@ -268,7 +264,7 @@ fn expand_not_sensitive(input: DeriveInput) -> Result<TokenStream> {
         }
     };
 
-    // slog impl - emit Debug representation as a string
+    // slog impl - serialize directly as structured JSON (no redaction needed)
     #[cfg(feature = "slog")]
     let slog_impl = {
         let slog_crate = slog_crate()?;
@@ -278,7 +274,7 @@ fn expand_not_sensitive(input: DeriveInput) -> Result<TokenStream> {
         slog_generics
             .make_where_clause()
             .predicates
-            .push(parse_quote!(#self_ty: ::core::fmt::Debug));
+            .push(parse_quote!(#self_ty: ::serde::Serialize));
         let (slog_impl_generics, slog_ty_generics, slog_where_clause) =
             slog_generics.split_for_impl();
         quote! {
@@ -289,7 +285,7 @@ fn expand_not_sensitive(input: DeriveInput) -> Result<TokenStream> {
                     key: #slog_crate::Key,
                     serializer: &mut dyn #slog_crate::Serializer,
                 ) -> #slog_crate::Result {
-                    serializer.emit_arguments(key, &format_args!("{:?}", self))
+                    #crate_root::slog::__slog_serialize_not_sensitive(self, _record, key, serializer)
                 }
             }
 
@@ -328,11 +324,6 @@ fn expand_not_sensitive(input: DeriveInput) -> Result<TokenStream> {
 /// Unlike `SensitiveDisplay`, this derive does **not** require a display template.
 /// Instead, it delegates directly to the type's existing `Display` implementation.
 ///
-/// # Container Attributes
-///
-/// - `#[not_sensitive_display(skip_debug)]` - Opt out of `Debug` impl generation. Use this when
-///   you need a custom `Debug` implementation or the type already derives `Debug` elsewhere.
-///
 /// # Required Bounds
 ///
 /// The type must implement `Display`. This is required because `RedactableDisplay` delegates
@@ -340,13 +331,21 @@ fn expand_not_sensitive(input: DeriveInput) -> Result<TokenStream> {
 ///
 /// # Generated Impls
 ///
+/// - `RedactableContainer`: no-op passthrough (allows use inside `Sensitive` containers)
 /// - `RedactableDisplay`: delegates to `Display::fmt`
-/// - `Debug`: when *not* building with `cfg(any(test, feature = "testing"))`, `Debug` formats via
-///   `Display::fmt`. In test/testing builds, it uses standard `Debug` formatting (requires the
-///   type to also implement `Debug` for test builds).
-/// - `slog::Value` (behind `cfg(feature = "slog")`): uses `RedactableDisplay` output
-/// - `SlogRedacted` (behind `cfg(feature = "slog")`): marker trait
+/// - `slog::Value` and `SlogRedacted` (behind `cfg(feature = "slog")`): uses `RedactableDisplay` output
 /// - `TracingRedacted` (behind `cfg(feature = "tracing")`): marker trait
+///
+/// # Debug
+///
+/// `NotSensitiveDisplay` does **not** generate a `Debug` impl — there's nothing to redact.
+/// Use `#[derive(Debug)]` alongside `NotSensitiveDisplay` when needed:
+///
+/// # Rejected Attributes
+///
+/// `#[sensitive]` and `#[not_sensitive]` attributes are rejected on both the container
+/// and its fields — the former is wrong (the type is explicitly non-sensitive), the
+/// latter is redundant (the entire type is already non-sensitive).
 ///
 /// # Example
 ///
@@ -360,7 +359,7 @@ fn expand_not_sensitive(input: DeriveInput) -> Result<TokenStream> {
 ///     Abort,
 /// }
 /// ```
-#[proc_macro_derive(NotSensitiveDisplay, attributes(not_sensitive_display))]
+#[proc_macro_derive(NotSensitiveDisplay)]
 pub fn derive_not_sensitive_display(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
     match expand_not_sensitive_display(input) {
@@ -465,8 +464,6 @@ fn expand_not_sensitive_display(input: DeriveInput) -> Result<TokenStream> {
         ));
     }
 
-    let NotSensitiveDisplayOptions { skip_debug } = parse_not_sensitive_display_options(&attrs)?;
-
     let crate_root = crate_root();
 
     // Generate the RedactableContainer no-op passthrough impl
@@ -501,46 +498,6 @@ fn expand_not_sensitive_display(input: DeriveInput) -> Result<TokenStream> {
         impl #display_impl_generics #crate_root::RedactableDisplay for #ident #display_ty_generics #display_where_clause {
             fn fmt_redacted(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
                 ::core::fmt::Display::fmt(self, f)
-            }
-        }
-    };
-
-    // Debug impl - production uses Display, test uses Debug
-    let debug_impl = if skip_debug {
-        quote! {}
-    } else {
-        // For test builds, we need Debug bound
-        let mut debug_generics = generics.clone();
-        let debug_where_clause = debug_generics.make_where_clause();
-        for param in generics.type_params() {
-            let ident = &param.ident;
-            debug_where_clause
-                .predicates
-                .push(syn::parse_quote!(#ident: ::core::fmt::Debug));
-        }
-        let (debug_impl_generics, debug_ty_generics, debug_where_clause) =
-            debug_generics.split_for_impl();
-
-        // Generate unredacted debug body based on data type
-        let debug_unredacted_body = match &data {
-            Data::Struct(data) => derive_unredacted_debug_struct(&ident, data, &generics).body,
-            Data::Enum(data) => derive_unredacted_debug_enum(&ident, data, &generics).body,
-            Data::Union(_) => unreachable!(),
-        };
-
-        quote! {
-            #[cfg(any(test, feature = "testing"))]
-            impl #debug_impl_generics ::core::fmt::Debug for #ident #debug_ty_generics #debug_where_clause {
-                fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
-                    #debug_unredacted_body
-                }
-            }
-
-            #[cfg(not(any(test, feature = "testing")))]
-            impl #display_impl_generics ::core::fmt::Debug for #ident #display_ty_generics #display_where_clause {
-                fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
-                    ::core::fmt::Display::fmt(self, f)
-                }
             }
         }
     };
@@ -594,7 +551,6 @@ fn expand_not_sensitive_display(input: DeriveInput) -> Result<TokenStream> {
     Ok(quote! {
         #container_impl
         #redacted_display_impl
-        #debug_impl
         #slog_impl
         #tracing_impl
     })
