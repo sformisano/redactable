@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.1 - 2026-02-06
+
+### Fixed
+- `NotSensitiveDisplay` now always delegates to `Display::fmt`, ignoring display templates (doc comments, `#[error("...")]`). Previously, detected templates caused the derive to parse placeholders and require fields to implement `RedactableDisplay`, which broke types with foreign field types (e.g. `anyhow::Error`, `std::io::Error`).
+- `#[not_sensitive]` attributes on `NotSensitiveDisplay` fields are now rejected with a clear error message (the entire type is already non-sensitive).
+
 ## 0.5.0 - 2026-02-05
 
 ### Added
@@ -8,7 +14,6 @@
   - Requires `T: Display` and delegates `RedactableDisplay` to the existing `Display` implementation
   - Supports `#[not_sensitive_display(skip_debug)]` attribute to opt out of `Debug` impl generation
   - Also generates `RedactableContainer` impl (no-op passthrough), so types can be used inside `#[derive(Sensitive)]` containers without also deriving `NotSensitive`
-  - Supports template-based formatting (displaydoc/thiserror style) when a display template is present on the container
 - `NotSensitive<T>` wrapper and `.not_sensitive()` escape hatch with no formatting preference
 - `NotSensitive<T>` implements `slog::Value` when `T: slog::Value` and `SlogRedacted`/`TracingRedacted` when the inner type does
 - `.not_sensitive_display()` for explicit `Display` formatting at logging boundaries
