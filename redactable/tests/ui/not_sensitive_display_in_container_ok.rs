@@ -1,6 +1,8 @@
 // Test: NotSensitiveDisplay can be used inside #[derive(Sensitive)] container
 // This works because NotSensitiveDisplay now provides RedactableContainer.
 
+use std::fmt;
+
 use redactable::{NotSensitiveDisplay, Redactable, Secret, Sensitive};
 use serde::Serialize;
 
@@ -8,6 +10,12 @@ use serde::Serialize;
 #[derive(Clone, Serialize, NotSensitiveDisplay)]
 struct ErrorCode {
     code: u16,
+}
+
+impl fmt::Display for ErrorCode {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "error code {}", self.code)
+    }
 }
 
 // This container has a field using NotSensitiveDisplay type

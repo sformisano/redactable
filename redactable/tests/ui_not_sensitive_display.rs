@@ -22,4 +22,16 @@ mod not_sensitive_display {
         let t = trybuild::TestCases::new();
         t.pass("tests/ui/not_sensitive_display_no_template_ok.rs");
     }
+
+    #[test]
+    fn foreign_type_compiles() {
+        let t = trybuild::TestCases::new();
+        t.pass("tests/ui/not_sensitive_display_foreign_type_ok.rs");
+    }
+
+    #[test]
+    fn rejects_not_sensitive_attribute() {
+        let t = trybuild::TestCases::new();
+        t.compile_fail("tests/ui/not_sensitive_display_not_sensitive_rejected.rs");
+    }
 }

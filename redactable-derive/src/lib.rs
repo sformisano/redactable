@@ -95,7 +95,7 @@ use generics::{
     add_container_bounds, add_debug_bounds, add_display_bounds, add_policy_applicable_bounds,
     add_policy_applicable_ref_bounds, add_redacted_display_bounds, collect_generics_from_type,
 };
-use redacted_display::{derive_redacted_display, has_display_template};
+use redacted_display::derive_redacted_display;
 
 /// Derives `redactable::RedactableContainer` (and related impls) for structs and enums.
 ///
@@ -324,12 +324,46 @@ fn expand_not_sensitive_display(input: DeriveInput) -> Result<TokenStream> {
         ));
     }
 
+    // Check for #[not_sensitive] attributes which are redundant on NotSensitiveDisplay types
+    let mut not_sensitive_attr_spans = Vec::new();
+    match &data {
+        Data::Struct(data) => {
+            for field in &data.fields {
+                if field
+                    .attrs
+                    .iter()
+                    .any(|attr| attr.path().is_ident("not_sensitive"))
+                {
+                    not_sensitive_attr_spans.push(field.span());
+                }
+            }
+        }
+        Data::Enum(data) => {
+            for variant in &data.variants {
+                for field in &variant.fields {
+                    if field
+                        .attrs
+                        .iter()
+                        .any(|attr| attr.path().is_ident("not_sensitive"))
+                    {
+                        not_sensitive_attr_spans.push(field.span());
+                    }
+                }
+            }
+        }
+        Data::Union(_) => unreachable!("unions rejected above"),
+    }
+
+    if let Some(span) = not_sensitive_attr_spans.first() {
+        return Err(syn::Error::new(
+            *span,
+            "`#[not_sensitive]` attributes are not needed on `NotSensitiveDisplay` types (the entire type is already non-sensitive)",
+        ));
+    }
+
     let NotSensitiveDisplayOptions { skip_debug } = parse_not_sensitive_display_options(&attrs)?;
 
     let crate_root = crate_root();
-
-    // Check if a display template exists (thiserror/displaydoc style)
-    let has_template = has_display_template(&attrs)?;
 
     // Generate the RedactableContainer no-op passthrough impl
     // This is always generated, allowing NotSensitiveDisplay to be used inside Sensitive containers
@@ -343,19 +377,7 @@ fn expand_not_sensitive_display(input: DeriveInput) -> Result<TokenStream> {
         }
     };
 
-    // If a template exists, use the template-based formatter (like SensitiveDisplay)
-    if has_template {
-        return expand_not_sensitive_display_with_template(
-            &ident,
-            generics,
-            &data,
-            &attrs,
-            skip_debug,
-            container_impl,
-        );
-    }
-
-    // No template: use the existing behavior (delegate to Display)
+    // Always delegate to Display::fmt (no template parsing for NotSensitiveDisplay)
     // Add Display bound to generics for RedactableDisplay impl
     let mut display_generics = generics.clone();
     let display_where_clause = display_generics.make_where_clause();
@@ -457,136 +479,6 @@ fn expand_not_sensitive_display(input: DeriveInput) -> Result<TokenStream> {
     let tracing_impl = {
         let (tracing_impl_generics, tracing_ty_generics, tracing_where_clause) =
             display_generics.split_for_impl();
-        quote! {
-            impl #tracing_impl_generics #crate_root::tracing::TracingRedacted for #ident #tracing_ty_generics #tracing_where_clause {}
-        }
-    };
-
-    #[cfg(not(feature = "tracing"))]
-    let tracing_impl = quote! {};
-
-    Ok(quote! {
-        #container_impl
-        #redacted_display_impl
-        #debug_impl
-        #slog_impl
-        #tracing_impl
-    })
-}
-
-/// Generates `NotSensitiveDisplay` impls when a display template is present.
-///
-/// This uses the template-based formatter (like `SensitiveDisplay`) but still generates
-/// a no-op `RedactableContainer` impl.
-#[allow(clippy::too_many_lines, clippy::redundant_clone)]
-fn expand_not_sensitive_display_with_template(
-    ident: &Ident,
-    generics: syn::Generics,
-    data: &Data,
-    attrs: &[syn::Attribute],
-    skip_debug: bool,
-    container_impl: TokenStream,
-) -> Result<TokenStream> {
-    let crate_root = crate_root();
-
-    // Use derive_redacted_display to generate the template-based RedactableDisplay impl
-    let redacted_display_output = derive_redacted_display(ident, data, attrs, &generics)?;
-    let redacted_display_generics =
-        add_display_bounds(generics.clone(), &redacted_display_output.display_generics);
-    let redacted_display_generics = add_debug_bounds(
-        redacted_display_generics,
-        &redacted_display_output.debug_generics,
-    );
-    let redacted_display_generics = add_policy_applicable_ref_bounds(
-        redacted_display_generics,
-        &redacted_display_output.policy_ref_generics,
-    );
-    let redacted_display_generics = add_redacted_display_bounds(
-        redacted_display_generics,
-        &redacted_display_output.nested_generics,
-    );
-    let (display_impl_generics, display_ty_generics, display_where_clause) =
-        redacted_display_generics.split_for_impl();
-    let redacted_display_body = redacted_display_output.body;
-    let redacted_display_impl = quote! {
-        impl #display_impl_generics #crate_root::RedactableDisplay for #ident #display_ty_generics #display_where_clause {
-            fn fmt_redacted(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
-                #redacted_display_body
-            }
-        }
-    };
-
-    // Debug impl - same pattern as SensitiveDisplay:
-    // - In test/testing builds: unredacted debug
-    // - In production: uses redacted display
-    let debug_impl = if skip_debug {
-        quote! {}
-    } else {
-        let debug_output = derive_unredacted_debug(ident, data, &generics)?;
-        let debug_unredacted_generics = add_debug_bounds(generics.clone(), &debug_output.generics);
-        let (
-            debug_unredacted_impl_generics,
-            debug_unredacted_ty_generics,
-            debug_unredacted_where_clause,
-        ) = debug_unredacted_generics.split_for_impl();
-        let (debug_redacted_impl_generics, debug_redacted_ty_generics, debug_redacted_where_clause) =
-            redacted_display_generics.split_for_impl();
-        let debug_unredacted_body = debug_output.body;
-        quote! {
-            #[cfg(any(test, feature = "testing"))]
-            impl #debug_unredacted_impl_generics ::core::fmt::Debug for #ident #debug_unredacted_ty_generics #debug_unredacted_where_clause {
-                fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
-                    #debug_unredacted_body
-                }
-            }
-
-            #[cfg(not(any(test, feature = "testing")))]
-            impl #debug_redacted_impl_generics ::core::fmt::Debug for #ident #debug_redacted_ty_generics #debug_redacted_where_clause {
-                fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
-                    #crate_root::RedactableDisplay::fmt_redacted(self, f)
-                }
-            }
-        }
-    };
-
-    // slog impl - same as SensitiveDisplay in RedactedDisplay mode
-    #[cfg(feature = "slog")]
-    let slog_impl = {
-        let slog_crate = slog_crate()?;
-        let mut slog_generics = generics;
-        let (_, ty_generics, _) = slog_generics.split_for_impl();
-        let self_ty: syn::Type = syn::parse_quote!(#ident #ty_generics);
-        slog_generics
-            .make_where_clause()
-            .predicates
-            .push(syn::parse_quote!(#self_ty: #crate_root::RedactableDisplay));
-        let (slog_impl_generics, slog_ty_generics, slog_where_clause) =
-            slog_generics.split_for_impl();
-        quote! {
-            impl #slog_impl_generics #slog_crate::Value for #ident #slog_ty_generics #slog_where_clause {
-                fn serialize(
-                    &self,
-                    _record: &#slog_crate::Record<'_>,
-                    key: #slog_crate::Key,
-                    serializer: &mut dyn #slog_crate::Serializer,
-                ) -> #slog_crate::Result {
-                    let redacted = #crate_root::RedactableDisplay::redacted_display(self);
-                    serializer.emit_arguments(key, &format_args!("{}", redacted))
-                }
-            }
-
-            impl #slog_impl_generics #crate_root::slog::SlogRedacted for #ident #slog_ty_generics #slog_where_clause {}
-        }
-    };
-
-    #[cfg(not(feature = "slog"))]
-    let slog_impl = quote! {};
-
-    // tracing impl
-    #[cfg(feature = "tracing")]
-    let tracing_impl = {
-        let (tracing_impl_generics, tracing_ty_generics, tracing_where_clause) =
-            redacted_display_generics.split_for_impl();
         quote! {
             impl #tracing_impl_generics #crate_root::tracing::TracingRedacted for #ident #tracing_ty_generics #tracing_where_clause {}
         }
