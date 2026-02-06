@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.5.2 - 2026-02-06
+
+### Added
+- `NotSensitive` derive now generates `slog::Value` / `SlogRedacted` and `TracingRedacted`
+  implementations, giving it logging parity with `Sensitive`. The slog integration emits the
+  `Debug` representation as a string (requires the type to implement `Debug` via `#[derive(Debug)]`).
+- `#[not_sensitive]` attributes (container or field level) on `NotSensitive` types are now rejected
+  with a clear error — the entire type is already non-sensitive, so the attribute is redundant.
+- Bare container attributes (`#[sensitive]`, `#[not_sensitive_display]`) on derive macros are now
+  rejected with a clear error instead of being silently ignored.
+
 ## 0.5.1 - 2026-02-06
 
 ### Fixed
