@@ -253,6 +253,8 @@ struct Config {
 
 > **Note:** `NotSensitive` is for types used with the `Sensitive` derive. For `SensitiveDisplay`, you have two options: use `#[derive(NotSensitiveDisplay)]` for a type with no sensitive data that needs logging integration (symmetric with `SensitiveDisplay`), or use the `#[not_sensitive]` field attribute when only some fields need to opt out.
 
+> **Debug:** `NotSensitive` does not generate a `Debug` impl. If your type previously derived `Sensitive` (which generates `Debug`) and you switch to `NotSensitive`, add `#[derive(Debug)]` explicitly — `Sensitive` containers require `Debug` on all field types. Since the data is non-sensitive, standard `#[derive(Debug)]` is safe. `NotSensitiveDisplay` does generate `Debug`, so this only applies to `NotSensitive`.
+
 #### `NotSensitiveDisplay` - Full logging integration
 
 When you need logging integration (slog, tracing) for a type with no sensitive data, use `NotSensitiveDisplay`. This is the display counterpart to `NotSensitive`:
@@ -283,6 +285,8 @@ impl std::fmt::Display for RetryDecision {
 - `Debug` - production uses `Display`, test builds use standard `Debug` (use `#[not_sensitive_display(skip_debug)]` to opt out)
 - `slog::Value` and `SlogRedacted` - when `slog` feature is enabled
 - `TracingRedacted` - when `tracing` feature is enabled
+
+`NotSensitiveDisplay` is a strict superset of `NotSensitive` — it provides everything `NotSensitive` does (`RedactableContainer`) plus `RedactableDisplay`, `Debug`, and logging integration. For any non-sensitive type that has `Display`, prefer `NotSensitiveDisplay`: it works everywhere `NotSensitive` works (as fields in `Sensitive` containers) and additionally supports direct logging.
 
 This is useful when combining with `displaydoc` or similar crates that derive `Display`:
 
@@ -552,14 +556,39 @@ This prevents accidental exposure when adding new fields while still making nest
 
 **Which derive macro?**
 
-| Situation | Use |
-|---|---|
-| Structured data you can consume (or clone) | `#[derive(Sensitive)]` |
-| Types you only want to borrow | `#[derive(SensitiveDisplay)]` |
-| Type with no sensitive data (for `Sensitive` bounds) | `#[derive(NotSensitive)]` |
-| Type with no sensitive data (for `SensitiveDisplay` bounds / logging) | `#[derive(NotSensitiveDisplay)]` |
+1. **Does the type contain sensitive data?**
+   - Yes → `Sensitive` or `SensitiveDisplay`
+   - No → `NotSensitive` or `NotSensitiveDisplay`
 
-**Error types** are a common case: use `Sensitive` if your error type implements `Clone`, otherwise use `SensitiveDisplay`. For non-sensitive types that need logging integration, use `NotSensitiveDisplay`.
+2. **Sensitive types: structured data or display string?**
+   - Structured data you can clone → `Sensitive`
+   - Display string, errors, or non-Clone types → `SensitiveDisplay`
+
+3. **Non-sensitive types: does it have `Display`?**
+   - Yes → `NotSensitiveDisplay` (provides container, Debug, and logging — strict superset of `NotSensitive`)
+   - No → `NotSensitive` + explicit `#[derive(Debug)]`
+
+**What each derive generates:**
+
+| Derive | `RedactableContainer` | `RedactableDisplay` | `Debug` | Logging |
+|---|---|---|---|---|
+| `Sensitive` | ✅ | ❌ | ✅ | ✅ |
+| `NotSensitive` | ✅ | ❌ | ❌ | ❌ |
+| `SensitiveDisplay` | ❌ | ✅ | ✅ | ✅ |
+| `NotSensitiveDisplay` | ✅ | ✅ | ✅ | ✅ |
+
+- **Debug** is conditional: production builds show redacted/Display output; test builds show actual values. Opt out with `skip_debug`.
+- **Logging** = `slog::Value` + `SlogRedacted` (requires `slog` feature), `TracingRedacted` (requires `tracing` feature). For `Sensitive`, slog integration requires `Serialize` on the type (the redacted struct is serialized as JSON).
+- `SensitiveDisplay` and `NotSensitiveDisplay` require `Display` on the type.
+- `Sensitive` conventionally pairs with `Clone` since `.redact()` consumes `self`.
+
+**Common patterns:**
+
+- **Newtype wrappers** (e.g., `struct Name(String)`) with `Display` → `NotSensitiveDisplay`
+- **Fieldless enums** used as classifiers with `Display` (via `strum` or manual impl) → `NotSensitiveDisplay`
+- **Composite structs** with multiple fields, no `Display` → `NotSensitive` + `#[derive(Debug)]`
+- **Error types with sensitive data** (PII in fields, user input in messages) → `SensitiveDisplay` with `#[sensitive(Policy)]` on sensitive fields
+- **Error types with no sensitive data** (operational, infrastructure) → `NotSensitiveDisplay`
 
 **How to opt out of redaction?**
 
