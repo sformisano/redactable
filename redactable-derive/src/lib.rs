@@ -143,77 +143,181 @@ pub fn derive_sensitive_container(input: proc_macro::TokenStream) -> proc_macro:
     }
 }
 
-/// Derives a no-op `redactable::RedactableContainer` implementation.
+/// Derives a no-op `redactable::RedactableContainer` implementation, along with
+/// `slog::Value` / `SlogRedacted` and `TracingRedacted`.
 ///
 /// This is useful for types that are known to be non-sensitive but still need to
-/// satisfy `RedactableContainer` / `Redactable` bounds.
-#[proc_macro_derive(NotSensitive)]
+/// satisfy `RedactableContainer` / `Redactable` bounds. Because the type has no
+/// sensitive data, logging integration works without wrappers.
+///
+/// # Generated Impls
+///
+/// - `RedactableContainer`: no-op passthrough (the type has no sensitive data)
+/// - `slog::Value` and `SlogRedacted` (behind `cfg(feature = "slog")`): emits the `Debug`
+///   representation as a string. Requires the type to implement `Debug` (use `#[derive(Debug)]`).
+/// - `TracingRedacted` (behind `cfg(feature = "tracing")`): marker trait
+///
+/// # Debug
+///
+/// `NotSensitive` does **not** generate a `Debug` impl. Unlike `Sensitive` (which generates
+/// `Debug` to redact sensitive fields), `NotSensitive` types have nothing to redact — standard
+/// `#[derive(Debug)]` is the right tool. Add it alongside `NotSensitive`:
+///
+/// ```ignore
+/// #[derive(Clone, Debug, NotSensitive)]
+/// struct PublicData { ... }
+/// ```
+///
+/// Unions are rejected at compile time.
+#[proc_macro_derive(NotSensitive, attributes(not_sensitive))]
 pub fn derive_not_sensitive(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
-    let ident = input.ident;
-    let generics = input.generics;
-    let attrs = input.attrs;
-    let data = input.data;
+    match expand_not_sensitive(input) {
+        Ok(tokens) => tokens.into(),
+        Err(err) => err.into_compile_error().into(),
+    }
+}
 
-    let mut sensitive_attr_spans = Vec::new();
-    if let Some(attr) = attrs.iter().find(|attr| attr.path().is_ident("sensitive")) {
-        sensitive_attr_spans.push(attr.span());
+#[allow(clippy::too_many_lines)]
+fn expand_not_sensitive(input: DeriveInput) -> Result<TokenStream> {
+    let DeriveInput {
+        ident,
+        generics,
+        data,
+        attrs,
+        ..
+    } = input;
+
+    // Reject unions
+    if let Data::Union(u) = &data {
+        return Err(syn::Error::new(
+            u.union_token.span(),
+            "`NotSensitive` cannot be derived for unions",
+        ));
+    }
+
+    // Reject #[sensitive] and #[not_sensitive] attributes on container or fields.
+    // #[sensitive] is wrong because the type is explicitly not-sensitive.
+    // #[not_sensitive] is redundant/nonsensical — the entire type is already not-sensitive.
+    for attr in &attrs {
+        if attr.path().is_ident("sensitive") {
+            return Err(syn::Error::new(
+                attr.span(),
+                "`#[sensitive]` attributes are not allowed on `NotSensitive` types",
+            ));
+        }
+        if attr.path().is_ident("not_sensitive") {
+            return Err(syn::Error::new(
+                attr.span(),
+                "`#[not_sensitive]` attributes are not needed on `NotSensitive` types (the entire type is already non-sensitive)",
+            ));
+        }
     }
 
     match &data {
         Data::Struct(data) => {
             for field in &data.fields {
-                if field
-                    .attrs
-                    .iter()
-                    .any(|attr| attr.path().is_ident("sensitive"))
-                {
-                    sensitive_attr_spans.push(field.span());
+                for attr in &field.attrs {
+                    if attr.path().is_ident("sensitive") {
+                        return Err(syn::Error::new(
+                            attr.span(),
+                            "`#[sensitive]` attributes are not allowed on `NotSensitive` types",
+                        ));
+                    }
+                    if attr.path().is_ident("not_sensitive") {
+                        return Err(syn::Error::new(
+                            attr.span(),
+                            "`#[not_sensitive]` attributes are not needed on `NotSensitive` types (the entire type is already non-sensitive)",
+                        ));
+                    }
                 }
             }
         }
         Data::Enum(data) => {
             for variant in &data.variants {
                 for field in &variant.fields {
-                    if field
-                        .attrs
-                        .iter()
-                        .any(|attr| attr.path().is_ident("sensitive"))
-                    {
-                        sensitive_attr_spans.push(field.span());
+                    for attr in &field.attrs {
+                        if attr.path().is_ident("sensitive") {
+                            return Err(syn::Error::new(
+                                attr.span(),
+                                "`#[sensitive]` attributes are not allowed on `NotSensitive` types",
+                            ));
+                        }
+                        if attr.path().is_ident("not_sensitive") {
+                            return Err(syn::Error::new(
+                                attr.span(),
+                                "`#[not_sensitive]` attributes are not needed on `NotSensitive` types (the entire type is already non-sensitive)",
+                            ));
+                        }
                     }
                 }
             }
         }
-        Data::Union(data) => {
-            return syn::Error::new(
-                data.union_token.span(),
-                "`NotSensitive` cannot be derived for unions",
-            )
-            .into_compile_error()
-            .into();
-        }
+        Data::Union(_) => unreachable!("unions rejected above"),
     }
 
-    if let Some(span) = sensitive_attr_spans.first() {
-        return syn::Error::new(
-            *span,
-            "`#[sensitive]` attributes are not allowed on `NotSensitive` types",
-        )
-        .into_compile_error()
-        .into();
-    }
-    let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
     let crate_root = crate_root();
 
-    let tokens = quote! {
+    // RedactableContainer impl (no-op passthrough)
+    let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
+    let container_impl = quote! {
         impl #impl_generics #crate_root::RedactableContainer for #ident #ty_generics #where_clause {
             fn redact_with<M: #crate_root::RedactableMapper>(self, _mapper: &M) -> Self {
                 self
             }
         }
     };
-    tokens.into()
+
+    // slog impl - emit Debug representation as a string
+    #[cfg(feature = "slog")]
+    let slog_impl = {
+        let slog_crate = slog_crate()?;
+        let mut slog_generics = generics.clone();
+        let (_, ty_generics, _) = slog_generics.split_for_impl();
+        let self_ty: syn::Type = parse_quote!(#ident #ty_generics);
+        slog_generics
+            .make_where_clause()
+            .predicates
+            .push(parse_quote!(#self_ty: ::core::fmt::Debug));
+        let (slog_impl_generics, slog_ty_generics, slog_where_clause) =
+            slog_generics.split_for_impl();
+        quote! {
+            impl #slog_impl_generics #slog_crate::Value for #ident #slog_ty_generics #slog_where_clause {
+                fn serialize(
+                    &self,
+                    _record: &#slog_crate::Record<'_>,
+                    key: #slog_crate::Key,
+                    serializer: &mut dyn #slog_crate::Serializer,
+                ) -> #slog_crate::Result {
+                    serializer.emit_arguments(key, &format_args!("{:?}", self))
+                }
+            }
+
+            impl #slog_impl_generics #crate_root::slog::SlogRedacted for #ident #slog_ty_generics #slog_where_clause {}
+        }
+    };
+
+    #[cfg(not(feature = "slog"))]
+    let slog_impl = quote! {};
+
+    // tracing impl
+    #[cfg(feature = "tracing")]
+    let tracing_impl = {
+        let (tracing_impl_generics, tracing_ty_generics, tracing_where_clause) =
+            generics.split_for_impl();
+        quote! {
+            impl #tracing_impl_generics #crate_root::tracing::TracingRedacted for #ident #tracing_ty_generics #tracing_where_clause {}
+        }
+    };
+
+    #[cfg(not(feature = "tracing"))]
+    let tracing_impl = quote! {};
+
+    Ok(quote! {
+        #container_impl
+        #slog_impl
+        #tracing_impl
+    })
 }
 
 /// Derives `redactable::RedactableDisplay` for types with no sensitive data.
