@@ -7,7 +7,7 @@ use redactable::{NotSensitiveDisplay, Redactable, Secret, Sensitive};
 use serde::Serialize;
 
 /// error code {code}
-#[derive(Clone, Serialize, NotSensitiveDisplay)]
+#[derive(Clone, Debug, Serialize, NotSensitiveDisplay)]
 struct ErrorCode {
     code: u16,
 }

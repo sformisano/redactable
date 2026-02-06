@@ -1,3 +1,7 @@
+# Git Commit Rules
+
+**Before running `git commit`, always verify Cursor's Commit Attribution is disabled.** Cursor can inject `--trailer "Co-authored-by: Cursor <cursoragent@cursor.com>"` into agent-executed commits. This is controlled by **Cursor Settings > Agent > Attribution** (`attribution.attributeCommitsToAgent`). If attribution is enabled, **do NOT commit** — tell the user to disable it first and output the commit command for them to run manually instead.
+
 # Commit Message Conventions
 
 When generating commit messages, always use the Conventional Commits format with type prefixes:

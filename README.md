@@ -234,7 +234,28 @@ impl RedactableLeaf for UserId {
 
 ### Opting out with `NotSensitive`
 
-Some types you own need to satisfy `RedactableContainer` bounds but have no sensitive data. Use `#[derive(NotSensitive)]` to generate a no-op `RedactableContainer` impl along with logging integration:
+`NotSensitive` is for types that have no sensitive data. It generates a no-op `RedactableContainer` (so the type satisfies trait bounds and can be used as a field inside `Sensitive` containers) and provides logging integration:
+
+```rust
+use redactable::NotSensitive;
+
+#[derive(NotSensitive)]
+struct PublicMetadata {
+    version: String,
+    timestamp: u64,
+}
+```
+
+`NotSensitive` generates:
+- `RedactableContainer` — no-op passthrough (the type has no sensitive data)
+- `slog::Value` and `SlogRedacted` — serializes the value directly as structured JSON, same format as `Sensitive` but without redaction (when `slog` feature is enabled; requires `Serialize` on the type)
+- `TracingRedacted` — when `tracing` feature is enabled
+
+**A key advantage of `NotSensitive` is that it is lightweight.** `Sensitive` generates a `Debug` impl, which means every field type must implement `Debug`. `NotSensitive` does not generate `Debug`, so it imposes no trait bounds on field types. For slog, both require `Serialize`, but `NotSensitive` does not additionally require `Clone` or `Debug`. This makes `NotSensitive` ideal for types that aggregate complex or foreign inner types where adding extra trait bounds would be impractical.
+
+Add `#[derive(Debug)]` alongside `NotSensitive` when you need debug formatting — it's just not required by the macro.
+
+When used inside a `Sensitive` container, the parent's generated `Debug` impl requires all field types to implement `Debug`. This is a requirement of the parent, not of `NotSensitive`:
 
 ```rust
 use redactable::{NotSensitive, Sensitive};
@@ -247,22 +268,16 @@ struct PublicMetadata {
 
 #[derive(Clone, Sensitive)]
 struct Config {
-    metadata: PublicMetadata,  // ✅ Works because NotSensitive provides RedactableContainer
+    metadata: PublicMetadata,  // ✅ NotSensitive provides RedactableContainer
+    // Debug on PublicMetadata is needed by Config's generated Debug, not by NotSensitive
 }
 ```
 
-`NotSensitive` generates:
-- `RedactableContainer` - no-op passthrough (the type has no sensitive data)
-- `slog::Value` and `SlogRedacted` - emits the `Debug` representation (when `slog` feature is enabled; requires `Debug` on the type)
-- `TracingRedacted` - when `tracing` feature is enabled
-
-Unlike `Sensitive`, `NotSensitive` does **not** generate a `Debug` impl — there's nothing to redact, so standard `#[derive(Debug)]` is the right tool. Add it alongside `NotSensitive`.
-
-> **Note:** `NotSensitive` is for types used with the `Sensitive` derive. For `SensitiveDisplay`, you have two options: use `#[derive(NotSensitiveDisplay)]` for a type with no sensitive data that needs logging integration (symmetric with `SensitiveDisplay`), or use the `#[not_sensitive]` field attribute when only some fields need to opt out.
+> **Note:** `NotSensitive` provides `RedactableContainer`, making it compatible with `Sensitive` containers. For `SensitiveDisplay` containers, use `#[derive(NotSensitiveDisplay)]` (which additionally provides `RedactableDisplay`), or use the `#[not_sensitive]` field attribute when only specific fields need to opt out.
 
 #### `NotSensitiveDisplay` - Full logging integration
 
-When you need logging integration (slog, tracing) for a type with no sensitive data, use `NotSensitiveDisplay`. This is the display counterpart to `NotSensitive`:
+`NotSensitiveDisplay` is the display counterpart to `NotSensitive`. Use it for non-sensitive types that have a `Display` impl:
 
 ```rust
 use redactable::NotSensitiveDisplay;
@@ -285,13 +300,14 @@ impl std::fmt::Display for RetryDecision {
 ```
 
 `NotSensitiveDisplay` generates:
-- `RedactableContainer` - no-op passthrough (allows use inside `Sensitive` containers)
-- `RedactableDisplay` - delegates to `Display::fmt`
-- `Debug` - production uses `Display`, test builds use standard `Debug` (use `#[not_sensitive_display(skip_debug)]` to opt out)
-- `slog::Value` and `SlogRedacted` - when `slog` feature is enabled
-- `TracingRedacted` - when `tracing` feature is enabled
+- `RedactableContainer` — no-op passthrough (allows use inside `Sensitive` containers)
+- `RedactableDisplay` — delegates to `Display::fmt`
+- `slog::Value` and `SlogRedacted` — when `slog` feature is enabled
+- `TracingRedacted` — when `tracing` feature is enabled
 
-Both `NotSensitive` and `NotSensitiveDisplay` provide `RedactableContainer` and logging integration (`slog::Value`, `SlogRedacted`, `TracingRedacted`). `NotSensitiveDisplay` additionally provides `RedactableDisplay` (delegating to `Display`) and `Debug`. For non-sensitive types that have `Display`, prefer `NotSensitiveDisplay`; for types without `Display`, use `NotSensitive` (and add `#[derive(Debug)]` when needed).
+Like `NotSensitive`, `NotSensitiveDisplay` does **not** generate a `Debug` impl and shares the same lightweight advantage: no trait bounds are imposed on field types.
+
+Both `NotSensitive` and `NotSensitiveDisplay` provide `RedactableContainer` and logging integration. The difference: `NotSensitiveDisplay` additionally provides `RedactableDisplay` (delegating to `Display`). If your non-sensitive type has `Display`, prefer `NotSensitiveDisplay`; otherwise, use `NotSensitive`.
 
 This is useful when combining with `displaydoc` or similar crates that derive `Display`:
 
@@ -580,11 +596,11 @@ This prevents accidental exposure when adding new fields while still making nest
 | `Sensitive` | ✅ | ❌ | ✅ (redacted) | ✅ |
 | `NotSensitive` | ✅ | ❌ | ❌ (use `#[derive(Debug)]`) | ✅ |
 | `SensitiveDisplay` | ❌ | ✅ | ✅ (redacted) | ✅ |
-| `NotSensitiveDisplay` | ✅ | ✅ | ✅ (passthrough) | ✅ |
+| `NotSensitiveDisplay` | ✅ | ✅ | ❌ (use `#[derive(Debug)]`) | ✅ |
 
-- **Debug**: `Sensitive`/`SensitiveDisplay` generate Debug because they need to *redact* it — production builds show redacted output, test builds show actual values. `NotSensitive` does not generate Debug (nothing to redact; use `#[derive(Debug)]`). `NotSensitiveDisplay` generates Debug that delegates to `Display`. For `Sensitive`/`SensitiveDisplay`, opt out with `#[sensitive(skip_debug)]`; for `NotSensitiveDisplay`, opt out with `#[not_sensitive_display(skip_debug)]`.
-- **Logging** = `slog::Value` + `SlogRedacted` (requires `slog` feature), `TracingRedacted` (requires `tracing` feature). For `Sensitive`, slog integration requires `Serialize` on the type (the redacted struct is serialized as JSON). For `NotSensitive`, slog emits the `Debug` representation.
-- `SensitiveDisplay` and `NotSensitiveDisplay` require `Display` on the type.
+- **Debug**: `Sensitive`/`SensitiveDisplay` generate Debug because they need to *redact* it — production builds show redacted output, test builds show actual values. This means all field types must implement `Debug`. `NotSensitive` and `NotSensitiveDisplay` do not generate Debug (nothing to redact; use `#[derive(Debug)]`), so they impose no `Debug` requirement on field types. For `Sensitive`/`SensitiveDisplay`, opt out with `#[sensitive(skip_debug)]`.
+- **Logging** = `slog::Value` + `SlogRedacted` (requires `slog` feature), `TracingRedacted` (requires `tracing` feature). Both `Sensitive` and `NotSensitive` require `Serialize` for slog — they emit structured JSON. `Sensitive` redacts first; `NotSensitive` serializes directly.
+- `NotSensitiveDisplay` requires `Display` on the type (delegates `RedactableDisplay` to `Display::fmt`). `SensitiveDisplay` uses a display template instead (see [Template syntax](#template-syntax)).
 - `Sensitive` conventionally pairs with `Clone` since `.redact()` consumes `self`.
 
 **Common patterns:**
@@ -777,7 +793,7 @@ slog::info!(logger, "auth"; "token" => &api_token);
 // Logged: "*********-key"
 ```
 
-Both work because they implement `slog::Value` - containers via the derive macro, wrappers via a manual implementation. No explicit conversion needed. `SensitiveDisplay` and `NotSensitiveDisplay` types also derive `slog::Value` when the feature is enabled, emitting the (redacted) display string.
+Both work because they implement `slog::Value` — containers via the derive macro, wrappers via a manual implementation. No explicit conversion needed. All four derives generate `slog::Value` when the feature is enabled: `Sensitive` and `NotSensitive` emit structured JSON (`Sensitive` redacts first; `NotSensitive` serializes directly), while `SensitiveDisplay` and `NotSensitiveDisplay` emit the (redacted) display string.
 
 ### tracing
 

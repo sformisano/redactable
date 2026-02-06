@@ -1,15 +1,21 @@
 # Changelog
 
-## 0.5.2 - 2026-02-06
+## 0.5.3 - 2026-02-06
 
 ### Added
 - `NotSensitive` derive now generates `slog::Value` / `SlogRedacted` and `TracingRedacted`
-  implementations, giving it logging parity with `Sensitive`. The slog integration emits the
-  `Debug` representation as a string (requires the type to implement `Debug` via `#[derive(Debug)]`).
-- `#[not_sensitive]` attributes (container or field level) on `NotSensitive` types are now rejected
-  with a clear error — the entire type is already non-sensitive, so the attribute is redundant.
-- Bare container attributes (`#[sensitive]`, `#[not_sensitive_display]`) on derive macros are now
-  rejected with a clear error instead of being silently ignored.
+  implementations, giving it logging parity with `Sensitive`. The slog integration serializes
+  the value directly as structured JSON (requires `Serialize` on the type, same as `Sensitive`).
+- `#[sensitive]` and `#[not_sensitive]` attributes on `NotSensitive` types (container or field level)
+  are now rejected with clear errors — the former because the type is explicitly non-sensitive,
+  the latter because it is redundant.
+- Bare `#[sensitive]` on derive macro containers is now rejected with a clear error instead of
+  being silently ignored.
+
+### Removed
+- `NotSensitiveDisplay` no longer generates a `Debug` impl. Like `NotSensitive`, there is nothing
+  to redact — use `#[derive(Debug)]` instead. The `#[not_sensitive_display(skip_debug)]` attribute
+  has been removed accordingly.
 
 ## 0.5.1 - 2026-02-06
 
@@ -21,9 +27,8 @@
 
 ### Added
 - `NotSensitiveDisplay` derive macro for types with no sensitive data that need logging integration
-  - Provides symmetry with `SensitiveDisplay`: generates `RedactableDisplay`, `Debug`, `slog::Value`, `SlogRedacted`, and `TracingRedacted`
+  - Provides symmetry with `SensitiveDisplay`: generates `RedactableDisplay`, `slog::Value`, `SlogRedacted`, and `TracingRedacted`
   - Requires `T: Display` and delegates `RedactableDisplay` to the existing `Display` implementation
-  - Supports `#[not_sensitive_display(skip_debug)]` attribute to opt out of `Debug` impl generation
   - Also generates `RedactableContainer` impl (no-op passthrough), so types can be used inside `#[derive(Sensitive)]` containers without also deriving `NotSensitive`
 - `NotSensitive<T>` wrapper and `.not_sensitive()` escape hatch with no formatting preference
 - `NotSensitive<T>` implements `slog::Value` when `T: slog::Value` and `SlogRedacted`/`TracingRedacted` when the inner type does

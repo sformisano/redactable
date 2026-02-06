@@ -930,7 +930,8 @@ mod not_sensitive_derive {
 
     #[test]
     fn passes_through_all_fields_unchanged() {
-        #[derive(Clone, Debug, NotSensitive)]
+        #[derive(Clone, NotSensitive)]
+        #[cfg_attr(feature = "slog", derive(serde::Serialize))]
         struct PublicInfo {
             id: u64,
             label: String,
@@ -955,7 +956,8 @@ mod not_sensitive_derive {
             secret: String,
         }
 
-        #[derive(Clone, Debug, NotSensitive)]
+        #[derive(Clone, NotSensitive)]
+        #[cfg_attr(feature = "slog", derive(serde::Serialize))]
         struct Outer {
             inner: Inner,
         }
@@ -1060,9 +1062,8 @@ mod not_sensitive_display_derive {
         assert_eq!(display, "Status(404)");
     }
 
-    // Test with skip_debug attribute
+    // Test that NotSensitiveDisplay does not conflict with #[derive(Debug)]
     #[derive(Clone, Debug, NotSensitiveDisplay)]
-    #[not_sensitive_display(skip_debug)]
     struct WithOwnDebug {
         value: String,
     }
@@ -1074,7 +1075,7 @@ mod not_sensitive_display_derive {
     }
 
     #[test]
-    fn skip_debug_allows_own_debug_impl() {
+    fn derive_debug_works_alongside_not_sensitive_display() {
         let value = WithOwnDebug {
             value: "test".into(),
         };
@@ -1115,7 +1116,6 @@ mod not_sensitive_display_derive {
         // A simple enum with NotSensitiveDisplay that has a Display impl
         #[derive(Clone, NotSensitiveDisplay, PartialEq)]
         #[cfg_attr(feature = "slog", derive(serde::Serialize))]
-        #[not_sensitive_display(skip_debug)]
         enum RetryDecision {
             Retry,
             Abort,
@@ -1168,7 +1168,6 @@ mod not_sensitive_display_derive {
         fn not_sensitive_display_struct_in_sensitive_struct() {
             #[derive(Clone, NotSensitiveDisplay, PartialEq)]
             #[cfg_attr(feature = "slog", derive(serde::Serialize))]
-            #[not_sensitive_display(skip_debug)]
             struct StatusInfo {
                 code: u32,
                 message: String,

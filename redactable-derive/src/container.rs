@@ -1,4 +1,4 @@
-//! Container-level attribute parsing for `#[derive(Sensitive)]` and `#[derive(NotSensitiveDisplay)]`.
+//! Container-level attribute parsing for `#[derive(Sensitive)]` and `#[derive(SensitiveDisplay)]`.
 //!
 //! This module handles attributes on the struct/enum itself, not on fields.
 
@@ -46,58 +46,6 @@ pub(crate) fn parse_container_options(attrs: &[Attribute]) -> Result<ContainerOp
                 return Err(syn::Error::new_spanned(
                     nv,
                     "name-value syntax is not supported for container-level #[sensitive]",
-                ));
-            }
-        }
-    }
-
-    Ok(options)
-}
-
-/// Options parsed from container-level `#[not_sensitive_display(...)]` attributes.
-#[derive(Clone, Debug, Default)]
-pub(crate) struct NotSensitiveDisplayOptions {
-    /// If true, skip generating the `Debug` impl.
-    pub(crate) skip_debug: bool,
-}
-
-/// Parses container-level `#[not_sensitive_display(...)]` attributes.
-pub(crate) fn parse_not_sensitive_display_options(
-    attrs: &[Attribute],
-) -> Result<NotSensitiveDisplayOptions> {
-    let mut options = NotSensitiveDisplayOptions::default();
-
-    for attr in attrs {
-        if !attr.path().is_ident("not_sensitive_display") {
-            continue;
-        }
-
-        match &attr.meta {
-            Meta::Path(_) => {
-                return Err(syn::Error::new_spanned(
-                    attr,
-                    "bare `#[not_sensitive_display]` on the container has no effect; use `#[not_sensitive_display(skip_debug)]` to opt out of `Debug` generation",
-                ));
-            }
-            Meta::List(list) => {
-                list.parse_nested_meta(|meta| {
-                    if meta.path.is_ident("skip_debug") {
-                        options.skip_debug = true;
-                        Ok(())
-                    } else {
-                        Err(meta.error(format!(
-                            "unknown container option `{}`; expected `skip_debug`",
-                            meta.path
-                                .get_ident()
-                                .map_or_else(|| "?".to_string(), ToString::to_string)
-                        )))
-                    }
-                })?;
-            }
-            Meta::NameValue(nv) => {
-                return Err(syn::Error::new_spanned(
-                    nv,
-                    "name-value syntax is not supported for container-level #[not_sensitive_display]",
                 ));
             }
         }
@@ -159,46 +107,6 @@ mod tests {
                 .unwrap_err()
                 .to_string()
                 .contains("bare `#[sensitive]` on the container has no effect")
-        );
-    }
-
-    #[test]
-    fn not_sensitive_display_no_attribute_returns_defaults() {
-        let attrs = parse_attrs(quote! {});
-        let options = parse_not_sensitive_display_options(&attrs).unwrap();
-        assert!(!options.skip_debug);
-    }
-
-    #[test]
-    fn not_sensitive_display_skip_debug_is_parsed() {
-        let attrs = parse_attrs(quote! { #[not_sensitive_display(skip_debug)] });
-        let options = parse_not_sensitive_display_options(&attrs).unwrap();
-        assert!(options.skip_debug);
-    }
-
-    #[test]
-    fn not_sensitive_display_unknown_option_errors() {
-        let attrs = parse_attrs(quote! { #[not_sensitive_display(unknown_option)] });
-        let result = parse_not_sensitive_display_options(&attrs);
-        assert!(result.is_err());
-        assert!(
-            result
-                .unwrap_err()
-                .to_string()
-                .contains("unknown container option")
-        );
-    }
-
-    #[test]
-    fn not_sensitive_display_bare_attribute_is_rejected() {
-        let attrs = parse_attrs(quote! { #[not_sensitive_display] });
-        let result = parse_not_sensitive_display_options(&attrs);
-        assert!(result.is_err());
-        assert!(
-            result
-                .unwrap_err()
-                .to_string()
-                .contains("bare `#[not_sensitive_display]` on the container has no effect")
         );
     }
 }
