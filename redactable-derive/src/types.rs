@@ -5,7 +5,7 @@
 /// `PhantomData<T>` is a zero-sized type that never carries actual data,
 /// so it can never contain sensitive information regardless of `T`.
 /// Fields of this type should be passed through unchanged without
-/// requiring `T: RedactableContainer`.
+/// requiring `T: RedactableWithMapper`.
 pub(crate) fn is_phantom_data(ty: &syn::Type) -> bool {
     if let syn::Type::Path(path) = ty {
         // Check the last segment for "PhantomData" with generic arguments.

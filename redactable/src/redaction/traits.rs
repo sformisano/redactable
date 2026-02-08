@@ -2,9 +2,8 @@
 //!
 //! This module defines the fundamental traits:
 //!
-//! - [`RedactableLeaf`]: Types that *are* sensitive data (String, Cow<str>)
-//! - [`RedactableWithPolicy`]: Policy-aware leaf redaction
-//! - [`RedactableContainer`]: Types that *contain* sensitive data (structs, enums)
+//! - [`SensitiveWithPolicy`]: Policy-aware leaf redaction
+//! - [`RedactableWithMapper`]: Types that participate in redaction traversal
 //! - [`Redactable`]: User-facing `.redact()` method
 
 use std::borrow::Cow;
@@ -13,77 +12,25 @@ use super::redact::RedactableMapper;
 use crate::policy::{RedactionPolicy, TextRedactionPolicy};
 
 // =============================================================================
-// RedactableLeaf - Types that ARE sensitive data (leaf values)
+// SensitiveWithPolicy - Policy-aware leaf redaction
 // =============================================================================
 
-/// String-like payloads that can be redacted via policies.
+/// A type that can be redacted using a specific policy.
 ///
-/// The redaction engine treats these values as strings for the purpose of policy
-/// application. Scalar values (numbers, booleans, chars) are not `RedactableLeaf`
-/// and instead redact to their defaults via `#[sensitive]` and `map_scalar`.
+/// Implement this for your types when you need them to work with
+/// `SensitiveValue<T, P>` or `#[sensitive(Policy)]`. The orphan rule is
+/// satisfied because the policy `P` is local to your crate.
 ///
-/// ## Relationship with `RedactableContainer`
+/// `String` and `Cow<str>` have built-in implementations for all policies.
+/// For your own types, implement this trait for the specific policy you need:
 ///
-/// - `RedactableLeaf`: A type that *is* sensitive data (String, custom newtypes)
-/// - `RedactableContainer`: A type that *contains* sensitive data (structs, enums)
-///
-/// Use `#[sensitive(Policy)]` on fields of `RedactableLeaf` types.
-/// Nested `RedactableContainer` fields are walked by default.
-///
-/// ## Foreign string-like types
-///
-/// If the sensitive field type comes from another crate, you cannot implement
-/// `RedactableLeaf` for it directly (Rust's orphan rules). The recommended
-/// pattern is to define a local newtype in your project and implement
-/// `RedactableLeaf` for that wrapper.
-///
-/// `from_redacted` is not required to preserve the original representation; it
-/// only needs to construct a value that corresponds to the redacted string
-/// returned by the applied policy.
-#[diagnostic::on_unimplemented(
-    message = "`{Self}` is not a `RedactableLeaf`",
-    label = "this type cannot have a policy applied directly",
-    note = "policies like `#[sensitive(Secret)]` are for leaf values (String, etc.)",
-    note = "if `{Self}` is a struct that derives `Sensitive`, remove the policy and let traversal walk into it"
-)]
-pub trait RedactableLeaf: Sized {
-    /// Returns a read-only view of the sensitive value.
-    fn as_str(&self) -> &str;
-    /// Reconstructs the value from a redacted string.
-    #[must_use]
-    fn from_redacted(redacted: String) -> Self;
-}
-
-impl RedactableLeaf for String {
-    fn as_str(&self) -> &str {
-        self.as_str()
-    }
-
-    fn from_redacted(redacted: String) -> Self {
-        redacted
-    }
-}
-
-impl RedactableLeaf for Cow<'_, str> {
-    fn as_str(&self) -> &str {
-        self.as_ref()
-    }
-
-    fn from_redacted(redacted: String) -> Self {
-        Cow::Owned(redacted)
-    }
-}
-
-// =============================================================================
-// RedactableWithPolicy - Policy-aware leaf redaction
-// =============================================================================
-
-/// A policy-aware leaf that can be redacted without requiring a local newtype.
-///
-/// This is the external-type escape hatch: you can implement it for a foreign type
-/// using a local policy `P`, even when you cannot implement `RedactableLeaf` due to
-/// orphan rules.
-pub trait RedactableWithPolicy<P>: Sized {
+/// ```ignore
+/// impl SensitiveWithPolicy<MyPolicy> for MyType {
+///     fn redact_with_policy(self, policy: &TextRedactionPolicy) -> Self { ... }
+///     fn redacted_string(&self, policy: &TextRedactionPolicy) -> String { ... }
+/// }
+/// ```
+pub trait SensitiveWithPolicy<P>: Sized {
     /// Returns a redacted version of `self` using the provided policy.
     #[must_use]
     fn redact_with_policy(self, policy: &TextRedactionPolicy) -> Self;
@@ -93,14 +40,9 @@ pub trait RedactableWithPolicy<P>: Sized {
     fn redacted_string(&self, policy: &TextRedactionPolicy) -> String;
 }
 
-impl<T, P> RedactableWithPolicy<P> for T
-where
-    T: RedactableLeaf,
-    P: RedactionPolicy,
-{
+impl<P: RedactionPolicy> SensitiveWithPolicy<P> for String {
     fn redact_with_policy(self, policy: &TextRedactionPolicy) -> Self {
-        let redacted = policy.apply_to(self.as_str());
-        T::from_redacted(redacted)
+        policy.apply_to(self.as_str())
     }
 
     fn redacted_string(&self, policy: &TextRedactionPolicy) -> String {
@@ -108,33 +50,34 @@ where
     }
 }
 
+impl<P: RedactionPolicy> SensitiveWithPolicy<P> for Cow<'_, str> {
+    fn redact_with_policy(self, policy: &TextRedactionPolicy) -> Self {
+        Cow::Owned(policy.apply_to(self.as_ref()))
+    }
+
+    fn redacted_string(&self, policy: &TextRedactionPolicy) -> String {
+        policy.apply_to(self.as_ref())
+    }
+}
+
 // =============================================================================
-// RedactableContainer - Types that CONTAIN sensitive data (containers)
+// RedactableWithMapper - Types that CONTAIN sensitive data (containers)
 // =============================================================================
 
-/// A type that contains sensitive data and can be traversed for redaction.
+/// A type that participates in redaction traversal.
 ///
-/// This trait is implemented by types that derive `Sensitive`. It walks the
-/// type's fields and applies scalar redaction to any fields marked with `#[sensitive]`.
-///
-/// ## When to use
-///
-/// - Structs/enums containing sensitive fields should derive `Sensitive`
-/// - Use `#[sensitive]` on scalar fields to redact to defaults
-/// - Use `#[sensitive(Policy)]` on leaf values (strings, etc.)
-///
-/// ## Relationship with `RedactableLeaf`
-///
-/// - `RedactableContainer`: A type that *contains* sensitive data (structs, enums)
-/// - `RedactableLeaf`: A type that *is* sensitive data (String, custom newtypes)
+/// This trait is implemented by types that derive `Sensitive` or `NotSensitive`,
+/// as well as by standard library types (scalars, strings, collections) via
+/// blanket implementations. It walks the type's fields and applies redaction
+/// to any fields marked with `#[sensitive]` or `#[sensitive(Policy)]`.
 #[diagnostic::on_unimplemented(
-    message = "`{Self}` does not implement `RedactableContainer`",
+    message = "`{Self}` does not implement `RedactableWithMapper`",
     label = "this type cannot be walked for sensitive data",
     note = "use `#[derive(Sensitive)]` on the type definition",
     note = "or use `#[sensitive(Policy)]` if this is a leaf value like String"
 )]
 #[doc(hidden)]
-pub trait RedactableContainer: Sized {
+pub trait RedactableWithMapper: Sized {
     /// Applies redaction to this value using the provided mapper.
     #[must_use]
     fn redact_with<M: RedactableMapper>(self, mapper: &M) -> Self;
@@ -146,13 +89,13 @@ pub trait RedactableContainer: Sized {
 
 /// Public entrypoint for redaction on traversable types.
 ///
-/// This trait is blanket-implemented for all [`RedactableContainer`] types and
+/// This trait is blanket-implemented for all [`RedactableWithMapper`] types and
 /// provides a convenience `redact()` method.
 ///
 /// `redact` is implemented in terms of the default mapping behavior provided by
 /// [`super::redact::redact`], which applies policies associated with policy markers
 /// types.
-pub trait Redactable: RedactableContainer {
+pub trait Redactable: RedactableWithMapper {
     /// Redacts the value using policy-bound redaction.
     ///
     /// This consumes `self` and returns a redacted copy.
@@ -162,7 +105,7 @@ pub trait Redactable: RedactableContainer {
     }
 }
 
-impl<T> Redactable for T where T: RedactableContainer {}
+impl<T> Redactable for T where T: RedactableWithMapper {}
 
 // =============================================================================
 // Tests
@@ -172,24 +115,44 @@ impl<T> Redactable for T where T: RedactableContainer {}
 mod tests {
     use std::borrow::Cow;
 
-    use super::RedactableLeaf;
+    use super::SensitiveWithPolicy;
+    use crate::policy::{Secret, TextRedactionPolicy};
 
     #[test]
-    fn string_sensitive_value_round_trip() {
-        let original = "secret".to_string();
-        assert_eq!(original.as_str(), "secret");
-        let redacted = String::from_redacted("[REDACTED]".to_string());
+    fn string_redact_with_policy() {
+        let original = String::from("my_secret");
+        let policy = TextRedactionPolicy::default_full();
+        let redacted: String =
+            <String as SensitiveWithPolicy<Secret>>::redact_with_policy(original, &policy);
         assert_eq!(redacted, "[REDACTED]");
     }
 
     #[test]
-    fn cow_sensitive_value_round_trip() {
-        let original: Cow<'static, str> = Cow::Borrowed("secret");
-        assert_eq!(original.as_str(), "secret");
-        let redacted = Cow::from_redacted("[REDACTED]".to_string());
+    fn string_redacted_string() {
+        let original = String::from("my_secret");
+        let policy = TextRedactionPolicy::default_full();
+        let result = <String as SensitiveWithPolicy<Secret>>::redacted_string(&original, &policy);
+        assert_eq!(result, "[REDACTED]");
+    }
+
+    #[test]
+    fn cow_redact_with_policy() {
+        let original: Cow<'static, str> = Cow::Borrowed("my_secret");
+        let policy = TextRedactionPolicy::default_full();
+        let redacted =
+            <Cow<'_, str> as SensitiveWithPolicy<Secret>>::redact_with_policy(original, &policy);
         match redacted {
             Cow::Owned(value) => assert_eq!(value, "[REDACTED]"),
             Cow::Borrowed(_) => panic!("redacted Cow should be owned"),
         }
+    }
+
+    #[test]
+    fn cow_redacted_string() {
+        let original: Cow<'static, str> = Cow::Borrowed("my_secret");
+        let policy = TextRedactionPolicy::default_full();
+        let result =
+            <Cow<'_, str> as SensitiveWithPolicy<Secret>>::redacted_string(&original, &policy);
+        assert_eq!(result, "[REDACTED]");
     }
 }

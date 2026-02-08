@@ -1,4 +1,4 @@
-//! Struct-specific `RedactableContainer` derivation.
+//! Struct-specific `RedactableWithMapper` derivation.
 //!
 //! This module generates traversal logic for struct fields and collects generic
 //! parameters that require trait bounds.
@@ -8,49 +8,21 @@ use quote::{format_ident, quote, quote_spanned};
 use syn::{DataStruct, Fields, Result, spanned::Spanned};
 
 use crate::{
-    crate_path,
+    DeriveOutput, crate_path,
     strategy::{Strategy, parse_field_strategy},
     transform::{DeriveContext, generate_field_transform},
 };
-
-pub(crate) struct StructDeriveOutput {
-    pub(crate) redaction_body: TokenStream,
-    pub(crate) used_generics: Vec<Ident>,
-    pub(crate) policy_applicable_generics: Vec<Ident>,
-    pub(crate) debug_redacted_body: TokenStream,
-    pub(crate) debug_redacted_generics: Vec<Ident>,
-    pub(crate) debug_unredacted_body: TokenStream,
-    pub(crate) debug_unredacted_generics: Vec<Ident>,
-}
-
-struct StructParts {
-    redaction_body: TokenStream,
-    used_generics: Vec<Ident>,
-    policy_applicable_generics: Vec<Ident>,
-    debug_redacted_body: TokenStream,
-    debug_redacted_generics: Vec<Ident>,
-    debug_unredacted_body: TokenStream,
-    debug_unredacted_generics: Vec<Ident>,
-}
 
 pub(crate) fn derive_struct(
     name: &Ident,
     data: DataStruct,
     generics: &syn::Generics,
-) -> Result<StructDeriveOutput> {
-    let container_path = crate_path("RedactableContainer");
-    let StructParts {
-        redaction_body,
-        used_generics,
-        policy_applicable_generics,
-        debug_redacted_body,
-        debug_redacted_generics,
-        debug_unredacted_body,
-        debug_unredacted_generics,
-    } = match data.fields {
-        Fields::Named(fields) => derive_named_struct(name, fields, generics, &container_path)?,
-        Fields::Unnamed(fields) => derive_unnamed_struct(name, fields, generics, &container_path)?,
-        Fields::Unit => StructParts {
+) -> Result<DeriveOutput> {
+    let container_path = crate_path("RedactableWithMapper");
+    match data.fields {
+        Fields::Named(fields) => derive_named_struct(name, fields, generics, &container_path),
+        Fields::Unnamed(fields) => derive_unnamed_struct(name, fields, generics, &container_path),
+        Fields::Unit => Ok(DeriveOutput {
             redaction_body: quote! { self },
             used_generics: Vec::new(),
             policy_applicable_generics: Vec::new(),
@@ -62,18 +34,8 @@ pub(crate) fn derive_struct(
                 f.write_str(stringify!(#name))
             },
             debug_unredacted_generics: Vec::new(),
-        },
-    };
-
-    Ok(StructDeriveOutput {
-        redaction_body,
-        used_generics,
-        policy_applicable_generics,
-        debug_redacted_body,
-        debug_redacted_generics,
-        debug_unredacted_body,
-        debug_unredacted_generics,
-    })
+        }),
+    }
 }
 
 fn derive_named_struct(
@@ -81,7 +43,7 @@ fn derive_named_struct(
     fields: syn::FieldsNamed,
     generics: &syn::Generics,
     container_path: &TokenStream,
-) -> Result<StructParts> {
+) -> Result<DeriveOutput> {
     let mut bindings = Vec::new();
     let mut transforms = Vec::new();
     let mut used_generics = Vec::new();
@@ -129,7 +91,7 @@ fn derive_named_struct(
         debug_unredacted_fields.push(debug_unredacted_field);
     }
 
-    Ok(StructParts {
+    Ok(DeriveOutput {
         redaction_body: quote! {
             let Self { #(#bindings),* } = self;
             #(#transforms)*
@@ -165,7 +127,7 @@ fn derive_unnamed_struct(
     fields: syn::FieldsUnnamed,
     generics: &syn::Generics,
     container_path: &TokenStream,
-) -> Result<StructParts> {
+) -> Result<DeriveOutput> {
     let mut bindings = Vec::new();
     let mut transforms = Vec::new();
     let mut used_generics = Vec::new();
@@ -213,7 +175,7 @@ fn derive_unnamed_struct(
         debug_unredacted_fields.push(debug_unredacted_field);
     }
 
-    Ok(StructParts {
+    Ok(DeriveOutput {
         redaction_body: quote! {
             let Self ( #(#bindings),* ) = self;
             #(#transforms)*

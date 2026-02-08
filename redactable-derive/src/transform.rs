@@ -69,7 +69,7 @@ pub(crate) fn generate_field_transform(
         }
         Strategy::NotSensitive => {
             // Explicit opt-out: no transformation, passthrough unchanged.
-            // This is useful for foreign types that don't implement RedactableContainer.
+            // This is useful for foreign types that don't implement RedactableWithMapper.
             Ok(TokenStream::new())
         }
         Strategy::Policy(policy_path) => {

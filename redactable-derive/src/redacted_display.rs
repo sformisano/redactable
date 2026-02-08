@@ -3,7 +3,7 @@
 //! This module derives a redacted formatting implementation from thiserror-style
 //! `#[error("...")]` strings or displaydoc-style doc comments.
 //!
-//! Unannotated fields referenced in a template use `RedactableDisplay` by default.
+//! Unannotated fields referenced in a template use `RedactableWithFormatter` by default.
 //! Use `#[not_sensitive]` for raw output or `#[sensitive(Policy)]` for policy redaction.
 
 use std::collections::BTreeMap;
@@ -85,7 +85,7 @@ fn derive_struct_display(
     generics: &syn::Generics,
 ) -> Result<RedactedDisplayOutput> {
     let template = template_from_attrs(attrs, name.span())?;
-    let fields = build_fields(data)?;
+    let fields = build_fields_from_syn(&data.fields)?;
     let format_args = build_format_args(&template, &fields, generics)?;
     let format_prelude = format_args.prelude.clone();
     let bindings = fields.iter().map(|field| field.ident.clone());
@@ -124,7 +124,7 @@ fn derive_enum_display(
 
     for variant in &data.variants {
         let template = template_from_attrs(&variant.attrs, variant.ident.span())?;
-        let fields = build_fields_from_variant(variant)?;
+        let fields = build_fields_from_syn(&variant.fields)?;
         let format_args = build_format_args(&template, &fields, generics)?;
         let format_prelude = format_args.prelude.clone();
         let bindings = fields.iter().map(|field| field.ident.clone());
@@ -162,45 +162,8 @@ fn derive_enum_display(
     })
 }
 
-fn build_fields(data: &DataStruct) -> Result<Vec<FieldInfo<'_>>> {
-    match &data.fields {
-        Fields::Named(fields) => fields
-            .named
-            .iter()
-            .map(|field| {
-                let strategy = parse_field_strategy(&field.attrs)?;
-                let ident = field
-                    .ident
-                    .clone()
-                    .expect("named field should have identifier");
-                Ok(FieldInfo {
-                    ident,
-                    ty: &field.ty,
-                    strategy,
-                    span: field.span(),
-                })
-            })
-            .collect(),
-        Fields::Unnamed(fields) => fields
-            .unnamed
-            .iter()
-            .enumerate()
-            .map(|(index, field)| {
-                let strategy = parse_field_strategy(&field.attrs)?;
-                Ok(FieldInfo {
-                    ident: format_ident!("field_{index}"),
-                    ty: &field.ty,
-                    strategy,
-                    span: field.span(),
-                })
-            })
-            .collect(),
-        Fields::Unit => Ok(Vec::new()),
-    }
-}
-
-fn build_fields_from_variant(variant: &syn::Variant) -> Result<Vec<FieldInfo<'_>>> {
-    match &variant.fields {
+fn build_fields_from_syn(fields: &Fields) -> Result<Vec<FieldInfo<'_>>> {
+    match fields {
         Fields::Named(fields) => fields
             .named
             .iter()
@@ -355,7 +318,7 @@ fn redacted_expr_for_field(field: &FieldInfo<'_>) -> TokenStream {
     let span = field.span;
     let scalar_path = crate_path("ScalarRedaction");
     let apply_policy_ref_path = crate_path("apply_policy_ref");
-    let redacted_display_path = crate_path("RedactableDisplay");
+    let redacted_display_path = crate_path("RedactableWithFormatter");
     let field_ty = field.ty;
     match &field.strategy {
         Strategy::WalkDefault => quote_spanned! { span =>

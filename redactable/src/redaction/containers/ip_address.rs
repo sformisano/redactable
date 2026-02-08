@@ -6,7 +6,7 @@ use crate::{
     policy::IpAddress,
     redaction::{
         redact::RedactableMapper,
-        traits::{RedactableContainer, RedactableWithPolicy},
+        traits::{RedactableWithMapper, SensitiveWithPolicy},
     },
 };
 
@@ -21,7 +21,7 @@ fn redact_ipv6(addr: Ipv6Addr) -> Ipv6Addr {
     Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, segments[7])
 }
 
-impl RedactableWithPolicy<IpAddress> for Ipv4Addr {
+impl SensitiveWithPolicy<IpAddress> for Ipv4Addr {
     fn redact_with_policy(self, _policy: &crate::policy::TextRedactionPolicy) -> Self {
         redact_ipv4(self)
     }
@@ -31,7 +31,7 @@ impl RedactableWithPolicy<IpAddress> for Ipv4Addr {
     }
 }
 
-impl RedactableWithPolicy<IpAddress> for Ipv6Addr {
+impl SensitiveWithPolicy<IpAddress> for Ipv6Addr {
     fn redact_with_policy(self, _policy: &crate::policy::TextRedactionPolicy) -> Self {
         redact_ipv6(self)
     }
@@ -41,7 +41,7 @@ impl RedactableWithPolicy<IpAddress> for Ipv6Addr {
     }
 }
 
-impl RedactableWithPolicy<IpAddress> for IpAddr {
+impl SensitiveWithPolicy<IpAddress> for IpAddr {
     fn redact_with_policy(self, _policy: &crate::policy::TextRedactionPolicy) -> Self {
         match self {
             IpAddr::V4(addr) => IpAddr::V4(redact_ipv4(addr)),
@@ -57,7 +57,7 @@ impl RedactableWithPolicy<IpAddress> for IpAddr {
     }
 }
 
-impl RedactableWithPolicy<IpAddress> for SocketAddr {
+impl SensitiveWithPolicy<IpAddress> for SocketAddr {
     fn redact_with_policy(self, _policy: &crate::policy::TextRedactionPolicy) -> Self {
         match self {
             SocketAddr::V4(addr) => {
@@ -88,25 +88,25 @@ impl RedactableWithPolicy<IpAddress> for SocketAddr {
     }
 }
 
-impl RedactableContainer for Ipv4Addr {
+impl RedactableWithMapper for Ipv4Addr {
     fn redact_with<M: RedactableMapper>(self, mapper: &M) -> Self {
         mapper.map_sensitive::<Self, IpAddress>(self)
     }
 }
 
-impl RedactableContainer for Ipv6Addr {
+impl RedactableWithMapper for Ipv6Addr {
     fn redact_with<M: RedactableMapper>(self, mapper: &M) -> Self {
         mapper.map_sensitive::<Self, IpAddress>(self)
     }
 }
 
-impl RedactableContainer for IpAddr {
+impl RedactableWithMapper for IpAddr {
     fn redact_with<M: RedactableMapper>(self, mapper: &M) -> Self {
         mapper.map_sensitive::<Self, IpAddress>(self)
     }
 }
 
-impl RedactableContainer for SocketAddr {
+impl RedactableWithMapper for SocketAddr {
     fn redact_with<M: RedactableMapper>(self, mapper: &M) -> Self {
         mapper.map_sensitive::<Self, IpAddress>(self)
     }

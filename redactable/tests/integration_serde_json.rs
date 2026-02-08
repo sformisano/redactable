@@ -5,7 +5,7 @@
 
 #![cfg(feature = "json")]
 
-use redactable::{Redactable, RedactableDisplay, Secret, Sensitive, Token};
+use redactable::{Redactable, RedactableWithFormatter, Secret, Sensitive, Token};
 use serde_json::{Value, json};
 
 mod policy_application {

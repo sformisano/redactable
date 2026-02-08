@@ -1,4 +1,4 @@
-//! Enum-specific `RedactableContainer` derivation.
+//! Enum-specific `RedactableWithMapper` derivation.
 //!
 //! This module generates match arms for each variant and collects generic
 //! parameters that require trait bounds.
@@ -8,20 +8,10 @@ use quote::{format_ident, quote, quote_spanned};
 use syn::{DataEnum, Fields, Result, spanned::Spanned};
 
 use crate::{
-    crate_path,
+    DeriveOutput, crate_path,
     strategy::{Strategy, parse_field_strategy},
     transform::{DeriveContext, generate_field_transform},
 };
-
-pub(crate) struct EnumDeriveOutput {
-    pub(crate) redaction_body: TokenStream,
-    pub(crate) used_generics: Vec<Ident>,
-    pub(crate) policy_applicable_generics: Vec<Ident>,
-    pub(crate) debug_redacted_body: TokenStream,
-    pub(crate) debug_redacted_generics: Vec<Ident>,
-    pub(crate) debug_unredacted_body: TokenStream,
-    pub(crate) debug_unredacted_generics: Vec<Ident>,
-}
 
 /// Context for deriving a single enum variant.
 struct VariantContext<'a> {
@@ -36,8 +26,8 @@ pub(crate) fn derive_enum(
     name: &Ident,
     data: DataEnum,
     generics: &syn::Generics,
-) -> Result<EnumDeriveOutput> {
-    let container_path = crate_path("RedactableContainer");
+) -> Result<DeriveOutput> {
+    let container_path = crate_path("RedactableWithMapper");
     let mut arms = Vec::new();
     let mut used_generics = Vec::new();
     let mut policy_applicable_generics = Vec::new();
@@ -95,7 +85,7 @@ pub(crate) fn derive_enum(
         }
     };
 
-    Ok(EnumDeriveOutput {
+    Ok(DeriveOutput {
         redaction_body: body,
         used_generics,
         policy_applicable_generics,

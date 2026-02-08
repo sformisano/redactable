@@ -1,5 +1,5 @@
 // Test: NotSensitiveDisplay can be used inside #[derive(Sensitive)] container
-// This works because NotSensitiveDisplay now provides RedactableContainer.
+// This works because NotSensitiveDisplay now provides RedactableWithMapper.
 
 use std::fmt;
 
@@ -33,10 +33,10 @@ fn main() {
         internal_message: "database connection failed".into(),
     };
 
-    // Verify the container can be redacted (requires ErrorCode: RedactableContainer)
+    // Verify the container can be redacted (requires ErrorCode: RedactableWithMapper)
     let redacted = api_error.redact();
 
-    // Error code passes through unchanged (no-op RedactableContainer)
+    // Error code passes through unchanged (no-op RedactableWithMapper)
     assert_eq!(redacted.error.code, 500);
     // Sensitive field is redacted
     assert_eq!(redacted.internal_message, "[REDACTED]");

@@ -1,4 +1,4 @@
-//! Passthrough `RedactableContainer` implementations for scalar-like types.
+//! Passthrough `RedactableWithMapper` implementations for scalar-like types.
 
 use std::{
     borrow::Cow,
@@ -12,7 +12,7 @@ use std::{
 };
 
 use super::impl_redactable_container_passthrough;
-use crate::redaction::{redact::RedactableMapper, traits::RedactableContainer};
+use crate::redaction::{redact::RedactableMapper, traits::RedactableWithMapper};
 
 // =============================================================================
 // Passthrough implementations (scalars and primitives)
@@ -76,13 +76,13 @@ impl_redactable_container_passthrough!(SystemTime);
 
 impl_redactable_container_passthrough!(Ordering);
 
-impl<T> RedactableContainer for PhantomData<T> {
+impl<T> RedactableWithMapper for PhantomData<T> {
     fn redact_with<M: RedactableMapper>(self, _mapper: &M) -> Self {
         self
     }
 }
 
-impl RedactableContainer for Cow<'_, str> {
+impl RedactableWithMapper for Cow<'_, str> {
     fn redact_with<M: RedactableMapper>(self, _mapper: &M) -> Self {
         self
     }

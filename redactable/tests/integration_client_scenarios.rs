@@ -33,7 +33,7 @@ impl RedactionPolicy for PartiallyVisible {
 ///
 /// Original problem: Users were forced to create newtypes like `PiiString`
 /// just to wrap optional strings because Option<String> didn't implement
-/// RedactableLeaf.
+/// `SensitiveWithPolicy`.
 ///
 /// Expected behavior: `#[sensitive(Policy)]` should work on Option<T>,
 /// Vec<T>, Box<T> and apply the policy to the inner value(s).

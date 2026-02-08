@@ -1,7 +1,7 @@
 // Test: NotSensitiveDisplay on an enum with foreign type fields (std::io::Error,
 // std::num::ParseIntError) and a manual Display impl. No #[not_sensitive] needed.
 // This would have failed before the change because the template-based path
-// required fields to implement RedactableDisplay.
+// required fields to implement RedactableWithFormatter.
 
 use std::fmt;
 
@@ -29,10 +29,10 @@ fn main() {
     ));
     let parse_err = MyError::Parse("abc".parse::<i32>().unwrap_err());
 
-    // Verify RedactableDisplay delegates to Display
-    let io_displayed = redactable::RedactableDisplay::redacted_display(&io_err).to_string();
+    // Verify RedactableWithFormatter delegates to Display
+    let io_displayed = redactable::RedactableWithFormatter::redacted_display(&io_err).to_string();
     assert_eq!(io_displayed, "IO error: file missing");
 
-    let parse_displayed = redactable::RedactableDisplay::redacted_display(&parse_err).to_string();
+    let parse_displayed = redactable::RedactableWithFormatter::redacted_display(&parse_err).to_string();
     assert_eq!(parse_displayed, "parse error: invalid digit found in string");
 }

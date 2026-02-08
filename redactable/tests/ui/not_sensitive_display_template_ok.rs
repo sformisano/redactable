@@ -42,18 +42,18 @@ fn main() {
         message: "Not Found".into(),
     };
 
-    // Verify RedactableDisplay delegates to Display
-    let displayed = redactable::RedactableDisplay::redacted_display(&status).to_string();
+    // Verify RedactableWithFormatter delegates to Display
+    let displayed = redactable::RedactableWithFormatter::redacted_display(&status).to_string();
     assert_eq!(displayed, "status: 200");
 
     let response_displayed =
-        redactable::RedactableDisplay::redacted_display(&response).to_string();
+        redactable::RedactableWithFormatter::redacted_display(&response).to_string();
     assert_eq!(
         response_displayed,
         "HTTP response with code 404 and message: Not Found"
     );
 
-    // Verify RedactableContainer is implemented (no-op passthrough)
+    // Verify RedactableWithMapper is implemented (no-op passthrough)
     let status2 = ApiStatus { status_code: 500 };
     let redacted = status2.redact();
     assert_eq!(redacted.status_code, 500); // unchanged

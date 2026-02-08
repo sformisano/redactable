@@ -3,12 +3,11 @@
 //! These tests verify:
 //! - Wrapper ergonomics (From, Deref, DerefMut, Debug)
 //! - Redaction behavior within containers
-//! - Orphan rule workarounds with `RedactableWithPolicy`
+//! - Orphan rule workarounds with `SensitiveWithPolicy`
 
 use redactable::{
-    NotSensitiveValue, Redactable, RedactableLeaf, RedactableWithPolicy, RedactedOutput,
-    RedactionPolicy, Secret, Sensitive, SensitiveValue, TextRedactionPolicy, ToRedactedOutput,
-    Token,
+    NotSensitiveValue, Redactable, RedactedOutput, RedactionPolicy, Secret, Sensitive,
+    SensitiveValue, SensitiveWithPolicy, TextRedactionPolicy, ToRedactedOutput, Token,
 };
 #[cfg(feature = "slog")]
 use serde::Serialize;
@@ -95,13 +94,13 @@ mod sensitive_value {
             #[cfg_attr(feature = "slog", derive(Serialize))]
             struct UserId(String);
 
-            impl RedactableLeaf for UserId {
-                fn as_str(&self) -> &str {
-                    &self.0
+            impl SensitiveWithPolicy<Secret> for UserId {
+                fn redact_with_policy(self, policy: &TextRedactionPolicy) -> Self {
+                    Self(policy.apply_to(&self.0))
                 }
 
-                fn from_redacted(redacted: String) -> Self {
-                    Self(redacted)
+                fn redacted_string(&self, policy: &TextRedactionPolicy) -> String {
+                    policy.apply_to(&self.0)
                 }
             }
 
@@ -305,7 +304,7 @@ mod orphan_rule_workaround {
         }
     }
 
-    impl RedactableWithPolicy<ForeignIdPolicy> for ForeignId {
+    impl SensitiveWithPolicy<ForeignIdPolicy> for ForeignId {
         fn redact_with_policy(self, policy: &TextRedactionPolicy) -> Self {
             Self(policy.apply_to(&self.0))
         }
@@ -368,7 +367,7 @@ mod orphan_rule_workaround {
         #[derive(Clone, PartialEq, Debug)]
         struct ExternalToken(String);
 
-        impl RedactableWithPolicy<MyTokenPolicy> for ExternalToken {
+        impl SensitiveWithPolicy<MyTokenPolicy> for ExternalToken {
             fn redact_with_policy(self, policy: &TextRedactionPolicy) -> Self {
                 Self(policy.apply_to(&self.0))
             }

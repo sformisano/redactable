@@ -49,26 +49,12 @@
 )]
 // Allow some clippy lints
 #![allow(
-    clippy::default_trait_access,
-    clippy::doc_markdown,
-    clippy::if_not_else,
-    clippy::module_name_repetitions,
-    clippy::multiple_crate_versions,
-    clippy::must_use_candidate,
-    clippy::needless_pass_by_value,
-    clippy::needless_ifs,
-    clippy::use_self,
     clippy::cargo_common_metadata,
-    clippy::missing_errors_doc,
-    clippy::enum_glob_use,
-    clippy::struct_excessive_bools,
     clippy::missing_const_for_fn,
-    clippy::redundant_pub_crate,
-    clippy::result_large_err,
-    clippy::future_not_send,
-    clippy::option_if_let_else,
-    clippy::from_over_into,
-    clippy::manual_inspect
+    clippy::missing_errors_doc,
+    clippy::module_name_repetitions,
+    clippy::must_use_candidate,
+    clippy::use_self
 )]
 // Allow some lints while testing
 #![cfg_attr(test, allow(clippy::non_ascii_literal, clippy::unwrap_used))]
@@ -95,21 +81,24 @@ pub use policy::{
     MaskConfig, PhoneNumber, Pii, REDACTED_PLACEHOLDER, RedactionPolicy, Secret,
     TextRedactionPolicy, Token,
 };
-// Re-exports from redaction module
-#[doc(hidden)]
-#[cfg(feature = "redaction")]
-pub use redaction::PolicyApplicable;
+// Re-exports from redaction module: public API
 #[cfg(feature = "redaction")]
 pub use redaction::{
     NotSensitive, NotSensitiveDebug, NotSensitiveDebugExt, NotSensitiveDisplay,
-    NotSensitiveDisplayExt, NotSensitiveExt, NotSensitiveValue, PolicyApplicableRef, Redactable,
-    RedactableContainer, RedactableDisplay, RedactableLeaf, RedactableMapper, RedactableWithPolicy,
-    RedactedDisplayRef, RedactedOutput, RedactedOutputExt, RedactedOutputRef, ScalarRedaction,
-    SensitiveValue, ToRedactedOutput, apply_policy, apply_policy_ref, redact,
+    NotSensitiveDisplayExt, NotSensitiveExt, NotSensitiveValue, Redactable, RedactedOutput,
+    RedactedOutputExt, RedactedOutputRef, SensitiveValue, SensitiveWithPolicy, ToRedactedOutput,
 };
 #[cfg(feature = "json")]
 pub use redaction::{
     NotSensitiveJson, NotSensitiveJsonExt, RedactedJson, RedactedJsonExt, RedactedJsonRef,
 };
+// Re-exports from redaction module: internal machinery (used by derive-generated code)
+#[doc(hidden)]
+#[cfg(feature = "redaction")]
+pub use redaction::{
+    PolicyApplicable, PolicyApplicableRef, RedactableMapper, RedactableWithFormatter,
+    RedactableWithMapper, RedactedFormatterRef, ScalarRedaction, apply_policy, apply_policy_ref,
+    redact,
+};
 #[cfg(feature = "slog")]
-pub use slog::{RedactedDisplayValue, SlogRedactedExt};
+pub use slog::{RedactedDisplayValue, SlogRedactedDisplayExt, SlogRedactedExt};

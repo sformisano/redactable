@@ -1,6 +1,6 @@
-//! RedactableContainer implementations for standard library types.
+//! `RedactableWithMapper` implementations for standard library types.
 //!
-//! This module provides `RedactableContainer` implementations for common std
+//! This module provides `RedactableWithMapper` implementations for common std
 //! containers (`Option`, `Vec`, `Box`, maps, sets). When walking into these
 //! containers, they recursively apply redaction to their contents.
 //!
@@ -34,7 +34,7 @@ mod tests;
 
 macro_rules! impl_redactable_container_passthrough {
     ($ty:ty) => {
-        impl crate::redaction::traits::RedactableContainer for $ty {
+        impl crate::redaction::traits::RedactableWithMapper for $ty {
             fn redact_with<M: crate::redaction::redact::RedactableMapper>(
                 self,
                 _mapper: &M,

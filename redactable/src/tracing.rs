@@ -31,8 +31,8 @@ use crate::{
     policy::RedactionPolicy,
     redaction::{
         NotSensitive, NotSensitiveDebug, NotSensitiveDisplay, NotSensitiveJson, Redactable,
-        RedactableWithPolicy, RedactedJson, RedactedJsonRef, RedactedOutput, RedactedOutputRef,
-        SensitiveValue, ToRedactedOutput,
+        RedactedJson, RedactedJsonRef, RedactedOutput, RedactedOutputRef, SensitiveValue,
+        SensitiveWithPolicy, ToRedactedOutput,
     },
 };
 
@@ -78,7 +78,7 @@ impl TracingRedacted for RedactedJson {}
 
 impl<T, P> TracingRedacted for SensitiveValue<T, P>
 where
-    T: RedactableWithPolicy<P>,
+    T: SensitiveWithPolicy<P>,
     P: RedactionPolicy,
 {
 }
@@ -220,7 +220,7 @@ mod tests {
     #[cfg(feature = "tracing-valuable")]
     mod valuable_tests {
         use super::*;
-        use crate::redaction::{RedactableContainer, RedactableMapper};
+        use crate::redaction::{RedactableMapper, RedactableWithMapper};
 
         // Mock type that implements both Redactable and Valuable
         #[derive(Clone, Debug, valuable::Valuable)]
@@ -229,7 +229,7 @@ mod tests {
             password: String,
         }
 
-        impl RedactableContainer for MockValuableRedactable {
+        impl RedactableWithMapper for MockValuableRedactable {
             fn redact_with<M: RedactableMapper>(self, _mapper: &M) -> Self {
                 // Simple mock: always redact password
                 Self {

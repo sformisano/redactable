@@ -2,13 +2,13 @@
 //!
 //! This module provides the machinery for applying redaction:
 //!
-//! - **`traits`**: Core traits (`RedactableContainer`, `RedactableLeaf`, `Redactable`)
+//! - **`traits`**: Core traits (`RedactableWithMapper`, `SensitiveWithPolicy`, `Redactable`)
 //! - **`redact`**: Application layer - the redaction machinery (`PolicyApplicable`, `RedactableMapper`)
 //! - **`wrappers`**: Wrapper types (`SensitiveValue`, `NotSensitiveValue`)
 //! - **`output`**: Output types for logging boundaries (`RedactedOutput`, `ToRedactedOutput`)
-//! - **`display`**: Redacted display support (`RedactableDisplay`, `RedactedDisplayRef`)
+//! - **`display`**: Redacted display support (`RedactableWithFormatter`, `RedactedFormatterRef`)
 //! - **`escape_hatches`**: Escape hatches for non-sensitive values
-//! - **`containers`**: `RedactableContainer` implementations for std types
+//! - **`containers`**: `RedactableWithMapper` implementations for std types
 //!
 //! Policy marker types and text policies live in `crate::policy`.
 
@@ -24,7 +24,7 @@ mod wrappers;
 
 // Re-export core traits
 // Re-export display types
-pub use display::{RedactableDisplay, RedactedDisplayRef};
+pub use display::{RedactableWithFormatter, RedactedFormatterRef};
 // Re-export escape hatches
 pub use escape_hatches::{
     NotSensitive, NotSensitiveDebug, NotSensitiveDebugExt, NotSensitiveDisplay,
@@ -41,6 +41,6 @@ pub use redact::{
     PolicyApplicable, PolicyApplicableRef, RedactableMapper, ScalarRedaction, apply_policy,
     apply_policy_ref, redact,
 };
-pub use traits::{Redactable, RedactableContainer, RedactableLeaf, RedactableWithPolicy};
+pub use traits::{Redactable, RedactableWithMapper, SensitiveWithPolicy};
 // Re-export wrapper types
 pub use wrappers::{NotSensitiveValue, SensitiveValue};

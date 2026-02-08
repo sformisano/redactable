@@ -22,5 +22,5 @@ fn main() {
         },
     };
 
-    let _ = redactable::RedactableDisplay::redacted_display(&err);
+    let _ = redactable::RedactableWithFormatter::redacted_display(&err);
 }

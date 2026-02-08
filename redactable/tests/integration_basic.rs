@@ -11,9 +11,8 @@ use std::collections::{BTreeMap, HashMap};
 
 use redactable::{
     NotSensitive, NotSensitiveDebugExt, NotSensitiveDisplayExt, NotSensitiveExt, Redactable,
-    RedactableLeaf, RedactableWithPolicy, RedactedOutput, RedactedOutputExt, RedactionPolicy,
-    Secret, Sensitive, SensitiveDisplay, SensitiveValue, TextRedactionPolicy, ToRedactedOutput,
-    Token,
+    RedactedOutput, RedactedOutputExt, RedactionPolicy, Secret, Sensitive, SensitiveDisplay,
+    SensitiveValue, SensitiveWithPolicy, TextRedactionPolicy, ToRedactedOutput, Token,
 };
 
 fn log_redacted<T: ToRedactedOutput>(value: &T) -> RedactedOutput {
@@ -783,13 +782,13 @@ mod external_types {
         #[cfg_attr(feature = "slog", derive(serde::Serialize))]
         struct ExternalId(String);
 
-        impl RedactableLeaf for ExternalId {
-            fn as_str(&self) -> &str {
-                self.0.as_str()
+        impl SensitiveWithPolicy<Secret> for ExternalId {
+            fn redact_with_policy(self, policy: &TextRedactionPolicy) -> Self {
+                Self(policy.apply_to(&self.0))
             }
 
-            fn from_redacted(redacted: String) -> Self {
-                Self(redacted)
+            fn redacted_string(&self, policy: &TextRedactionPolicy) -> String {
+                policy.apply_to(&self.0)
             }
         }
 
@@ -829,7 +828,7 @@ mod external_types {
             }
         }
 
-        impl RedactableWithPolicy<ExternalTypePolicy> for ExternalType {
+        impl SensitiveWithPolicy<ExternalTypePolicy> for ExternalType {
             fn redact_with_policy(self, policy: &TextRedactionPolicy) -> Self {
                 Self(policy.apply_to(&self.0))
             }
@@ -877,16 +876,16 @@ mod external_types {
             }
         }
 
-        impl RedactableLeaf for UserId {
-            fn as_str(&self) -> &str {
-                &self.value
-            }
-
-            fn from_redacted(redacted: String) -> Self {
+        impl SensitiveWithPolicy<Token> for UserId {
+            fn redact_with_policy(self, policy: &TextRedactionPolicy) -> Self {
                 Self {
                     prefix: "redacted".into(),
-                    value: redacted,
+                    value: policy.apply_to(&self.value),
                 }
+            }
+
+            fn redacted_string(&self, policy: &TextRedactionPolicy) -> String {
+                policy.apply_to(&self.value)
             }
         }
 
@@ -915,7 +914,7 @@ mod external_types {
         assert_eq!(redacted_traversed.user_id.prefix, "usr");
         assert_eq!(redacted_traversed.user_id.value, "[REDACTED]");
 
-        // SensitiveValue<T, Policy> wrapper uses RedactableLeaf (redacts as unit)
+        // SensitiveValue<T, Policy> wrapper uses SensitiveWithPolicy (redacts as unit)
         let account_as_leaf = AccountAsLeaf {
             user_id: SensitiveValue::from(user_id.clone()),
         };
@@ -974,7 +973,7 @@ mod not_sensitive_derive {
 }
 
 mod not_sensitive_display_derive {
-    use redactable::{NotSensitiveDisplay, RedactableDisplay};
+    use redactable::{NotSensitiveDisplay, RedactableWithFormatter};
 
     // Test basic struct with Display impl
     #[derive(Clone, NotSensitiveDisplay)]
@@ -996,7 +995,7 @@ mod not_sensitive_display_derive {
             message: "OK".into(),
         };
 
-        // RedactableDisplay delegates to Display
+        // RedactableWithFormatter delegates to Display
         let display = format!("{}", status.redacted_display());
         assert_eq!(display, "200: OK");
     }
@@ -1080,7 +1079,7 @@ mod not_sensitive_display_derive {
             value: "test".into(),
         };
 
-        // Display via RedactableDisplay
+        // Display via RedactableWithFormatter
         let display = format!("{}", value.redacted_display());
         assert_eq!(display, "WithOwnDebug(test)");
 
@@ -1109,9 +1108,11 @@ mod not_sensitive_display_derive {
     }
 
     // Test that NotSensitiveDisplay types can be used inside Sensitive containers
-    // This works because NotSensitiveDisplay also generates RedactableContainer
+    // This works because NotSensitiveDisplay also generates RedactableWithMapper
     mod inside_sensitive_container {
-        use redactable::{NotSensitiveDisplay, Redactable, RedactableDisplay, Secret, Sensitive};
+        use redactable::{
+            NotSensitiveDisplay, Redactable, RedactableWithFormatter, Secret, Sensitive,
+        };
 
         // A simple enum with NotSensitiveDisplay that has a Display impl
         #[derive(Clone, NotSensitiveDisplay, PartialEq)]
@@ -1141,7 +1142,7 @@ mod not_sensitive_display_derive {
 
         #[test]
         fn not_sensitive_display_type_in_sensitive_struct() {
-            // This test proves NotSensitiveDisplay generates RedactableContainer
+            // This test proves NotSensitiveDisplay generates RedactableWithMapper
             // If it didn't, this wouldn't compile
             #[derive(Clone, Sensitive)]
             #[cfg_attr(feature = "slog", derive(serde::Serialize))]
@@ -1246,7 +1247,7 @@ mod not_sensitive_display_derive {
 
         #[test]
         fn not_sensitive_display_still_works_for_display() {
-            // Verify RedactableDisplay still works correctly
+            // Verify RedactableWithFormatter still works correctly
             let decision = RetryDecision::Abort;
             let display = format!("{}", decision.redacted_display());
             assert_eq!(display, "Abort");
@@ -1460,7 +1461,7 @@ mod phantom_data {
 
     use super::*;
 
-    /// External type that does NOT implement RedactableContainer.
+    /// External type that does NOT implement RedactableWithMapper.
     /// This simulates types like `chrono::DateTime<Utc>` or other third-party types.
     #[derive(Clone, Debug, PartialEq)]
     struct ExternalType;
@@ -1468,7 +1469,7 @@ mod phantom_data {
     #[test]
     fn phantom_data_field_passes_through_without_bounds() {
         // This test verifies that PhantomData<T> fields work without
-        // requiring T: RedactableContainer. If this compiles, the fix works.
+        // requiring T: RedactableWithMapper. If this compiles, the fix works.
         #[derive(Clone, Sensitive)]
         #[cfg_attr(feature = "slog", derive(serde::Serialize))]
         struct TypedId<T> {
@@ -1478,7 +1479,7 @@ mod phantom_data {
             _marker: PhantomData<T>,
         }
 
-        // ExternalType does NOT implement RedactableContainer.
+        // ExternalType does NOT implement RedactableWithMapper.
         // If PhantomData wasn't handled specially, this would fail to compile.
         let typed_id: TypedId<ExternalType> = TypedId {
             id: "user_123".into(),
@@ -1526,7 +1527,7 @@ mod phantom_data {
             _c: PhantomData<C>,
         }
 
-        // None of A, B, C implement RedactableContainer
+        // None of A, B, C implement RedactableWithMapper
         let multi: MultiPhantom<ExternalType, ExternalType, ExternalType> = MultiPhantom {
             data: "secret".into(),
             _a: PhantomData,
@@ -1582,13 +1583,13 @@ mod to_redacted_output {
         #[cfg_attr(feature = "json", derive(serde::Serialize))]
         struct ExternalId(String);
 
-        impl RedactableLeaf for ExternalId {
-            fn as_str(&self) -> &str {
-                self.0.as_str()
+        impl SensitiveWithPolicy<Secret> for ExternalId {
+            fn redact_with_policy(self, policy: &TextRedactionPolicy) -> Self {
+                Self(policy.apply_to(&self.0))
             }
 
-            fn from_redacted(redacted: String) -> Self {
-                Self(redacted)
+            fn redacted_string(&self, policy: &TextRedactionPolicy) -> String {
+                policy.apply_to(&self.0)
             }
         }
 

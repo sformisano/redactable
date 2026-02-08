@@ -5,32 +5,32 @@ use std::{
     hash::Hash,
 };
 
-use crate::redaction::{redact::RedactableMapper, traits::RedactableContainer};
+use crate::redaction::{redact::RedactableMapper, traits::RedactableWithMapper};
 
 // =============================================================================
 // Map implementations (values only, keys unchanged)
 // =============================================================================
 
-impl<K, V, S> RedactableContainer for HashMap<K, V, S>
+impl<K, V, S> RedactableWithMapper for HashMap<K, V, S>
 where
     K: Hash + Eq,
-    V: RedactableContainer,
+    V: RedactableWithMapper,
     S: std::hash::BuildHasher + Clone,
 {
     fn redact_with<M: RedactableMapper>(self, mapper: &M) -> Self {
         // NOTE: Map keys are not redacted by design. Only values are redacted to
         // preserve hashing/ordering invariants and avoid key collisions.
         let hasher = self.hasher().clone();
-        let mut result = HashMap::with_hasher(hasher);
+        let mut result = HashMap::with_capacity_and_hasher(self.len(), hasher);
         result.extend(self.into_iter().map(|(k, v)| (k, v.redact_with(mapper))));
         result
     }
 }
 
-impl<K, V> RedactableContainer for BTreeMap<K, V>
+impl<K, V> RedactableWithMapper for BTreeMap<K, V>
 where
     K: Ord,
-    V: RedactableContainer,
+    V: RedactableWithMapper,
 {
     fn redact_with<M: RedactableMapper>(self, mapper: &M) -> Self {
         // NOTE: Map keys are not redacted by design. Only values are redacted to

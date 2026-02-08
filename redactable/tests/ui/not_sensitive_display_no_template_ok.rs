@@ -1,5 +1,5 @@
 // Test: NotSensitiveDisplay without template delegates to Display (unchanged behavior)
-// Also verifies RedactableContainer is generated even without a template.
+// Also verifies RedactableWithMapper is generated even without a template.
 
 use std::fmt;
 
@@ -17,11 +17,11 @@ impl fmt::Display for HttpMethod {
 fn main() {
     let method = HttpMethod("GET".into());
 
-    // Verify RedactableDisplay delegates to Display
-    let displayed = redactable::RedactableDisplay::redacted_display(&method).to_string();
+    // Verify RedactableWithFormatter delegates to Display
+    let displayed = redactable::RedactableWithFormatter::redacted_display(&method).to_string();
     assert_eq!(displayed, "GET");
 
-    // Verify RedactableContainer is implemented (no-op passthrough)
+    // Verify RedactableWithMapper is implemented (no-op passthrough)
     let method2 = HttpMethod("POST".into());
     let redacted = method2.redact();
     assert_eq!(redacted.0, "POST"); // unchanged

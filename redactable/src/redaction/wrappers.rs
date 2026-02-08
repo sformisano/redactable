@@ -12,7 +12,7 @@ use serde::Serialize;
 
 use super::{
     redact::RedactableMapper,
-    traits::{RedactableContainer, RedactableWithPolicy},
+    traits::{RedactableWithMapper, SensitiveWithPolicy},
 };
 use crate::policy::RedactionPolicy;
 
@@ -22,8 +22,7 @@ use crate::policy::RedactionPolicy;
 
 /// Wrapper for leaf values to apply a redaction policy.
 ///
-/// This is useful when a field's type does not implement `RedactableLeaf`.
-/// For external types, implement `RedactableWithPolicy<P>` in your crate and
+/// For external types, implement `SensitiveWithPolicy<P>` in your crate and
 /// wrap the value in `SensitiveValue<T, P>` to apply the policy.
 ///
 /// **Serialization:** when the `json` feature is enabled, `serde::Serialize`
@@ -32,14 +31,14 @@ use crate::policy::RedactionPolicy;
 /// `redacted_json()` (from `RedactedJsonExt`) at the logging/serialization
 /// boundary instead of serializing the wrapper directly.
 ///
-/// Leaf values are **atomic**: if `T` implements `RedactableLeaf` (even if `T`
-/// is a struct), its fields are not traversed.
+/// Leaf values are **atomic**: `SensitiveValue` treats `T` as an opaque unit
+/// and does not traverse its fields.
 #[derive(Clone, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct SensitiveValue<T, P>(T, PhantomData<P>);
 
 impl<T, P> SensitiveValue<T, P>
 where
-    T: RedactableWithPolicy<P>,
+    T: SensitiveWithPolicy<P>,
     P: RedactionPolicy,
 {
     /// Returns the redacted string representation using the policy `P`.
@@ -50,9 +49,9 @@ where
     }
 }
 
-impl<T, P> RedactableContainer for SensitiveValue<T, P>
+impl<T, P> RedactableWithMapper for SensitiveValue<T, P>
 where
-    T: RedactableWithPolicy<P>,
+    T: SensitiveWithPolicy<P>,
     P: RedactionPolicy,
 {
     fn redact_with<M: RedactableMapper>(self, mapper: &M) -> Self {
@@ -94,7 +93,7 @@ impl<T, P> SensitiveValue<T, P> {
 
 impl<T, P> std::fmt::Debug for SensitiveValue<T, P>
 where
-    T: RedactableWithPolicy<P>,
+    T: SensitiveWithPolicy<P>,
     P: RedactionPolicy,
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -124,7 +123,7 @@ where
 /// Wrapper for foreign types that should pass through unchanged.
 ///
 /// Use this when a field's type comes from another crate and doesn't implement
-/// `RedactableContainer`. The wrapper provides a passthrough implementation
+/// `RedactableWithMapper`. The wrapper provides a passthrough implementation
 /// that simply returns the value without any redaction.
 ///
 /// **Serialization:** when the `json` feature is enabled, `serde::Serialize`
@@ -142,14 +141,14 @@ where
 ///
 /// #[derive(Clone, Sensitive)]
 /// struct Config {
-///     // ForeignConfig doesn't implement RedactableContainer
+///     // ForeignConfig doesn't implement RedactableWithMapper
 ///     foreign: NotSensitiveValue<other_crate::ForeignConfig>,
 /// }
 /// ```
 #[derive(Clone, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct NotSensitiveValue<T>(pub T);
 
-impl<T> RedactableContainer for NotSensitiveValue<T> {
+impl<T> RedactableWithMapper for NotSensitiveValue<T> {
     fn redact_with<M: RedactableMapper>(self, _mapper: &M) -> Self {
         self
     }

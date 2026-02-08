@@ -14,8 +14,8 @@ use serde::Serialize;
 use serde_json::Value as JsonValue;
 
 use super::{
-    display::RedactableDisplay,
-    traits::{Redactable, RedactableWithPolicy},
+    display::RedactableWithFormatter,
+    traits::{Redactable, SensitiveWithPolicy},
     wrappers::SensitiveValue,
 };
 use crate::policy::RedactionPolicy;
@@ -50,7 +50,7 @@ impl ToRedactedOutput for RedactedOutput {
 
 impl<T> ToRedactedOutput for T
 where
-    T: RedactableDisplay,
+    T: RedactableWithFormatter,
 {
     fn to_redacted_output(&self) -> RedactedOutput {
         RedactedOutput::Text(format!("{}", self.redacted_display()))
@@ -59,7 +59,7 @@ where
 
 impl<T, P> ToRedactedOutput for SensitiveValue<T, P>
 where
-    T: RedactableWithPolicy<P>,
+    T: SensitiveWithPolicy<P>,
     P: RedactionPolicy,
 {
     fn to_redacted_output(&self) -> RedactedOutput {

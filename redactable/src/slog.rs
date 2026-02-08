@@ -24,8 +24,8 @@ use crate::{
     policy::RedactionPolicy,
     redaction::{
         NotSensitive, NotSensitiveDebug, NotSensitiveDisplay, NotSensitiveJson, Redactable,
-        RedactableDisplay, RedactableWithPolicy, RedactedJsonRef, RedactedOutput,
-        RedactedOutputRef, SensitiveValue, ToRedactedOutput,
+        RedactableWithFormatter, RedactedJsonRef, RedactedOutput, RedactedOutputRef,
+        SensitiveValue, SensitiveWithPolicy, ToRedactedOutput,
     },
 };
 
@@ -79,18 +79,54 @@ fn emit_output(
     }
 }
 
-impl SlogValue for RedactedOutput {
-    fn serialize(
-        &self,
-        record: &Record<'_>,
-        key: Key,
-        serializer: &mut dyn Serializer,
-    ) -> SlogResult {
-        emit_output(self, record, key, serializer)
-    }
+// =============================================================================
+// impl_slog_redacted! — SlogValue + SlogRedacted for ToRedactedOutput types
+// =============================================================================
+//
+// Most types in this module share the same SlogValue body: delegate to
+// `emit_output(&self.to_redacted_output(), ...)`. This macro generates both
+// the SlogValue and SlogRedacted impls for those types.
+
+macro_rules! impl_slog_redacted {
+    // With generics: `@ [T, P] Type<T, P> where Bounds`
+    (@ [$($gen:ident),+] $ty:ty where $($bounds:tt)+) => {
+        impl<$($gen),+> SlogValue for $ty where $($bounds)+ {
+            fn serialize(
+                &self,
+                record: &Record<'_>,
+                key: Key,
+                serializer: &mut dyn Serializer,
+            ) -> SlogResult {
+                emit_output(&self.to_redacted_output(), record, key, serializer)
+            }
+        }
+
+        impl<$($gen),+> SlogRedacted for $ty where $($bounds)+ {}
+    };
+    // Without generics: `Type`
+    ($ty:ty) => {
+        impl SlogValue for $ty {
+            fn serialize(
+                &self,
+                record: &Record<'_>,
+                key: Key,
+                serializer: &mut dyn Serializer,
+            ) -> SlogResult {
+                emit_output(&self.to_redacted_output(), record, key, serializer)
+            }
+        }
+
+        impl SlogRedacted for $ty {}
+    };
 }
 
-impl SlogRedacted for RedactedOutput {}
+impl_slog_redacted!(RedactedOutput);
+impl_slog_redacted!(@ [T, P] SensitiveValue<T, P> where T: SensitiveWithPolicy<P>, P: RedactionPolicy);
+impl_slog_redacted!(@ [T] NotSensitiveDisplay<T> where T: fmt::Display);
+impl_slog_redacted!(@ [T] NotSensitiveDebug<T> where T: fmt::Debug);
+impl_slog_redacted!(@ [T] NotSensitiveJson<'_, T> where T: Serialize + ?Sized);
+impl_slog_redacted!(@ [T] RedactedOutputRef<'_, T> where T: Redactable + Clone + fmt::Debug);
+impl_slog_redacted!(@ [T] RedactedJsonRef<'_, T> where T: Redactable + Clone + Serialize);
 
 /// Extension trait for ergonomic slog logging of redacted values as JSON.
 ///
@@ -121,72 +157,7 @@ pub trait SlogRedactedExt: Redactable + fmt::Debug + Serialize + Sized {
 
 impl<T> SlogRedactedExt for T where T: Redactable + fmt::Debug + Serialize {}
 
-// Backward compatibility alias
-#[deprecated(since = "0.2.0", note = "Use SlogRedactedExt instead")]
-pub trait IntoRedactedJson: SlogRedactedExt {
-    /// Deprecated: use `slog_redacted_json` instead.
-    #[deprecated(since = "0.2.0", note = "Use slog_redacted_json instead")]
-    fn into_redacted_json(self) -> RedactedJson {
-        self.slog_redacted_json()
-    }
-}
-
-#[allow(deprecated)]
-impl<T> IntoRedactedJson for T where T: SlogRedactedExt {}
-
-impl<T, P> SlogValue for SensitiveValue<T, P>
-where
-    T: RedactableWithPolicy<P>,
-    P: RedactionPolicy,
-{
-    fn serialize(
-        &self,
-        record: &Record<'_>,
-        key: Key,
-        serializer: &mut dyn Serializer,
-    ) -> SlogResult {
-        emit_output(&self.to_redacted_output(), record, key, serializer)
-    }
-}
-
-impl<T, P> SlogRedacted for SensitiveValue<T, P>
-where
-    T: RedactableWithPolicy<P>,
-    P: RedactionPolicy,
-{
-}
-
-impl<T> SlogValue for NotSensitiveDisplay<T>
-where
-    T: fmt::Display,
-{
-    fn serialize(
-        &self,
-        record: &Record<'_>,
-        key: Key,
-        serializer: &mut dyn Serializer,
-    ) -> SlogResult {
-        emit_output(&self.to_redacted_output(), record, key, serializer)
-    }
-}
-
-impl<T> SlogRedacted for NotSensitiveDisplay<T> where T: fmt::Display {}
-
-impl<T> SlogValue for NotSensitiveDebug<T>
-where
-    T: fmt::Debug,
-{
-    fn serialize(
-        &self,
-        record: &Record<'_>,
-        key: Key,
-        serializer: &mut dyn Serializer,
-    ) -> SlogResult {
-        emit_output(&self.to_redacted_output(), record, key, serializer)
-    }
-}
-
-impl<T> SlogRedacted for NotSensitiveDebug<T> where T: fmt::Debug {}
+// Special cases: these don't use emit_output(&self.to_redacted_output(), ...)
 
 impl<T> SlogValue for NotSensitive<T>
 where
@@ -204,58 +175,10 @@ where
 
 impl<T> SlogRedacted for NotSensitive<T> where T: SlogRedacted {}
 
-impl<T> SlogValue for NotSensitiveJson<'_, T>
-where
-    T: Serialize + ?Sized,
-{
-    fn serialize(
-        &self,
-        record: &Record<'_>,
-        key: Key,
-        serializer: &mut dyn Serializer,
-    ) -> SlogResult {
-        emit_output(&self.to_redacted_output(), record, key, serializer)
-    }
-}
-
-impl<T> SlogRedacted for NotSensitiveJson<'_, T> where T: Serialize + ?Sized {}
-
-impl<T> SlogValue for RedactedOutputRef<'_, T>
-where
-    T: Redactable + Clone + fmt::Debug,
-{
-    fn serialize(
-        &self,
-        record: &Record<'_>,
-        key: Key,
-        serializer: &mut dyn Serializer,
-    ) -> SlogResult {
-        emit_output(&self.to_redacted_output(), record, key, serializer)
-    }
-}
-
-impl<T> SlogRedacted for RedactedOutputRef<'_, T> where T: Redactable + Clone + fmt::Debug {}
-
-impl<T> SlogValue for RedactedJsonRef<'_, T>
-where
-    T: Redactable + Clone + Serialize,
-{
-    fn serialize(
-        &self,
-        record: &Record<'_>,
-        key: Key,
-        serializer: &mut dyn Serializer,
-    ) -> SlogResult {
-        emit_output(&self.to_redacted_output(), record, key, serializer)
-    }
-}
-
-impl<T> SlogRedacted for RedactedJsonRef<'_, T> where T: Redactable + Clone + Serialize {}
-
 /// Helper for `NotSensitive` derive-generated slog impls.
 ///
 /// Serializes the value directly as structured JSON without redaction.
-/// Not intended for direct use — called by generated code.
+/// Not intended for direct use - called by generated code.
 #[doc(hidden)]
 pub fn __slog_serialize_not_sensitive<T: Serialize>(
     value: &T,
@@ -269,12 +192,23 @@ pub fn __slog_serialize_not_sensitive<T: Serialize>(
     SlogValue::serialize(&nested, record, key, serializer)
 }
 
-/// Wrapper for values that implement `RedactableDisplay` to participate in slog logging.
+/// Wrapper for values that implement `RedactableWithFormatter` to participate in slog logging.
+///
+/// Use [`SlogRedactedDisplayExt::slog_redacted_display`] for ergonomic construction,
+/// or call `RedactedDisplayValue::new(&value)` directly.
 pub struct RedactedDisplayValue<'a, T: ?Sized>(&'a T);
 
+impl<'a, T: ?Sized> RedactedDisplayValue<'a, T> {
+    /// Wraps a reference to a `RedactableWithFormatter` value for slog logging.
+    pub fn new(value: &'a T) -> Self {
+        Self(value)
+    }
+}
+
+// Special case: delegates to the inner value's `to_redacted_output`, not `self`.
 impl<T> SlogValue for RedactedDisplayValue<'_, T>
 where
-    T: RedactableDisplay,
+    T: RedactableWithFormatter,
 {
     fn serialize(
         &self,
@@ -284,4 +218,35 @@ where
     ) -> SlogResult {
         emit_output(&self.0.to_redacted_output(), record, key, serializer)
     }
+}
+
+impl<T> SlogRedacted for RedactedDisplayValue<'_, T> where T: RedactableWithFormatter {}
+
+/// Extension trait for logging `RedactableWithFormatter` types through slog.
+///
+/// This is the display-string counterpart to [`SlogRedactedExt::slog_redacted_json`].
+/// Use this when you want redacted display output without JSON serialization overhead.
+///
+/// ## Example
+/// ```ignore
+/// use redactable::slog::SlogRedactedDisplayExt;
+///
+/// info!(logger, "event"; "data" => event.slog_redacted_display());
+/// ```
+pub trait SlogRedactedDisplayExt: RedactableWithFormatter {
+    /// Wraps `&self` for slog logging using `RedactableWithFormatter` formatting.
+    fn slog_redacted_display(&self) -> RedactedDisplayValue<'_, Self>
+    where
+        Self: Sized,
+    {
+        RedactedDisplayValue::new(self)
+    }
+}
+
+impl<T> SlogRedactedDisplayExt for T where T: RedactableWithFormatter {}
+
+#[cfg(feature = "tracing")]
+impl<T> crate::tracing::TracingRedacted for RedactedDisplayValue<'_, T> where
+    T: RedactableWithFormatter
+{
 }

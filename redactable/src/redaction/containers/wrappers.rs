@@ -1,24 +1,24 @@
 //! Redaction traversal for wrapper container types.
 
-use crate::redaction::{redact::RedactableMapper, traits::RedactableContainer};
+use crate::redaction::{redact::RedactableMapper, traits::RedactableWithMapper};
 
 // =============================================================================
 // Wrapper container implementations
 // =============================================================================
 
-impl<T> RedactableContainer for Option<T>
+impl<T> RedactableWithMapper for Option<T>
 where
-    T: RedactableContainer,
+    T: RedactableWithMapper,
 {
     fn redact_with<M: RedactableMapper>(self, mapper: &M) -> Self {
         self.map(|value| value.redact_with(mapper))
     }
 }
 
-impl<T, E> RedactableContainer for Result<T, E>
+impl<T, E> RedactableWithMapper for Result<T, E>
 where
-    T: RedactableContainer,
-    E: RedactableContainer,
+    T: RedactableWithMapper,
+    E: RedactableWithMapper,
 {
     fn redact_with<M: RedactableMapper>(self, mapper: &M) -> Self {
         match self {
@@ -28,9 +28,9 @@ where
     }
 }
 
-impl<T> RedactableContainer for Vec<T>
+impl<T> RedactableWithMapper for Vec<T>
 where
-    T: RedactableContainer,
+    T: RedactableWithMapper,
 {
     fn redact_with<M: RedactableMapper>(self, mapper: &M) -> Self {
         self.into_iter()
@@ -39,27 +39,27 @@ where
     }
 }
 
-impl<T> RedactableContainer for Box<T>
+impl<T> RedactableWithMapper for Box<T>
 where
-    T: RedactableContainer,
+    T: RedactableWithMapper,
 {
     fn redact_with<M: RedactableMapper>(self, mapper: &M) -> Self {
         Box::new((*self).redact_with(mapper))
     }
 }
 
-impl<T> RedactableContainer for std::sync::Arc<T>
+impl<T> RedactableWithMapper for std::sync::Arc<T>
 where
-    T: RedactableContainer + Clone,
+    T: RedactableWithMapper + Clone,
 {
     fn redact_with<M: RedactableMapper>(self, mapper: &M) -> Self {
         std::sync::Arc::new((*self).clone().redact_with(mapper))
     }
 }
 
-impl<T> RedactableContainer for std::rc::Rc<T>
+impl<T> RedactableWithMapper for std::rc::Rc<T>
 where
-    T: RedactableContainer + Clone,
+    T: RedactableWithMapper + Clone,
 {
     fn redact_with<M: RedactableMapper>(self, mapper: &M) -> Self {
         std::rc::Rc::new((*self).clone().redact_with(mapper))

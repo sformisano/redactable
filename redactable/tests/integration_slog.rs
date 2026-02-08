@@ -10,8 +10,8 @@
 use std::{cell::RefCell, collections::HashMap, fmt, fmt::Arguments};
 
 use redactable::{
-    Email, NotSensitiveJsonExt, PhoneNumber, Pii, RedactableContainer, RedactableDisplay,
-    RedactableMapper, RedactedJsonExt, RedactedOutput, RedactionPolicy, Secret, Sensitive,
+    Email, NotSensitiveJsonExt, PhoneNumber, Pii, RedactableMapper, RedactableWithFormatter,
+    RedactableWithMapper, RedactedJsonExt, RedactedOutput, RedactionPolicy, Secret, Sensitive,
     SensitiveDisplay, TextRedactionPolicy, ToRedactedOutput, Token,
     slog::{SlogRedacted, SlogRedactedExt},
 };
@@ -646,7 +646,7 @@ mod sensitive_display {
             _detail: String,
         }
 
-        impl RedactableContainer for NonSerializable {
+        impl RedactableWithMapper for NonSerializable {
             fn redact_with<M: RedactableMapper>(self, _mapper: &M) -> Self {
                 self
             }
@@ -837,7 +837,7 @@ mod sensitive_display {
             }
         }
 
-        impl RedactableContainer for ModeValue {
+        impl RedactableWithMapper for ModeValue {
             fn redact_with<M: RedactableMapper>(self, _mapper: &M) -> Self {
                 self
             }

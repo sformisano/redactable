@@ -11,12 +11,12 @@
 //! ```ignore
 //! struct TypedId<T> {
 //!     id: String,
-//!     _marker: PhantomData<T>,  // T should NOT require RedactableContainer
+//!     _marker: PhantomData<T>,  // T should NOT require RedactableWithMapper
 //! }
 //! ```
 //!
 //! Without this, `TypedId<DateTime<Utc>>` would fail because `DateTime<Utc>`
-//! doesn't implement `RedactableContainer`, even though `_marker` passes through
+//! doesn't implement `RedactableWithMapper`, even though `_marker` passes through
 //! unchanged (no `#[sensitive]` annotation).
 
 use syn::{Ident, parse_quote};
@@ -81,7 +81,7 @@ fn visit_path(path: &syn::Path, generics: &syn::Generics, result: &mut Vec<Ident
     if let Some(last_segment) = path.segments.last() {
         // Skip PhantomData - it's a zero-sized marker that doesn't need bounds.
         // This is critical: PhantomData<T> fields pass through unchanged,
-        // so we shouldn't require T: RedactableContainer. This enables
+        // so we shouldn't require T: RedactableWithMapper. This enables
         // patterns like `struct TypedId<T> { id: String, _marker: PhantomData<T> }`
         // to work even when T is an external type like DateTime<Utc>.
         if last_segment.ident == "PhantomData" {
@@ -144,14 +144,14 @@ pub(crate) fn collect_generics_from_type(
     visit_type(ty, generics, result);
 }
 
-/// Adds `RedactableContainer` bounds to generic parameters used in walked fields.
+/// Adds `RedactableWithMapper` bounds to generic parameters used in walked fields.
 pub(crate) fn add_container_bounds(
     mut generics: syn::Generics,
     used_generics: &[Ident],
 ) -> syn::Generics {
     for param in generics.type_params_mut() {
         if used_generics.iter().any(|g| g == &param.ident) {
-            let container_path = crate_path("RedactableContainer");
+            let container_path = crate_path("RedactableWithMapper");
             param.bounds.push(parse_quote!(#container_path));
         }
     }
@@ -219,7 +219,7 @@ pub(crate) fn add_redacted_display_bounds(
 ) -> syn::Generics {
     for param in generics.type_params_mut() {
         if used_generics.iter().any(|g| g == &param.ident) {
-            let redacted_display_path = crate_path("RedactableDisplay");
+            let redacted_display_path = crate_path("RedactableWithFormatter");
             param.bounds.push(parse_quote!(#redacted_display_path));
         }
     }
