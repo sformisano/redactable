@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.6.1
+
+### Added
+- `SensitiveDisplay` now generates a `RedactableWithMapper` impl that walks inner fields and
+  applies redaction — the same traversal logic used by `Sensitive`. This allows `SensitiveDisplay`
+  types to be used as fields inside `#[derive(Sensitive)]` containers and ensures their sensitive
+  data is properly redacted when `.redact()` is called on a parent struct.
+
 ## 0.6.0
 
 ### Changed (BREAKING)

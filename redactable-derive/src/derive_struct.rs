@@ -49,6 +49,7 @@ fn derive_named_struct(
     let mut used_generics = Vec::new();
     let mut policy_applicable_generics = Vec::new();
     let mut debug_redacted_fields = Vec::new();
+    let mut debug_redacted_patterns = Vec::new();
     let mut debug_unredacted_fields = Vec::new();
     let mut debug_redacted_generics = Vec::new();
     let mut debug_unredacted_generics = Vec::new();
@@ -74,10 +75,14 @@ fn derive_named_struct(
         let transform = generate_field_transform(&mut ctx, ty, &binding, span, &strategy)?;
 
         let debug_redacted_field = if is_sensitive {
+            // Sensitive: use wildcard pattern to avoid unused binding
+            debug_redacted_patterns.push(quote_spanned! { span => #binding: _ });
             quote_spanned! { span =>
                 debug.field(stringify!(#binding), &"[REDACTED]");
             }
         } else {
+            // Non-sensitive: normal binding, referenced in the field output
+            debug_redacted_patterns.push(quote_spanned! { span => #binding });
             quote_spanned! { span =>
                 debug.field(stringify!(#binding), #binding);
             }
@@ -101,7 +106,7 @@ fn derive_named_struct(
         policy_applicable_generics,
         debug_redacted_body: quote! {
             match self {
-                Self { #(#bindings),* } => {
+                Self { #(#debug_redacted_patterns),* } => {
                     let mut debug = f.debug_struct(stringify!(#name));
                     #(#debug_redacted_fields)*
                     debug.finish()
@@ -133,6 +138,7 @@ fn derive_unnamed_struct(
     let mut used_generics = Vec::new();
     let mut policy_applicable_generics = Vec::new();
     let mut debug_redacted_fields = Vec::new();
+    let mut debug_redacted_patterns = Vec::new();
     let mut debug_unredacted_fields = Vec::new();
     let mut debug_redacted_generics = Vec::new();
     let mut debug_unredacted_generics = Vec::new();
@@ -158,10 +164,14 @@ fn derive_unnamed_struct(
         let transform = generate_field_transform(&mut ctx, ty, &binding, span, &strategy)?;
 
         let debug_redacted_field = if is_sensitive {
+            // Sensitive: use wildcard pattern to avoid unused binding
+            debug_redacted_patterns.push(quote_spanned! { span => _ });
             quote_spanned! { span =>
                 debug.field(&"[REDACTED]");
             }
         } else {
+            // Non-sensitive: normal binding, referenced in the field output
+            debug_redacted_patterns.push(quote_spanned! { span => #binding });
             quote_spanned! { span =>
                 debug.field(#binding);
             }
@@ -185,7 +195,7 @@ fn derive_unnamed_struct(
         policy_applicable_generics,
         debug_redacted_body: quote! {
             match self {
-                Self ( #(#bindings),* ) => {
+                Self ( #(#debug_redacted_patterns),* ) => {
                     let mut debug = f.debug_tuple(stringify!(#name));
                     #(#debug_redacted_fields)*
                     debug.finish()

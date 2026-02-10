@@ -121,6 +121,7 @@ fn derive_named_variant(
     let mut bindings = Vec::new();
     let mut transforms = Vec::new();
     let mut debug_redacted_fields = Vec::new();
+    let mut debug_redacted_patterns = Vec::new();
     let mut debug_unredacted_fields = Vec::new();
 
     for field in fields.named {
@@ -135,10 +136,14 @@ fn derive_named_variant(
         let transform = generate_field_transform(derive_ctx, ty, &binding, span, &strategy)?;
 
         let debug_redacted_field = if is_sensitive {
+            // Sensitive: use wildcard pattern to avoid unused binding
+            debug_redacted_patterns.push(quote_spanned! { span => #binding: _ });
             quote_spanned! { span =>
                 debug.field(stringify!(#binding), &"[REDACTED]");
             }
         } else {
+            // Non-sensitive: normal binding, referenced in the field output
+            debug_redacted_patterns.push(quote_spanned! { span => #binding });
             quote_spanned! { span =>
                 debug.field(stringify!(#binding), #binding);
             }
@@ -153,6 +158,7 @@ fn derive_named_variant(
     }
 
     let pattern = quote! { { #(#bindings),* } };
+    let debug_redacted_pattern = quote! { { #(#debug_redacted_patterns),* } };
     variant_ctx.arms.push(quote! {
         #name::#variant_ident #pattern => {
             #(#transforms)*
@@ -160,7 +166,7 @@ fn derive_named_variant(
         }
     });
     variant_ctx.debug_redacted_arms.push(quote! {
-        #name::#variant_ident #pattern => {
+        #name::#variant_ident #debug_redacted_pattern => {
             let mut debug = f.debug_struct(stringify!(#name::#variant_ident));
             #(#debug_redacted_fields)*
             debug.finish()
@@ -187,6 +193,7 @@ fn derive_unnamed_variant(
     let mut bindings = Vec::new();
     let mut transforms = Vec::new();
     let mut debug_redacted_fields = Vec::new();
+    let mut debug_redacted_patterns = Vec::new();
     let mut debug_unredacted_fields = Vec::new();
 
     for (index, field) in fields.unnamed.into_iter().enumerate() {
@@ -201,10 +208,14 @@ fn derive_unnamed_variant(
         let transform = generate_field_transform(derive_ctx, ty, &binding, span, &strategy)?;
 
         let debug_redacted_field = if is_sensitive {
+            // Sensitive: use wildcard pattern to avoid unused binding
+            debug_redacted_patterns.push(quote_spanned! { span => _ });
             quote_spanned! { span =>
                 debug.field(&"[REDACTED]");
             }
         } else {
+            // Non-sensitive: normal binding, referenced in the field output
+            debug_redacted_patterns.push(quote_spanned! { span => #binding });
             quote_spanned! { span =>
                 debug.field(#binding);
             }
@@ -225,7 +236,7 @@ fn derive_unnamed_variant(
         }
     });
     variant_ctx.debug_redacted_arms.push(quote! {
-        #name::#variant_ident ( #(#bindings),* ) => {
+        #name::#variant_ident ( #(#debug_redacted_patterns),* ) => {
             let mut debug = f.debug_tuple(stringify!(#name::#variant_ident));
             #(#debug_redacted_fields)*
             debug.finish()
