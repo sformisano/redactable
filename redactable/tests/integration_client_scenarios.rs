@@ -5,7 +5,7 @@
 
 #![allow(clippy::redundant_locals, clippy::box_collection)]
 
-use std::{fmt, marker::PhantomData};
+use std::marker::PhantomData;
 
 use redactable::{
     Email, PhoneNumber, Pii, Redactable, RedactionPolicy, Secret, Sensitive, TextRedactionPolicy,
@@ -180,120 +180,6 @@ mod wrapper_types_with_policy {
     }
 }
 
-/// Issue 2: skip_debug container attribute
-///
-/// Original problem: The Sensitive derive always generated a Debug impl,
-/// conflicting with existing manual Debug implementations.
-///
-/// Expected behavior: `#[sensitive(skip_debug)]` allows opting out of
-/// Debug generation.
-mod skip_debug {
-    use super::*;
-
-    #[test]
-    fn allows_manual_debug_impl() {
-        #[derive(Clone, Sensitive)]
-        #[cfg_attr(feature = "slog", derive(serde::Serialize))]
-        #[sensitive(skip_debug)]
-        struct SecureToken {
-            token_type: String,
-            #[sensitive(Secret)]
-            value: String,
-            issued_at: u64,
-        }
-
-        impl fmt::Debug for SecureToken {
-            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-                f.debug_struct("SecureToken")
-                    .field("token_type", &self.token_type)
-                    .field("value", &"<HIDDEN>")
-                    .field("issued_at", &self.issued_at)
-                    .finish()
-            }
-        }
-
-        let token = SecureToken {
-            token_type: "Bearer".into(),
-            value: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...".into(),
-            issued_at: 1700000000,
-        };
-
-        let redacted = token.clone().redact();
-        assert_eq!(redacted.token_type, "Bearer");
-        assert_eq!(redacted.value, "[REDACTED]");
-        assert_eq!(redacted.issued_at, 1700000000);
-
-        let debug_output = format!("{:?}", token);
-        assert_eq!(
-            debug_output,
-            "SecureToken { token_type: \"Bearer\", value: \"<HIDDEN>\", issued_at: 1700000000 }"
-        );
-    }
-
-    #[test]
-    fn works_on_enums() {
-        #[derive(Clone, Sensitive)]
-        #[cfg_attr(feature = "slog", derive(serde::Serialize))]
-        #[sensitive(skip_debug)]
-        enum Credential {
-            ApiKey {
-                #[sensitive(Secret)]
-                key: String,
-            },
-            OAuth {
-                #[sensitive(Secret)]
-                access_token: String,
-                #[sensitive(Secret)]
-                refresh_token: Option<String>,
-            },
-        }
-
-        impl fmt::Debug for Credential {
-            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-                match self {
-                    Credential::ApiKey { .. } => f.debug_struct("Credential::ApiKey").finish(),
-                    Credential::OAuth { .. } => f.debug_struct("Credential::OAuth").finish(),
-                }
-            }
-        }
-
-        let cred = Credential::OAuth {
-            access_token: "access_abc123".into(),
-            refresh_token: Some("refresh_xyz789".into()),
-        };
-
-        let redacted = cred.clone().redact();
-        match redacted {
-            Credential::OAuth {
-                access_token,
-                refresh_token,
-            } => {
-                assert_eq!(access_token, "[REDACTED]");
-                assert_eq!(refresh_token, Some("[REDACTED]".into()));
-            }
-            _ => panic!("Wrong variant"),
-        }
-
-        let debug_output = format!("{:?}", cred);
-        assert_eq!(debug_output, "Credential::OAuth");
-
-        let api_cred = Credential::ApiKey {
-            key: "sk_live_secretkey123".into(),
-        };
-
-        let redacted_api = api_cred.clone().redact();
-        match redacted_api {
-            Credential::ApiKey { key } => {
-                assert_eq!(key, "[REDACTED]");
-            }
-            _ => panic!("Wrong variant"),
-        }
-
-        let debug_api = format!("{:?}", api_cred);
-        assert_eq!(debug_api, "Credential::ApiKey");
-    }
-}
-
 /// Issue 5: PhantomData handling
 ///
 /// Original problem: PhantomData<T> didn't implement RedactionWalker, forcing
@@ -390,7 +276,6 @@ mod real_world_scenarios {
     fn user_account_model() {
         #[derive(Clone, Sensitive)]
         #[cfg_attr(feature = "slog", derive(serde::Serialize))]
-        #[sensitive(skip_debug)]
         struct UserAccount<Id: Clone> {
             id: u64,
             username: String,
@@ -406,18 +291,6 @@ mod real_world_scenarios {
             #[sensitive(Secret)]
             recovery_codes: Vec<String>,
             _id_type: PhantomData<Id>,
-        }
-
-        impl<Id: Clone> fmt::Debug for UserAccount<Id> {
-            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-                f.debug_struct("UserAccount")
-                    .field("id", &self.id)
-                    .field("username", &self.username)
-                    .field("is_active", &self.is_active)
-                    .field("email", &"<redacted>")
-                    .field("phone", &self.phone.as_ref().map(|_| "<redacted>"))
-                    .finish_non_exhaustive()
-            }
         }
 
         #[derive(Clone)]
@@ -449,10 +322,11 @@ mod real_world_scenarios {
             vec!["[REDACTED]", "[REDACTED]", "[REDACTED]"]
         );
 
+        // In test builds, Sensitive generates unredacted Debug (shows actual values)
         let debug_output = format!("{:?}", account);
-        assert_eq!(
-            debug_output,
-            "UserAccount { id: 12345, username: \"johndoe\", is_active: true, email: \"<redacted>\", phone: Some(\"<redacted>\"), .. }"
+        assert!(
+            debug_output.contains("johndoe"),
+            "test-mode Debug should show actual values, got: {debug_output}"
         );
     }
 

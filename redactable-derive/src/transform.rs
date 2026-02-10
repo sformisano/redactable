@@ -70,6 +70,10 @@ pub(crate) fn generate_field_transform(
         Strategy::NotSensitive => {
             // Explicit opt-out: no transformation, passthrough unchanged.
             // This is useful for foreign types that don't implement RedactableWithMapper.
+            // Still collect debug generics: the field is printed in generated Debug impls
+            // even though it's not transformed, so its type needs a Debug bound.
+            collect_generics_from_type(ty, ctx.generics, ctx.debug_redacted_generics);
+            collect_generics_from_type(ty, ctx.generics, ctx.debug_unredacted_generics);
             Ok(TokenStream::new())
         }
         Strategy::Policy(policy_path) => {

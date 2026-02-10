@@ -1,14 +1,20 @@
 # Changelog
 
-## 0.6.2
+## 0.7.0
+
+### Added
+- `#[sensitive(dual)]` container attribute for types that derive both `Sensitive` and
+  `SensitiveDisplay`. Both macros read this attribute and coordinate: `Sensitive` skips `Debug`
+  (letting `SensitiveDisplay` provide it), and `SensitiveDisplay` skips `slog`/`tracing`
+  (letting `Sensitive` provide them). Each macro generates only its non-overlapping impls.
 
 ### Removed
-- `SensitiveDisplay` no longer generates a `RedactableWithMapper` impl. This was added in 0.6.1
-  but was a design mistake: newtypes that need structural redaction inside `Sensitive` containers
-  should derive `Sensitive` directly. `SensitiveDisplay` is for display/formatting redaction only
-  (`RedactableWithFormatter`). The 0.6.1 impl also caused compilation failures for types with
-  `Box<dyn Trait>` fields (common in error types), which is the primary use case for
-  `SensitiveDisplay`.
+- **Breaking:** `#[sensitive(skip_debug)]` container attribute. The only container-level option
+  is now `#[sensitive(dual)]`.
+- `#[sensitive_display(only)]` container attribute (superseded by `#[sensitive(dual)]`).
+- `SensitiveDisplay` no longer generates a `RedactableWithMapper` impl (reverted from 0.6.1).
+  Newtypes that need structural redaction inside `Sensitive` containers should derive `Sensitive`
+  directly.
 
 ## 0.6.1
 

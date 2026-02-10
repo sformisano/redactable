@@ -29,7 +29,7 @@ uuid = ["dep:uuid"]
 extras = ["chrono", "time", "uuid", "ip-address"]
 
 [dependencies]
-redactable-derive = { version = "0.6.2", path = "../redactable-derive" }
+redactable-derive = { version = "0.7.0", path = "../redactable-derive" }
 serde = { version = "1", optional = true, features = ["derive"] }
 serde_json = { version = "1", optional = true }
 slog = { version = "2.8", optional = true, features = ["nested-values"] }

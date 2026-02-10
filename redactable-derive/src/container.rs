@@ -5,10 +5,16 @@
 use syn::{Attribute, Meta, Result};
 
 /// Options parsed from container-level `#[sensitive(...)]` attributes.
+///
+/// Both `Sensitive` and `SensitiveDisplay` read these options.
 #[derive(Clone, Debug, Default)]
 pub(crate) struct ContainerOptions {
-    /// If true, skip generating the `Debug` impl.
-    pub(crate) skip_debug: bool,
+    /// If true, this type derives both `Sensitive` and `SensitiveDisplay`.
+    ///
+    /// Each macro adjusts its output to avoid conflicting impls:
+    /// - `Sensitive` skips `Debug` (lets `SensitiveDisplay` provide it).
+    /// - `SensitiveDisplay` skips `slog` and `tracing` (lets `Sensitive` provide them).
+    pub(crate) dual: bool,
 }
 
 /// Parses container-level `#[sensitive(...)]` attributes.
@@ -24,17 +30,18 @@ pub(crate) fn parse_container_options(attrs: &[Attribute]) -> Result<ContainerOp
             Meta::Path(_) => {
                 return Err(syn::Error::new_spanned(
                     attr,
-                    "bare `#[sensitive]` on the container has no effect; use `#[sensitive(skip_debug)]` to opt out of `Debug` generation",
+                    "bare `#[sensitive]` on the container has no effect; \
+                     use `#[sensitive(dual)]` when deriving both `Sensitive` and `SensitiveDisplay`",
                 ));
             }
             Meta::List(list) => {
                 list.parse_nested_meta(|meta| {
-                    if meta.path.is_ident("skip_debug") {
-                        options.skip_debug = true;
+                    if meta.path.is_ident("dual") {
+                        options.dual = true;
                         Ok(())
                     } else {
                         Err(meta.error(format!(
-                            "unknown container option `{}`; expected `skip_debug`",
+                            "unknown container option `{}`; expected `dual`",
                             meta.path
                                 .get_ident()
                                 .map_or_else(|| "?".to_string(), ToString::to_string)
@@ -74,14 +81,14 @@ mod tests {
     fn no_attribute_returns_defaults() {
         let attrs = parse_attrs(quote! {});
         let options = parse_container_options(&attrs).unwrap();
-        assert!(!options.skip_debug);
+        assert!(!options.dual);
     }
 
     #[test]
-    fn skip_debug_is_parsed() {
-        let attrs = parse_attrs(quote! { #[sensitive(skip_debug)] });
+    fn dual_is_parsed() {
+        let attrs = parse_attrs(quote! { #[sensitive(dual)] });
         let options = parse_container_options(&attrs).unwrap();
-        assert!(options.skip_debug);
+        assert!(options.dual);
     }
 
     #[test]

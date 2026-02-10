@@ -92,7 +92,7 @@ let err = AuthError::InvalidCredentials {
     user: "alice".into(),
     password: "hunter2".into(),
 };
-assert_eq!(err.redacted_display(), "login failed for alice [REDACTED]");
+assert_eq!(err.redacted_display(), "login failed for alice with [REDACTED]");
 ```
 
 ### What each derive generates
@@ -102,10 +102,19 @@ assert_eq!(err.redacted_display(), "login failed for alice [REDACTED]");
 | `Sensitive` | Same type with redacted leaves (via `RedactableWithMapper`) | ✅ (redacted) | ✅ |
 | `SensitiveDisplay` | Redacted string (via `RedactableWithFormatter`) | ✅ (redacted) | ✅ |
 
-- Both generate a conditional `Debug` impl: redacted output in production, actual values in test builds (`cfg(test)` or `feature = "testing"`). This means all field types must implement `Debug`. Opt out with `#[sensitive(skip_debug)]`.
+- Both generate a conditional `Debug` impl: redacted output in production, actual values in test builds (`cfg(test)` or `feature = "testing"`). This means all field types must implement `Debug`.
 - Both generate `slog::Value` + `SlogRedacted` (requires `slog` feature) and `TracingRedacted` (requires `tracing` feature). `Sensitive` emits structured JSON via slog (requires `Serialize`). `SensitiveDisplay` emits the redacted display string.
 - `Sensitive` requires `Clone` since `.redact()` consumes `self`. `SensitiveDisplay` works by reference, so no `Clone` is needed.
-- `SensitiveDisplay` does not generate `RedactableWithMapper`. If a type needs to be both a field inside a `Sensitive` container and produce redacted display output, derive both macros and use `#[sensitive(skip_debug)]` on one to avoid a `Debug` impl conflict.
+- `SensitiveDisplay` does not generate `RedactableWithMapper`. If a type needs both structural traversal **and** display formatting (e.g., a newtype that lives inside a `Sensitive` container but also needs `.redacted_display()`), derive both on the same type with `#[sensitive(dual)]`:
+
+  ```rust
+  /// {0}
+  #[derive(Clone, Sensitive, SensitiveDisplay)]
+  #[sensitive(dual)]
+  struct Email(#[sensitive(Token)] String);
+  ```
+
+  `#[sensitive(dual)]` coordinates both macros: `Sensitive` skips `Debug` (letting `SensitiveDisplay` provide it) and `SensitiveDisplay` skips `slog`/`tracing` (letting `Sensitive` provide them). Each macro generates only its non-overlapping impls.
 
 ## Design principles
 
@@ -546,7 +555,7 @@ enum RetryDecision {
 
 About `Debug`:
 
-- `Sensitive` and `SensitiveDisplay` generate a conditional impl: redacted in production, actual values in `cfg(test)` or `feature = "testing"`. Opt out with `#[sensitive(skip_debug)]`.
+- `Sensitive` and `SensitiveDisplay` generate a conditional impl: redacted in production, actual values in `cfg(test)` or `feature = "testing"`. When deriving both, use `#[sensitive(dual)]` to avoid conflicting impls.
 - `NotSensitive` and `NotSensitiveDisplay` do not override `Debug`. There is nothing to redact. Add `#[derive(Debug)]` separately when you need it.
 
 ## Wrapper types

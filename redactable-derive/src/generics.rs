@@ -144,18 +144,29 @@ pub(crate) fn collect_generics_from_type(
     visit_type(ty, generics, result);
 }
 
-/// Adds `RedactableWithMapper` bounds to generic parameters used in walked fields.
-pub(crate) fn add_container_bounds(
+/// Adds a trait bound to generic parameters that appear in `used_generics`.
+///
+/// This is the shared implementation behind all the public `add_*_bounds` helpers.
+fn add_bounds(
     mut generics: syn::Generics,
     used_generics: &[Ident],
+    bound: syn::TypeParamBound,
 ) -> syn::Generics {
     for param in generics.type_params_mut() {
         if used_generics.iter().any(|g| g == &param.ident) {
-            let container_path = crate_path("RedactableWithMapper");
-            param.bounds.push(parse_quote!(#container_path));
+            param.bounds.push(bound.clone());
         }
     }
     generics
+}
+
+/// Adds `RedactableWithMapper` bounds to generic parameters used in walked fields.
+pub(crate) fn add_container_bounds(
+    generics: syn::Generics,
+    used_generics: &[Ident],
+) -> syn::Generics {
+    let container_path = crate_path("RedactableWithMapper");
+    add_bounds(generics, used_generics, parse_quote!(#container_path))
 }
 
 /// Adds `PolicyApplicable` bounds to generic parameters used in policy-annotated fields.
@@ -163,65 +174,37 @@ pub(crate) fn add_container_bounds(
 /// This enables `#[sensitive(Policy)]` to work on generic types like `T`
 /// where `T` could be `String`, `Option<String>`, `Vec<String>`, etc.
 pub(crate) fn add_policy_applicable_bounds(
-    mut generics: syn::Generics,
+    generics: syn::Generics,
     used_generics: &[Ident],
 ) -> syn::Generics {
-    for param in generics.type_params_mut() {
-        if used_generics.iter().any(|g| g == &param.ident) {
-            let policy_applicable_path = crate_path("PolicyApplicable");
-            param.bounds.push(parse_quote!(#policy_applicable_path));
-        }
-    }
-    generics
+    let path = crate_path("PolicyApplicable");
+    add_bounds(generics, used_generics, parse_quote!(#path))
 }
 
 /// Adds `PolicyApplicableRef` bounds to generic parameters used in policy-annotated fields.
 pub(crate) fn add_policy_applicable_ref_bounds(
-    mut generics: syn::Generics,
+    generics: syn::Generics,
     used_generics: &[Ident],
 ) -> syn::Generics {
-    for param in generics.type_params_mut() {
-        if used_generics.iter().any(|g| g == &param.ident) {
-            let policy_applicable_path = crate_path("PolicyApplicableRef");
-            param.bounds.push(parse_quote!(#policy_applicable_path));
-        }
-    }
-    generics
+    let path = crate_path("PolicyApplicableRef");
+    add_bounds(generics, used_generics, parse_quote!(#path))
 }
 
-pub(crate) fn add_debug_bounds(
-    mut generics: syn::Generics,
-    used_generics: &[Ident],
-) -> syn::Generics {
-    for param in generics.type_params_mut() {
-        if used_generics.iter().any(|g| g == &param.ident) {
-            param.bounds.push(parse_quote!(::core::fmt::Debug));
-        }
-    }
-    generics
+pub(crate) fn add_debug_bounds(generics: syn::Generics, used_generics: &[Ident]) -> syn::Generics {
+    add_bounds(generics, used_generics, parse_quote!(::core::fmt::Debug))
 }
 
 pub(crate) fn add_display_bounds(
-    mut generics: syn::Generics,
+    generics: syn::Generics,
     used_generics: &[Ident],
 ) -> syn::Generics {
-    for param in generics.type_params_mut() {
-        if used_generics.iter().any(|g| g == &param.ident) {
-            param.bounds.push(parse_quote!(::core::fmt::Display));
-        }
-    }
-    generics
+    add_bounds(generics, used_generics, parse_quote!(::core::fmt::Display))
 }
 
 pub(crate) fn add_redacted_display_bounds(
-    mut generics: syn::Generics,
+    generics: syn::Generics,
     used_generics: &[Ident],
 ) -> syn::Generics {
-    for param in generics.type_params_mut() {
-        if used_generics.iter().any(|g| g == &param.ident) {
-            let redacted_display_path = crate_path("RedactableWithFormatter");
-            param.bounds.push(parse_quote!(#redacted_display_path));
-        }
-    }
-    generics
+    let path = crate_path("RedactableWithFormatter");
+    add_bounds(generics, used_generics, parse_quote!(#path))
 }

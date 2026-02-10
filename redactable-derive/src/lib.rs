@@ -100,8 +100,9 @@ use redacted_display::derive_redacted_display;
 ///
 /// These attributes are placed on the struct/enum itself:
 ///
-/// - `#[sensitive(skip_debug)]` - Opt out of `Debug` impl generation. Use this when you need a
-///   custom `Debug` implementation or the type already derives `Debug` elsewhere.
+/// - `#[sensitive(dual)]` - Use when deriving both `Sensitive` and `SensitiveDisplay` on the same
+///   type. `Sensitive` skips its `Debug` impl (letting `SensitiveDisplay` provide it), and
+///   `SensitiveDisplay` skips its `slog`/`tracing` impls (letting `Sensitive` provide them).
 ///
 /// # Field Attributes
 ///
@@ -121,20 +122,21 @@ use redacted_display::derive_redacted_display;
 ///
 /// Unions are rejected at compile time.
 ///
-/// # Additional Generated Impls
+/// # Generated Impls
 ///
-/// - `Debug`: when *not* building with `cfg(any(test, feature = "testing"))`, sensitive fields are
-///   formatted as the string `"[REDACTED]"` rather than their values. Use `#[sensitive(skip_debug)]`
-///   on the container to opt out.
-/// - `slog::Value` (behind `cfg(feature = "slog")`): implemented by cloning the value and routing
-///   it through `redactable::slog::SlogRedactedExt`. **Note:** this impl requires `Clone` and
+/// - `RedactableWithMapper`: always generated.
+/// - `Debug`: redacted in production, actual values in test/testing builds. Skipped when
+///   `#[sensitive(dual)]` is set.
+/// - `slog::Value` + `SlogRedacted` (requires `slog` feature): implemented by cloning the value
+///   and routing it through `redactable::slog::SlogRedactedExt`. Requires `Clone` and
 ///   `serde::Serialize` because it emits structured JSON. The derive first looks for a top-level
-///   `slog` crate; if not found, it checks the `REDACTABLE_SLOG_CRATE` env var for an alternate path
-///   (e.g., `my_log::slog`). If neither is available, compilation fails with a clear error.
+///   `slog` crate; if not found, it checks the `REDACTABLE_SLOG_CRATE` env var for an alternate
+///   path (e.g., `my_log::slog`). If neither is available, compilation fails with a clear error.
+/// - `TracingRedacted` (requires `tracing` feature): marker trait.
 #[proc_macro_derive(Sensitive, attributes(sensitive, not_sensitive))]
 pub fn derive_sensitive_container(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
-    match expand(input, SlogMode::RedactedJson) {
+    match expand(input, DeriveKind::Sensitive) {
         Ok(tokens) => tokens.into(),
         Err(err) => err.into_compile_error().into(),
     }
@@ -331,7 +333,7 @@ fn expand_not_sensitive(input: DeriveInput) -> Result<TokenStream> {
 /// # Debug
 ///
 /// `NotSensitiveDisplay` does **not** generate a `Debug` impl - there's nothing to redact.
-/// Use `#[derive(Debug)]` alongside `NotSensitiveDisplay` when needed:
+/// Use `#[derive(Debug)]` alongside `NotSensitiveDisplay` when needed.
 ///
 /// # Rejected Attributes
 ///
@@ -477,11 +479,6 @@ fn expand_not_sensitive_display(input: DeriveInput) -> Result<TokenStream> {
 /// Unannotated fields use `RedactableWithFormatter` by default (passthrough for scalars,
 /// redacted display for nested `SensitiveDisplay` types).
 ///
-/// # Container Attributes
-///
-/// - `#[sensitive(skip_debug)]` - Opt out of `Debug` impl generation. Use this when you need a
-///   custom `Debug` implementation or the type already derives `Debug` elsewhere.
-///
 /// # Field Annotations
 ///
 /// - *(none)*: Uses `RedactableWithFormatter` (requires the field type to implement it)
@@ -493,15 +490,18 @@ fn expand_not_sensitive_display(input: DeriveInput) -> Result<TokenStream> {
 ///
 /// Fields are redacted by reference, so field types do not need `Clone`.
 ///
-/// # Additional Generated Impls
+/// # Generated Impls
 ///
-/// - `Debug`: when *not* building with `cfg(any(test, feature = "testing"))`, `Debug` formats via
-///   `RedactableWithFormatter::fmt_redacted`. In test/testing builds, it shows actual values for
-///   debugging.
+/// - `RedactableWithFormatter`: always generated.
+/// - `Debug`: redacted in production, actual values in test/testing builds.
+/// - `slog::Value` + `SlogRedacted`: emits the redacted display string (requires `slog` feature).
+///   Skipped when `#[sensitive(dual)]` is set (Sensitive provides them instead).
+/// - `TracingRedacted`: marker trait (requires `tracing` feature).
+///   Skipped when `#[sensitive(dual)]` is set.
 #[proc_macro_derive(SensitiveDisplay, attributes(sensitive, not_sensitive, error))]
 pub fn derive_sensitive_display(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
-    match expand(input, SlogMode::RedactedDisplay) {
+    match expand(input, DeriveKind::SensitiveDisplay) {
         Ok(tokens) => tokens.into(),
         Err(err) => err.into_compile_error().into(),
     }
@@ -579,13 +579,19 @@ struct DebugOutput {
     generics: Vec<Ident>,
 }
 
-enum SlogMode {
-    RedactedJson,
-    RedactedDisplay,
+/// Which derive macro invoked `expand()`.
+///
+/// Controls what impls are generated: `Sensitive` emits `RedactableWithMapper` (structural
+/// traversal), while `SensitiveDisplay` emits `RedactableWithFormatter` (display formatting).
+enum DeriveKind {
+    /// `#[derive(Sensitive)]` — structural redaction via `RedactableWithMapper`.
+    Sensitive,
+    /// `#[derive(SensitiveDisplay)]` — display formatting via `RedactableWithFormatter`.
+    SensitiveDisplay,
 }
 
 #[allow(clippy::too_many_lines)]
-fn expand(input: DeriveInput, slog_mode: SlogMode) -> Result<TokenStream> {
+fn expand(input: DeriveInput, kind: DeriveKind) -> Result<TokenStream> {
     let DeriveInput {
         ident,
         generics,
@@ -594,11 +600,11 @@ fn expand(input: DeriveInput, slog_mode: SlogMode) -> Result<TokenStream> {
         ..
     } = input;
 
-    let ContainerOptions { skip_debug } = parse_container_options(&attrs)?;
+    let ContainerOptions { dual } = parse_container_options(&attrs)?;
 
     let crate_root = crate_root();
 
-    if matches!(slog_mode, SlogMode::RedactedDisplay) {
+    if matches!(kind, DeriveKind::SensitiveDisplay) {
         let redacted_display_output = derive_redacted_display(&ident, &data, &attrs, &generics)?;
         let redacted_display_generics =
             add_display_bounds(generics.clone(), &redacted_display_output.display_generics);
@@ -625,86 +631,88 @@ fn expand(input: DeriveInput, slog_mode: SlogMode) -> Result<TokenStream> {
             }
         };
 
-        let debug_impl = if skip_debug {
+        let debug_output = derive_unredacted_debug(&ident, &data, &generics)?;
+        let debug_unredacted_generics = add_debug_bounds(generics.clone(), &debug_output.generics);
+        let (
+            debug_unredacted_impl_generics,
+            debug_unredacted_ty_generics,
+            debug_unredacted_where_clause,
+        ) = debug_unredacted_generics.split_for_impl();
+        let (debug_redacted_impl_generics, debug_redacted_ty_generics, debug_redacted_where_clause) =
+            redacted_display_generics.split_for_impl();
+        let debug_unredacted_body = debug_output.body;
+        let debug_impl = quote! {
+            #[cfg(any(test, feature = "testing"))]
+            impl #debug_unredacted_impl_generics ::core::fmt::Debug for #ident #debug_unredacted_ty_generics #debug_unredacted_where_clause {
+                fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+                    #debug_unredacted_body
+                }
+            }
+
+            #[cfg(not(any(test, feature = "testing")))]
+            impl #debug_redacted_impl_generics ::core::fmt::Debug for #ident #debug_redacted_ty_generics #debug_redacted_where_clause {
+                fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+                    #crate_root::RedactableWithFormatter::fmt_redacted(self, f)
+                }
+            }
+        };
+
+        // In dual mode, Sensitive provides slog and tracing impls — skip them here.
+        let slog_impl = if dual {
             quote! {}
         } else {
-            let debug_output = derive_unredacted_debug(&ident, &data, &generics)?;
-            let debug_unredacted_generics =
-                add_debug_bounds(generics.clone(), &debug_output.generics);
-            let (
-                debug_unredacted_impl_generics,
-                debug_unredacted_ty_generics,
-                debug_unredacted_where_clause,
-            ) = debug_unredacted_generics.split_for_impl();
-            let (
-                debug_redacted_impl_generics,
-                debug_redacted_ty_generics,
-                debug_redacted_where_clause,
-            ) = redacted_display_generics.split_for_impl();
-            let debug_unredacted_body = debug_output.body;
-            quote! {
-                #[cfg(any(test, feature = "testing"))]
-                impl #debug_unredacted_impl_generics ::core::fmt::Debug for #ident #debug_unredacted_ty_generics #debug_unredacted_where_clause {
-                    fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
-                        #debug_unredacted_body
+            #[cfg(feature = "slog")]
+            {
+                let slog_crate = slog_crate()?;
+                let mut slog_generics = generics;
+                let (_, ty_generics, _) = slog_generics.split_for_impl();
+                let self_ty: syn::Type = parse_quote!(#ident #ty_generics);
+                slog_generics
+                    .make_where_clause()
+                    .predicates
+                    .push(parse_quote!(#self_ty: #crate_root::RedactableWithFormatter));
+                let (slog_impl_generics, slog_ty_generics, slog_where_clause) =
+                    slog_generics.split_for_impl();
+                quote! {
+                    impl #slog_impl_generics #slog_crate::Value for #ident #slog_ty_generics #slog_where_clause {
+                        fn serialize(
+                            &self,
+                            _record: &#slog_crate::Record<'_>,
+                            key: #slog_crate::Key,
+                            serializer: &mut dyn #slog_crate::Serializer,
+                        ) -> #slog_crate::Result {
+                            let redacted = #crate_root::RedactableWithFormatter::redacted_display(self);
+                            serializer.emit_arguments(key, &format_args!("{}", redacted))
+                        }
                     }
-                }
 
-                #[cfg(not(any(test, feature = "testing")))]
-                impl #debug_redacted_impl_generics ::core::fmt::Debug for #ident #debug_redacted_ty_generics #debug_redacted_where_clause {
-                    fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
-                        #crate_root::RedactableWithFormatter::fmt_redacted(self, f)
-                    }
+                    impl #slog_impl_generics #crate_root::slog::SlogRedacted for #ident #slog_ty_generics #slog_where_clause {}
                 }
+            }
+
+            #[cfg(not(feature = "slog"))]
+            {
+                quote! {}
             }
         };
 
-        // Only generate slog impl when the slog feature is enabled on redactable-derive.
-        // If slog is not available, emit a clear error with instructions.
-        #[cfg(feature = "slog")]
-        let slog_impl = {
-            let slog_crate = slog_crate()?;
-            let mut slog_generics = generics;
-            // Get ty_generics first (immutable borrow) before make_where_clause (mutable borrow)
-            let (_, ty_generics, _) = slog_generics.split_for_impl();
-            let self_ty: syn::Type = parse_quote!(#ident #ty_generics);
-            slog_generics
-                .make_where_clause()
-                .predicates
-                .push(parse_quote!(#self_ty: #crate_root::RedactableWithFormatter));
-            let (slog_impl_generics, slog_ty_generics, slog_where_clause) =
-                slog_generics.split_for_impl();
-            quote! {
-                impl #slog_impl_generics #slog_crate::Value for #ident #slog_ty_generics #slog_where_clause {
-                    fn serialize(
-                        &self,
-                        _record: &#slog_crate::Record<'_>,
-                        key: #slog_crate::Key,
-                        serializer: &mut dyn #slog_crate::Serializer,
-                    ) -> #slog_crate::Result {
-                        let redacted = #crate_root::RedactableWithFormatter::redacted_display(self);
-                        serializer.emit_arguments(key, &format_args!("{}", redacted))
-                    }
+        let tracing_impl = if dual {
+            quote! {}
+        } else {
+            #[cfg(feature = "tracing")]
+            {
+                let (tracing_impl_generics, tracing_ty_generics, tracing_where_clause) =
+                    redacted_display_generics.split_for_impl();
+                quote! {
+                    impl #tracing_impl_generics #crate_root::tracing::TracingRedacted for #ident #tracing_ty_generics #tracing_where_clause {}
                 }
+            }
 
-                impl #slog_impl_generics #crate_root::slog::SlogRedacted for #ident #slog_ty_generics #slog_where_clause {}
+            #[cfg(not(feature = "tracing"))]
+            {
+                quote! {}
             }
         };
-
-        #[cfg(not(feature = "slog"))]
-        let slog_impl = quote! {};
-
-        #[cfg(feature = "tracing")]
-        let tracing_impl = {
-            let (tracing_impl_generics, tracing_ty_generics, tracing_where_clause) =
-                redacted_display_generics.split_for_impl();
-            quote! {
-                impl #tracing_impl_generics #crate_root::tracing::TracingRedacted for #ident #tracing_ty_generics #tracing_where_clause {}
-            }
-        };
-
-        #[cfg(not(feature = "tracing"))]
-        let tracing_impl = quote! {};
 
         return Ok(quote! {
             #redacted_display_impl
@@ -714,12 +722,11 @@ fn expand(input: DeriveInput, slog_mode: SlogMode) -> Result<TokenStream> {
         });
     }
 
-    // Only SlogMode::RedactedJson reaches this point (RedactedDisplay returns early above).
-    // RedactableWithFormatter is not generated for the Sensitive derive.
+    // Only DeriveKind::Sensitive reaches this point (SensitiveDisplay returns early above).
 
-    let derive_output = match &data {
-        Data::Struct(data) => derive_struct(&ident, data.clone(), &generics)?,
-        Data::Enum(data) => derive_enum(&ident, data.clone(), &generics)?,
+    let derive_output = match data {
+        Data::Struct(data) => derive_struct(&ident, data, &generics)?,
+        Data::Enum(data) => derive_enum(&ident, data, &generics)?,
         Data::Union(u) => {
             return Err(syn::Error::new(
                 u.union_token.span(),
@@ -746,7 +753,8 @@ fn expand(input: DeriveInput, slog_mode: SlogMode) -> Result<TokenStream> {
     let redaction_body = &derive_output.redaction_body;
     let debug_redacted_body = &derive_output.debug_redacted_body;
     let debug_unredacted_body = &derive_output.debug_unredacted_body;
-    let debug_impl = if skip_debug {
+    // In dual mode, SensitiveDisplay provides Debug — skip it here.
+    let debug_impl = if dual {
         quote! {}
     } else {
         quote! {
@@ -766,8 +774,6 @@ fn expand(input: DeriveInput, slog_mode: SlogMode) -> Result<TokenStream> {
         }
     };
 
-    // Only generate slog impl when the slog feature is enabled on redactable-derive.
-    // If slog is not available, emit a clear error with instructions.
     #[cfg(feature = "slog")]
     let slog_impl = {
         let slog_crate = slog_crate()?;
@@ -828,9 +834,6 @@ fn expand(input: DeriveInput, slog_mode: SlogMode) -> Result<TokenStream> {
         #slog_impl
 
         #tracing_impl
-
-        // `slog` already provides `impl<V: Value> Value for &V`, so a reference
-        // impl here would conflict with the blanket impl.
     };
     Ok(trait_impl)
 }
