@@ -1,12 +1,23 @@
 # Changelog
 
+## 0.6.2
+
+### Removed
+- `SensitiveDisplay` no longer generates a `RedactableWithMapper` impl. This was added in 0.6.1
+  but was a design mistake: newtypes that need structural redaction inside `Sensitive` containers
+  should derive `Sensitive` directly. `SensitiveDisplay` is for display/formatting redaction only
+  (`RedactableWithFormatter`). The 0.6.1 impl also caused compilation failures for types with
+  `Box<dyn Trait>` fields (common in error types), which is the primary use case for
+  `SensitiveDisplay`.
+
 ## 0.6.1
 
-### Added
-- `SensitiveDisplay` now generates a `RedactableWithMapper` impl that walks inner fields and
-  applies redaction — the same traversal logic used by `Sensitive`. This allows `SensitiveDisplay`
-  types to be used as fields inside `#[derive(Sensitive)]` containers and ensures their sensitive
-  data is properly redacted when `.redact()` is called on a parent struct.
+### Fixed
+- Suppress unused variable warnings for `#[sensitive(Policy)]` fields in the generated redacted
+  `Debug` impl. The redacted debug destructure pattern now uses wildcard bindings (`field: _` for
+  named fields, `_` for tuple fields) for sensitive fields instead of creating unused bindings.
+  The `#[allow(unused_variables)]` attribute on the redacted `Debug` impl has been removed since
+  it is no longer needed.
 
 ## 0.6.0
 

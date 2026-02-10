@@ -22,10 +22,4 @@ mod sensitive_display {
         let t = trybuild::TestCases::new();
         t.pass("tests/ui/sensitive_display_nested_ok.rs");
     }
-
-    #[test]
-    fn inside_sensitive_container_compiles() {
-        let t = trybuild::TestCases::new();
-        t.pass("tests/ui/sensitive_display_in_container_ok.rs");
-    }
 }

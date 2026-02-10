@@ -105,6 +105,7 @@ assert_eq!(err.redacted_display(), "login failed for alice [REDACTED]");
 - Both generate a conditional `Debug` impl: redacted output in production, actual values in test builds (`cfg(test)` or `feature = "testing"`). This means all field types must implement `Debug`. Opt out with `#[sensitive(skip_debug)]`.
 - Both generate `slog::Value` + `SlogRedacted` (requires `slog` feature) and `TracingRedacted` (requires `tracing` feature). `Sensitive` emits structured JSON via slog (requires `Serialize`). `SensitiveDisplay` emits the redacted display string.
 - `Sensitive` requires `Clone` since `.redact()` consumes `self`. `SensitiveDisplay` works by reference, so no `Clone` is needed.
+- `SensitiveDisplay` does not generate `RedactableWithMapper`. If a type needs to be both a field inside a `Sensitive` container and produce redacted display output, derive both macros and use `#[sensitive(skip_debug)]` on one to avoid a `Debug` impl conflict.
 
 ## Design principles
 
@@ -676,7 +677,7 @@ The `slog` feature enables automatic redaction. Just log your values and they're
 
 ```toml
 [dependencies]
-redactable = { version = "0.5", features = ["slog"] }
+redactable = { version = "0.6", features = ["slog"] }
 ```
 
 **Containers**: the `Sensitive` derive generates `slog::Value` automatically:
@@ -720,7 +721,7 @@ For structured logging with tracing, use the `valuable` integration:
 
 ```toml
 [dependencies]
-redactable = { version = "0.5", features = ["tracing-valuable"] }
+redactable = { version = "0.6", features = ["tracing-valuable"] }
 ```
 
 ```rust

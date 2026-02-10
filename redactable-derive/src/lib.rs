@@ -495,9 +495,6 @@ fn expand_not_sensitive_display(input: DeriveInput) -> Result<TokenStream> {
 ///
 /// # Additional Generated Impls
 ///
-/// - `RedactableWithMapper`: allows `SensitiveDisplay` types to be used as fields inside
-///   `Sensitive` containers. The impl walks inner fields and applies redaction — the same
-///   traversal logic used by `Sensitive`.
 /// - `Debug`: when *not* building with `cfg(any(test, feature = "testing"))`, `Debug` formats via
 ///   `RedactableWithFormatter::fmt_redacted`. In test/testing builds, it shows actual values for
 ///   debugging.
@@ -628,37 +625,6 @@ fn expand(input: DeriveInput, slog_mode: SlogMode) -> Result<TokenStream> {
             }
         };
 
-        // Generate a real RedactableWithMapper impl so that SensitiveDisplay types are
-        // properly redacted when used as fields inside Sensitive containers. This reuses
-        // the same derive_struct/derive_enum logic that the Sensitive derive uses.
-        let container_derive_output = match &data {
-            Data::Struct(data) => derive_struct(&ident, data.clone(), &generics)?,
-            Data::Enum(data) => derive_enum(&ident, data.clone(), &generics)?,
-            Data::Union(u) => {
-                return Err(syn::Error::new(
-                    u.union_token.span(),
-                    "`SensitiveDisplay` cannot be derived for unions",
-                ));
-            }
-        };
-        let container_generics =
-            add_container_bounds(generics.clone(), &container_derive_output.used_generics);
-        let container_generics = add_policy_applicable_bounds(
-            container_generics,
-            &container_derive_output.policy_applicable_generics,
-        );
-        let (container_impl_generics, container_ty_generics, container_where_clause) =
-            container_generics.split_for_impl();
-        let container_redaction_body = &container_derive_output.redaction_body;
-        let container_impl = quote! {
-            impl #container_impl_generics #crate_root::RedactableWithMapper for #ident #container_ty_generics #container_where_clause {
-                fn redact_with<M: #crate_root::RedactableMapper>(self, mapper: &M) -> Self {
-                    use #crate_root::RedactableWithMapper as _;
-                    #container_redaction_body
-                }
-            }
-        };
-
         let debug_impl = if skip_debug {
             quote! {}
         } else {
@@ -742,7 +708,6 @@ fn expand(input: DeriveInput, slog_mode: SlogMode) -> Result<TokenStream> {
 
         return Ok(quote! {
             #redacted_display_impl
-            #container_impl
             #debug_impl
             #slog_impl
             #tracing_impl
