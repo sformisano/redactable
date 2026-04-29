@@ -1,0 +1,22 @@
+error[E0277]: the trait bound `String: ToRedactedOutput` is not satisfied
+ --> tests/ui/to_redacted_output_raw_string_rejected.rs:7:28
+  |
+7 |     assert_redacted_output(&raw);
+  |     ---------------------- ^^^^ the trait `ToRedactedOutput` is not implemented for `String`
+  |     |
+  |     required by a bound introduced by this call
+  |
+  = help: the following other types implement trait `ToRedactedOutput`:
+            NotSensitiveDebug<T>
+            NotSensitiveDisplay<T>
+            NotSensitiveJson<'_, T>
+            RedactedJson
+            RedactedJsonRef<'_, T>
+            RedactedOutput
+            RedactedOutputRef<'_, T>
+            SensitiveValue<T, P>
+note: required by a bound in `assert_redacted_output`
+ --> tests/ui/to_redacted_output_raw_string_rejected.rs:3:30
+  |
+3 | fn assert_redacted_output<T: ToRedactedOutput>(_: &T) {}
+  |                              ^^^^^^^^^^^^^^^^ required by this bound in `assert_redacted_output`

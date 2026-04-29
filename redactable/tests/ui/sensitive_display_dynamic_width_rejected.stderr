@@ -1,0 +1,5 @@
+error: format specifiers with dynamic width/precision are not supported
+ --> tests/ui/sensitive_display_dynamic_width_rejected.rs:4:9
+  |
+4 | #[error("value {value:.*}")]
+  |         ^^^^^^^^^^^^^^^^^^

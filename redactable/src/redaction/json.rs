@@ -1,9 +1,10 @@
 //! `serde_json::Value` support for redaction traversal.
 //!
 //! `serde_json::Value` is treated as an opaque leaf type. Any policy application
-//! fully redacts it to `Value::String("[REDACTED]")`. This is safe-by-default:
-//! since `Value` can contain arbitrary data, we redact it entirely rather than
-//! attempting to traverse its dynamic structure.
+//! fully redacts it to `Value::String("[REDACTED]")`. Unannotated values also
+//! redact by default as an explicit exception to the crate's mostly opt-in
+//! model: since `Value` can contain arbitrary data, we redact it entirely rather
+//! than attempting to traverse its dynamic structure.
 
 use super::{
     redact::{PolicyApplicable, PolicyApplicableRef, RedactableMapper},

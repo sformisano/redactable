@@ -68,6 +68,19 @@ mod sensitive_value {
                 RedactedOutput::Text("[REDACTED]".to_string())
             );
         }
+
+        #[cfg(feature = "json")]
+        #[test]
+        fn direct_json_serialization_remains_raw() {
+            let sensitive = SensitiveValue::<String, Secret>::from("secret".to_string());
+            let json = serde_json::to_value(&sensitive).expect("serialize sensitive wrapper");
+
+            assert_eq!(json, serde_json::json!("secret"));
+            assert_eq!(
+                sensitive.to_redacted_output(),
+                RedactedOutput::Text("[REDACTED]".to_string())
+            );
+        }
     }
 
     mod in_container {

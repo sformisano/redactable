@@ -266,6 +266,7 @@ impl PolicyApplicableRef for String {
 }
 
 impl PolicyApplicableRef for Cow<'_, str> {
+    /// Redacted `Cow` output is always owned so it never borrows from the raw input.
     type Output = Cow<'static, str>;
 
     fn apply_policy_ref<P, M>(&self, _mapper: &M) -> Self::Output

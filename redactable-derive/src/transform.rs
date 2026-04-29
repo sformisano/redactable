@@ -11,7 +11,7 @@ use crate::{
     crate_path,
     generics::collect_generics_from_type,
     strategy::Strategy,
-    types::{is_phantom_data, is_scalar_type},
+    types::{is_ip_address_type, is_nonzero_type, is_phantom_data, is_scalar_type},
 };
 
 /// Accumulated state during field processing.
@@ -30,6 +30,18 @@ pub(crate) struct DeriveContext<'a> {
 /// Checks if a policy path refers to the `Secret` policy.
 fn is_secret_policy(path: &syn::Path) -> bool {
     path.is_ident("Secret")
+}
+
+fn is_ip_address_policy(path: &syn::Path) -> bool {
+    path.is_ident("IpAddress")
+}
+
+fn nonzero_policy_error(span: Span) -> syn::Error {
+    syn::Error::new(
+        span,
+        "NonZero integer fields cannot use #[sensitive(Policy)] because redaction \
+         may need to produce zero; use a nullable scalar or a policy-aware wrapper",
+    )
 }
 
 /// Generates the transform token stream for a single field.
@@ -77,6 +89,26 @@ pub(crate) fn generate_field_transform(
             Ok(TokenStream::new())
         }
         Strategy::Policy(policy_path) => {
+            if is_nonzero_type(ty) {
+                return Err(nonzero_policy_error(span));
+            }
+            if is_ip_address_type(ty) {
+                if !is_ip_address_policy(policy_path) {
+                    return Err(syn::Error::new(
+                        span,
+                        "IP address fields can only use #[sensitive(IpAddress)]",
+                    ));
+                }
+                let policy = policy_path.clone();
+                let sensitive_with_policy_path = crate_path("SensitiveWithPolicy");
+                let redaction_policy_path = crate_path("RedactionPolicy");
+                return Ok(quote_spanned! { span =>
+                    let #binding = <#ty as #sensitive_with_policy_path<#policy>>::redact_with_policy(
+                        #binding,
+                        &<#policy as #redaction_policy_path>::policy(),
+                    );
+                });
+            }
             if is_scalar_type(ty) {
                 if is_secret_policy(policy_path) {
                     Ok(quote_spanned! { span =>

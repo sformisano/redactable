@@ -72,6 +72,50 @@ pub(crate) fn is_scalar_type(ty: &syn::Type) -> bool {
     }
 }
 
+fn last_bare_segment_ident(ty: &syn::Type) -> Option<&syn::Ident> {
+    let syn::Type::Path(path) = ty else {
+        return None;
+    };
+    let segment = path.path.segments.last()?;
+    if !segment.arguments.is_empty() {
+        return None;
+    }
+    Some(&segment.ident)
+}
+
+/// Checks if a type is one of the standard `NonZero*` integer types.
+pub(crate) fn is_nonzero_type(ty: &syn::Type) -> bool {
+    let Some(ident) = last_bare_segment_ident(ty) else {
+        return false;
+    };
+    matches!(
+        ident.to_string().as_str(),
+        "NonZeroI8"
+            | "NonZeroI16"
+            | "NonZeroI32"
+            | "NonZeroI64"
+            | "NonZeroI128"
+            | "NonZeroIsize"
+            | "NonZeroU8"
+            | "NonZeroU16"
+            | "NonZeroU32"
+            | "NonZeroU64"
+            | "NonZeroU128"
+            | "NonZeroUsize"
+    )
+}
+
+/// Checks if a type is one of the built-in std IP address types.
+pub(crate) fn is_ip_address_type(ty: &syn::Type) -> bool {
+    let Some(ident) = last_bare_segment_ident(ty) else {
+        return false;
+    };
+    matches!(
+        ident.to_string().as_str(),
+        "IpAddr" | "Ipv4Addr" | "Ipv6Addr" | "SocketAddr"
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use quote::quote;
@@ -170,5 +214,23 @@ mod tests {
     fn absolute_path_is_not_scalar() {
         let ty = parse_type(quote! { ::std::primitive::i32 });
         assert!(!is_scalar_type(&ty));
+    }
+
+    #[test]
+    fn nonzero_type_detected() {
+        let ty = parse_type(quote! { NonZeroU32 });
+        assert!(is_nonzero_type(&ty));
+    }
+
+    #[test]
+    fn qualified_nonzero_type_detected() {
+        let ty = parse_type(quote! { std::num::NonZeroU32 });
+        assert!(is_nonzero_type(&ty));
+    }
+
+    #[test]
+    fn ip_address_type_detected() {
+        let ty = parse_type(quote! { std::net::IpAddr });
+        assert!(is_ip_address_type(&ty));
     }
 }

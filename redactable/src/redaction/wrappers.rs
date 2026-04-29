@@ -25,9 +25,13 @@ use crate::policy::RedactionPolicy;
 /// For external types, implement `SensitiveWithPolicy<P>` in your crate and
 /// wrap the value in `SensitiveValue<T, P>` to apply the policy.
 ///
-/// **Serialization:** when the `json` feature is enabled, `serde::Serialize`
-/// emits the raw inner value unchanged. This is intentional. If you need
-/// redacted JSON, use `.redacted()`, `.to_redacted_output()`, or
+/// # Serialization warning
+///
+/// When the `json` feature is enabled, `serde::Serialize` emits the raw inner
+/// value unchanged. This is intentional because application storage and wire
+/// formats usually need the real value. Logging integrations redact before
+/// serializing the log value; direct `serde` serialization does not. If you
+/// need redacted JSON, use `.redacted()`, `.to_redacted_output()`, or
 /// `redacted_json()` (from `RedactedJsonExt`) at the logging/serialization
 /// boundary instead of serializing the wrapper directly.
 ///

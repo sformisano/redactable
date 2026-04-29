@@ -6,7 +6,7 @@
 //! Unannotated fields referenced in a template use `RedactableWithFormatter` by default.
 //! Use `#[not_sensitive]` for raw output or `#[sensitive(Policy)]` for policy redaction.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use proc_macro2::{Ident, Span, TokenStream};
 use quote::{format_ident, quote, quote_spanned};
@@ -16,7 +16,7 @@ use crate::{
     crate_path,
     generics::collect_generics_from_type,
     strategy::{Strategy, parse_field_strategy},
-    types::is_scalar_type,
+    types::{is_ip_address_type, is_nonzero_type, is_scalar_type},
 };
 
 pub(crate) struct RedactedDisplayOutput {
@@ -169,6 +169,7 @@ fn build_fields_from_syn(fields: &Fields) -> Result<Vec<FieldInfo<'_>>> {
             .iter()
             .map(|field| {
                 let strategy = parse_field_strategy(&field.attrs)?;
+                validate_policy_type(&field.ty, &strategy, field.span())?;
                 let ident = field
                     .ident
                     .clone()
@@ -187,6 +188,7 @@ fn build_fields_from_syn(fields: &Fields) -> Result<Vec<FieldInfo<'_>>> {
             .enumerate()
             .map(|(index, field)| {
                 let strategy = parse_field_strategy(&field.attrs)?;
+                validate_policy_type(&field.ty, &strategy, field.span())?;
                 Ok(FieldInfo {
                     ident: format_ident!("field_{index}"),
                     ty: &field.ty,
@@ -199,6 +201,38 @@ fn build_fields_from_syn(fields: &Fields) -> Result<Vec<FieldInfo<'_>>> {
     }
 }
 
+fn is_secret_policy(path: &syn::Path) -> bool {
+    path.is_ident("Secret")
+}
+
+fn is_ip_address_policy(path: &syn::Path) -> bool {
+    path.is_ident("IpAddress")
+}
+
+fn validate_policy_type(
+    ty: &syn::Type,
+    strategy: &Strategy,
+    span: proc_macro2::Span,
+) -> Result<()> {
+    let Strategy::Policy(policy) = strategy else {
+        return Ok(());
+    };
+    if is_nonzero_type(ty) {
+        return Err(syn::Error::new(
+            span,
+            "NonZero integer fields cannot use #[sensitive(Policy)] because redaction \
+             may need to produce zero; use a nullable scalar or a policy-aware wrapper",
+        ));
+    }
+    if is_ip_address_type(ty) && !is_ip_address_policy(policy) {
+        return Err(syn::Error::new(
+            span,
+            "IP address fields can only use #[sensitive(IpAddress)]",
+        ));
+    }
+    Ok(())
+}
+
 #[allow(clippy::too_many_lines)]
 fn build_format_args(
     template: &LitStr,
@@ -206,6 +240,7 @@ fn build_format_args(
     generics: &syn::Generics,
 ) -> Result<FormatArgsOutput> {
     let placeholders = parse_placeholders(template)?;
+    validate_positional_placeholders(&placeholders)?;
     let mut named_args: BTreeMap<String, (Ident, &'_ FieldInfo<'_>, FormatMode)> = BTreeMap::new();
     let mut positional_args: Vec<Option<(Ident, &'_ FieldInfo<'_>, FormatMode)>> = Vec::new();
     let mut display_generics = Vec::new();
@@ -257,6 +292,8 @@ fn build_format_args(
 
     for (name, (arg_ident, field, mode)) in named_args {
         let expr = redacted_expr_for_field(field);
+        let wrap_policy_output = should_wrap_policy_output(field);
+        let policy_format_path = crate_path("PolicyRedactedFormatterRef");
         collect_bounds(
             field,
             mode,
@@ -269,12 +306,19 @@ fn build_format_args(
         prelude_bindings.push(quote! {
             let #arg_ident = #expr;
         });
+        if wrap_policy_output {
+            prelude_bindings.push(quote! {
+                let #arg_ident = #policy_format_path::new(&#arg_ident);
+            });
+        }
         let name_ident = format_ident!("{name}");
         named_pairs.push(quote! { #name_ident = #arg_ident });
     }
 
     for (arg_ident, field, mode) in positional_args.into_iter().flatten() {
         let expr = redacted_expr_for_field(field);
+        let wrap_policy_output = should_wrap_policy_output(field);
+        let policy_format_path = crate_path("PolicyRedactedFormatterRef");
         collect_bounds(
             field,
             mode,
@@ -287,6 +331,11 @@ fn build_format_args(
         prelude_bindings.push(quote! {
             let #arg_ident = #expr;
         });
+        if wrap_policy_output {
+            prelude_bindings.push(quote! {
+                let #arg_ident = #policy_format_path::new(&#arg_ident);
+            });
+        }
         positional_idents.push(arg_ident);
     }
 
@@ -313,12 +362,21 @@ fn build_format_args(
     })
 }
 
+fn should_wrap_policy_output(field: &FieldInfo<'_>) -> bool {
+    match &field.strategy {
+        Strategy::Policy(policy) => !(is_scalar_type(field.ty) && is_secret_policy(policy)),
+        Strategy::WalkDefault | Strategy::NotSensitive => false,
+    }
+}
+
 fn redacted_expr_for_field(field: &FieldInfo<'_>) -> TokenStream {
     let ident = &field.ident;
     let span = field.span;
     let scalar_path = crate_path("ScalarRedaction");
     let apply_policy_ref_path = crate_path("apply_policy_ref");
     let redacted_display_path = crate_path("RedactableWithFormatter");
+    let sensitive_with_policy_path = crate_path("SensitiveWithPolicy");
+    let redaction_policy_path = crate_path("RedactionPolicy");
     let field_ty = field.ty;
     match &field.strategy {
         Strategy::WalkDefault => quote_spanned! { span =>
@@ -328,9 +386,17 @@ fn redacted_expr_for_field(field: &FieldInfo<'_>) -> TokenStream {
             #ident
         },
         Strategy::Policy(policy) => {
-            if is_scalar_type(field.ty) && policy.is_ident("Secret") {
+            if is_scalar_type(field.ty) && is_secret_policy(policy) {
                 quote_spanned! { span =>
                     #scalar_path::redact(*#ident)
+                }
+            } else if is_ip_address_type(field.ty) {
+                let policy = policy.clone();
+                quote_spanned! { span =>
+                    <#field_ty as #sensitive_with_policy_path<#policy>>::redacted_string(
+                        #ident,
+                        &<#policy as #redaction_policy_path>::policy(),
+                    )
                 }
             } else {
                 let policy = policy.clone();
@@ -364,7 +430,10 @@ fn collect_bounds(
             }
         },
         Strategy::Policy(policy) => {
-            if is_scalar_type(field.ty) && policy.is_ident("Secret") {
+            if is_scalar_type(field.ty) && is_secret_policy(policy) {
+                return;
+            }
+            if is_ip_address_type(field.ty) {
                 return;
             }
             collect_generics_from_type(field.ty, generics, policy_ref_generics);
@@ -380,6 +449,38 @@ fn collect_bounds(
             }
         }
     }
+}
+
+fn validate_positional_placeholders(placeholders: &[Placeholder]) -> Result<()> {
+    let indexes: BTreeSet<usize> = placeholders
+        .iter()
+        .filter_map(|placeholder| match placeholder.key {
+            PlaceholderKey::Index(index) => Some(index),
+            PlaceholderKey::Named(_) => None,
+        })
+        .collect();
+
+    let Some(max_index) = indexes.iter().next_back().copied() else {
+        return Ok(());
+    };
+
+    for expected in 0..=max_index {
+        if !indexes.contains(&expected) {
+            let span = placeholders
+                .iter()
+                .find_map(|placeholder| match placeholder.key {
+                    PlaceholderKey::Index(index) if index > expected => Some(placeholder.span),
+                    PlaceholderKey::Named(_) | PlaceholderKey::Index(_) => None,
+                })
+                .unwrap_or_else(Span::call_site);
+            return Err(syn::Error::new(
+                span,
+                "positional placeholders must be contiguous starting at 0",
+            ));
+        }
+    }
+
+    Ok(())
 }
 
 fn merge_mode(existing: FormatMode, next: FormatMode) -> FormatMode {

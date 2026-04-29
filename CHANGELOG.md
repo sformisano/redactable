@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.7.1
+
+### Fixed
+- Narrowed the logging-safe `ToRedactedOutput` boundary so raw passthrough values like `String`
+  no longer qualify as redacted output without an explicit wrapper or derived container.
+- Made `SensitiveDisplay` policy formatting work for redacted containers such as `Option<String>`
+  and `Vec<String>` in `{field}` templates.
+- Restored IP address handling to the opt-in model. Unannotated IP address fields pass through
+  unchanged, while `#[sensitive(IpAddress)]` still redacts them.
+- Made the `ip-address` feature enable the redaction surface it depends on.
+- Added clearer compile-time errors for sparse positional templates, unsupported format syntax,
+  and `NonZero*` fields annotated with redaction policies.
+- Removed `json`-only dead-code warnings from the `RedactedJson` internals.
+
+### Documentation
+- Documented the `serde_json::Value` default-redact exception, raw serialization behavior for
+  `SensitiveValue`, derived `Debug` placeholder behavior, empty string redaction, and supported
+  `SensitiveDisplay` format syntax.
+
 ## 0.7.0
 
 ### Added

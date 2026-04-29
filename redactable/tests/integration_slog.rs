@@ -12,7 +12,7 @@ use std::{cell::RefCell, collections::HashMap, fmt, fmt::Arguments};
 use redactable::{
     Email, NotSensitiveJsonExt, PhoneNumber, Pii, RedactableMapper, RedactableWithFormatter,
     RedactableWithMapper, RedactedJsonExt, RedactedOutput, RedactionPolicy, Secret, Sensitive,
-    SensitiveDisplay, TextRedactionPolicy, ToRedactedOutput, Token,
+    SensitiveDisplay, SensitiveValue, TextRedactionPolicy, ToRedactedOutput, Token,
     slog::{SlogRedacted, SlogRedactedExt},
 };
 use serde::Serialize;
@@ -632,6 +632,24 @@ mod redacted_json {
             assert_eq!(json["user"], "alice");
         } else {
             panic!("Expected Json output");
+        }
+    }
+}
+
+mod sensitive_value {
+    use super::*;
+
+    #[test]
+    fn slog_serialization_emits_redacted_value() {
+        let token = SensitiveValue::<String, Token>::from(String::from("sk-secret-12345"));
+
+        let mut serializer = CapturingSerializer::new();
+        serialize_to_capture(&token, "token", &mut serializer);
+
+        if let Some(CapturedValue::Str(value)) = serializer.get("token") {
+            assert_eq!(value, "***********2345");
+        } else {
+            panic!("Expected Str value for 'token' key");
         }
     }
 }

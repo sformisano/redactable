@@ -24,7 +24,7 @@ mod wrappers;
 
 // Re-export core traits
 // Re-export display types
-pub use display::{RedactableWithFormatter, RedactedFormatterRef};
+pub use display::{PolicyRedactedFormatterRef, RedactableWithFormatter, RedactedFormatterRef};
 // Re-export escape hatches
 pub use escape_hatches::{
     NotSensitive, NotSensitiveDebug, NotSensitiveDebugExt, NotSensitiveDisplay,

@@ -1,0 +1,5 @@
+error: unsupported format specifier `x`; only Display and Debug are supported
+ --> tests/ui/sensitive_display_unsupported_specifier_rejected.rs:4:9
+  |
+4 | #[error("value {value:x}")]
+  |         ^^^^^^^^^^^^^^^^^

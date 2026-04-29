@@ -5,6 +5,7 @@ use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV
 use crate::{
     policy::IpAddress,
     redaction::{
+        display::RedactableWithFormatter,
         redact::RedactableMapper,
         traits::{RedactableWithMapper, SensitiveWithPolicy},
     },
@@ -89,25 +90,49 @@ impl SensitiveWithPolicy<IpAddress> for SocketAddr {
 }
 
 impl RedactableWithMapper for Ipv4Addr {
-    fn redact_with<M: RedactableMapper>(self, mapper: &M) -> Self {
-        mapper.map_sensitive::<Self, IpAddress>(self)
+    fn redact_with<M: RedactableMapper>(self, _mapper: &M) -> Self {
+        self
     }
 }
 
 impl RedactableWithMapper for Ipv6Addr {
-    fn redact_with<M: RedactableMapper>(self, mapper: &M) -> Self {
-        mapper.map_sensitive::<Self, IpAddress>(self)
+    fn redact_with<M: RedactableMapper>(self, _mapper: &M) -> Self {
+        self
     }
 }
 
 impl RedactableWithMapper for IpAddr {
-    fn redact_with<M: RedactableMapper>(self, mapper: &M) -> Self {
-        mapper.map_sensitive::<Self, IpAddress>(self)
+    fn redact_with<M: RedactableMapper>(self, _mapper: &M) -> Self {
+        self
     }
 }
 
 impl RedactableWithMapper for SocketAddr {
-    fn redact_with<M: RedactableMapper>(self, mapper: &M) -> Self {
-        mapper.map_sensitive::<Self, IpAddress>(self)
+    fn redact_with<M: RedactableMapper>(self, _mapper: &M) -> Self {
+        self
+    }
+}
+
+impl RedactableWithFormatter for Ipv4Addr {
+    fn fmt_redacted(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        std::fmt::Display::fmt(self, f)
+    }
+}
+
+impl RedactableWithFormatter for Ipv6Addr {
+    fn fmt_redacted(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        std::fmt::Display::fmt(self, f)
+    }
+}
+
+impl RedactableWithFormatter for IpAddr {
+    fn fmt_redacted(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        std::fmt::Display::fmt(self, f)
+    }
+}
+
+impl RedactableWithFormatter for SocketAddr {
+    fn fmt_redacted(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        std::fmt::Display::fmt(self, f)
     }
 }

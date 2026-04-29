@@ -630,6 +630,15 @@ fn expand(input: DeriveInput, kind: DeriveKind) -> Result<TokenStream> {
                 }
             }
         };
+        let to_redacted_output_impl = quote! {
+            impl #display_impl_generics #crate_root::ToRedactedOutput for #ident #display_ty_generics #display_where_clause {
+                fn to_redacted_output(&self) -> #crate_root::RedactedOutput {
+                    #crate_root::RedactedOutput::Text(
+                        #crate_root::RedactableWithFormatter::redacted_display(self).to_string(),
+                    )
+                }
+            }
+        };
 
         let debug_output = derive_unredacted_debug(&ident, &data, &generics)?;
         let debug_unredacted_generics = add_debug_bounds(generics.clone(), &debug_output.generics);
@@ -716,6 +725,7 @@ fn expand(input: DeriveInput, kind: DeriveKind) -> Result<TokenStream> {
 
         return Ok(quote! {
             #redacted_display_impl
+            #to_redacted_output_impl
             #debug_impl
             #slog_impl
             #tracing_impl

@@ -258,24 +258,68 @@ fn cell_passthrough_unchanged() {
 
 #[cfg(feature = "ip-address")]
 #[test]
-fn ipaddr_redacts_by_default() {
+fn ipaddr_passthrough_unchanged() {
     use std::net::IpAddr;
 
     let ip: IpAddr = "192.168.1.100".parse().expect("valid IPv4");
     let redacted = ip.redact();
 
-    assert_eq!(redacted, "0.0.0.100".parse::<IpAddr>().unwrap());
+    assert_eq!(redacted, ip);
 }
 
 #[cfg(feature = "ip-address")]
 #[test]
-fn socketaddr_redacts_ip_only() {
+fn socketaddr_passthrough_unchanged() {
     use std::net::SocketAddr;
 
     let addr: SocketAddr = "10.1.2.3:443".parse().expect("valid socket addr");
     let redacted = addr.redact();
 
-    assert_eq!(redacted, "0.0.0.3:443".parse::<SocketAddr>().unwrap());
+    assert_eq!(redacted, addr);
+}
+
+#[cfg(feature = "ip-address")]
+#[test]
+fn annotated_ipaddr_redacts() {
+    use std::net::{IpAddr, SocketAddr};
+
+    use crate::{IpAddress, RedactableWithFormatter, SensitiveDisplay};
+
+    #[derive(Clone, Sensitive)]
+    #[cfg_attr(feature = "slog", derive(serde::Serialize))]
+    struct Connection {
+        #[sensitive(IpAddress)]
+        ip: IpAddr,
+        #[sensitive(IpAddress)]
+        socket: SocketAddr,
+    }
+
+    #[derive(SensitiveDisplay)]
+    #[error("client {ip}")]
+    struct DisplayConnection {
+        #[sensitive(IpAddress)]
+        ip: IpAddr,
+    }
+
+    let connection = Connection {
+        ip: "192.168.1.100".parse().expect("valid IPv4"),
+        socket: "10.1.2.3:443".parse().expect("valid socket addr"),
+    };
+    let redacted = connection.redact();
+
+    assert_eq!(redacted.ip, "0.0.0.100".parse::<IpAddr>().unwrap());
+    assert_eq!(
+        redacted.socket,
+        "0.0.0.3:443".parse::<SocketAddr>().unwrap()
+    );
+
+    let display_connection = DisplayConnection {
+        ip: "192.168.1.100".parse().expect("valid IPv4"),
+    };
+    assert_eq!(
+        display_connection.redacted_display().to_string(),
+        "client 0.0.0.100"
+    );
 }
 
 // =============================================================================

@@ -1,0 +1,5 @@
+error: positional placeholders must be contiguous starting at 0
+ --> tests/ui/sensitive_display_sparse_positional_rejected.rs:5:13
+  |
+5 |     #[error("second field {1}")]
+  |             ^^^^^^^^^^^^^^^^^^

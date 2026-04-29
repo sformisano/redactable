@@ -14,7 +14,6 @@ use serde::Serialize;
 use serde_json::Value as JsonValue;
 
 use super::{
-    display::RedactableWithFormatter,
     traits::{Redactable, SensitiveWithPolicy},
     wrappers::SensitiveValue,
 };
@@ -37,6 +36,10 @@ pub enum RedactedOutput {
 // =============================================================================
 
 /// Produces a logging-safe output representation.
+///
+/// This trait is intentionally narrower than [`RedactableWithFormatter`].
+/// Passthrough scalar formatting is useful inside redacted templates, but it
+/// does not certify a raw value as safe at a logging boundary.
 pub trait ToRedactedOutput {
     #[must_use]
     fn to_redacted_output(&self) -> RedactedOutput;
@@ -45,15 +48,6 @@ pub trait ToRedactedOutput {
 impl ToRedactedOutput for RedactedOutput {
     fn to_redacted_output(&self) -> RedactedOutput {
         self.clone()
-    }
-}
-
-impl<T> ToRedactedOutput for T
-where
-    T: RedactableWithFormatter,
-{
-    fn to_redacted_output(&self) -> RedactedOutput {
-        RedactedOutput::Text(format!("{}", self.redacted_display()))
     }
 }
 
@@ -115,10 +109,12 @@ pub struct RedactedJson {
 
 #[cfg(feature = "json")]
 impl RedactedJson {
+    #[cfg(feature = "slog")]
     pub(crate) fn new(value: JsonValue) -> Self {
         Self { value }
     }
 
+    #[cfg(feature = "slog")]
     pub(crate) fn value(&self) -> &JsonValue {
         &self.value
     }

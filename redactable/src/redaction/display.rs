@@ -68,6 +68,32 @@ impl<T: RedactableWithFormatter + ?Sized> std::fmt::Debug for RedactedFormatterR
     }
 }
 
+/// Formatting wrapper for values after a field-level policy was applied.
+///
+/// Display formatting uses redacted container formatting so policy-redacted
+/// containers can appear in `{field}` templates. Debug formatting stays aligned
+/// with Rust's ordinary `Debug` output for the already-redacted value.
+#[doc(hidden)]
+pub struct PolicyRedactedFormatterRef<'a, T: ?Sized>(&'a T);
+
+impl<'a, T: ?Sized> PolicyRedactedFormatterRef<'a, T> {
+    pub fn new(value: &'a T) -> Self {
+        Self(value)
+    }
+}
+
+impl<T: RedactableWithFormatter + ?Sized> std::fmt::Display for PolicyRedactedFormatterRef<'_, T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.0.fmt_redacted(f)
+    }
+}
+
+impl<T: std::fmt::Debug + ?Sized> std::fmt::Debug for PolicyRedactedFormatterRef<'_, T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        std::fmt::Debug::fmt(self.0, f)
+    }
+}
+
 // =============================================================================
 // Passthrough RedactableWithFormatter implementations
 // =============================================================================

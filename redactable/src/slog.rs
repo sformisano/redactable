@@ -205,18 +205,19 @@ impl<'a, T: ?Sized> RedactedDisplayValue<'a, T> {
     }
 }
 
-// Special case: delegates to the inner value's `to_redacted_output`, not `self`.
+// Special case: formats directly through RedactableWithFormatter.
 impl<T> SlogValue for RedactedDisplayValue<'_, T>
 where
     T: RedactableWithFormatter,
 {
     fn serialize(
         &self,
-        record: &Record<'_>,
+        _record: &Record<'_>,
         key: Key,
         serializer: &mut dyn Serializer,
     ) -> SlogResult {
-        emit_output(&self.0.to_redacted_output(), record, key, serializer)
+        let redacted = self.0.redacted_display();
+        serializer.emit_arguments(key, &format_args!("{redacted}"))
     }
 }
 

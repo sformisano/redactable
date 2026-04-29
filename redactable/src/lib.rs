@@ -95,6 +95,9 @@ pub use redaction::{
 // Re-exports from redaction module: internal machinery (used by derive-generated code)
 #[doc(hidden)]
 #[cfg(feature = "redaction")]
+pub use redaction::PolicyRedactedFormatterRef;
+#[doc(hidden)]
+#[cfg(feature = "redaction")]
 pub use redaction::{
     PolicyApplicable, PolicyApplicableRef, RedactableMapper, RedactableWithFormatter,
     RedactableWithMapper, RedactedFormatterRef, ScalarRedaction, apply_policy, apply_policy_ref,

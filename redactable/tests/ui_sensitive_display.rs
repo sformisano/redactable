@@ -22,4 +22,28 @@ mod sensitive_display {
         let t = trybuild::TestCases::new();
         t.pass("tests/ui/sensitive_display_nested_ok.rs");
     }
+
+    #[test]
+    fn accepts_policy_redacted_containers() {
+        let t = trybuild::TestCases::new();
+        t.pass("tests/ui/sensitive_display_policy_containers_ok.rs");
+    }
+
+    #[test]
+    fn rejects_sparse_positional_placeholders() {
+        let t = trybuild::TestCases::new();
+        t.compile_fail("tests/ui/sensitive_display_sparse_positional_rejected.rs");
+    }
+
+    #[test]
+    fn rejects_dynamic_width_or_precision() {
+        let t = trybuild::TestCases::new();
+        t.compile_fail("tests/ui/sensitive_display_dynamic_width_rejected.rs");
+    }
+
+    #[test]
+    fn rejects_unsupported_format_specifier() {
+        let t = trybuild::TestCases::new();
+        t.compile_fail("tests/ui/sensitive_display_unsupported_specifier_rejected.rs");
+    }
 }
