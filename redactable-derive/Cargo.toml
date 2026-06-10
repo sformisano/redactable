@@ -11,6 +11,9 @@ homepage.workspace = true
 keywords = ["redaction", "privacy", "security", "macro", "derive"]
 categories = ["development-tools"]
 
+[package.metadata.docs.rs]
+all-features = true
+
 [lib]
 proc-macro = true
 
