@@ -40,5 +40,6 @@ time = { version = "0.3", optional = true }
 uuid = { version = "1", optional = true }
 
 [dev-dependencies]
+redactable-test-fixtures = { path = "../test-fixtures" }
 serde = { version = "1", features = ["derive"] }
 trybuild = "1"

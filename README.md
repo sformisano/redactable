@@ -102,7 +102,7 @@ assert_eq!(err.redacted_display(), "login failed for alice with [REDACTED]");
 | `Sensitive` | Same type with redacted leaves (via `RedactableWithMapper`) | ✅ (redacted) | ✅ |
 | `SensitiveDisplay` | Redacted string (via `RedactableWithFormatter`) | ✅ (redacted) | ✅ |
 
-- Both generate a conditional `Debug` impl: redacted output in production, actual values in test builds (`cfg(test)` or `feature = "testing"`). This means all field types must implement `Debug`.
+- Both generate a conditional `Debug` impl: redacted output by default, actual values in your crate's `cfg(test)` builds or when the `redactable/testing` feature is enabled. This means all field types must implement `Debug`.
 - Both generate `slog::Value` + `SlogRedacted` (requires `slog` feature) and `TracingRedacted` (requires `tracing` feature). `Sensitive` emits structured JSON via slog (requires `Serialize`). `SensitiveDisplay` emits the redacted display string.
 - `Sensitive` requires `Clone` since `.redact()` consumes `self`. `SensitiveDisplay` works by reference, so no `Clone` is needed.
 - `SensitiveDisplay` does not generate `RedactableWithMapper`. If a type needs both structural traversal **and** display formatting (e.g., a newtype that lives inside a `Sensitive` container but also needs `.redacted_display()`), derive both on the same type with `#[sensitive(dual)]`:
@@ -560,7 +560,7 @@ enum RetryDecision {
 
 About `Debug`:
 
-- `Sensitive` and `SensitiveDisplay` generate a conditional impl: redacted in production, actual values in `cfg(test)` or `feature = "testing"`. When deriving both, use `#[sensitive(dual)]` to avoid conflicting impls.
+- `Sensitive` and `SensitiveDisplay` generate a conditional impl: redacted by default, actual values in your crate's `cfg(test)` builds or when the `redactable/testing` feature is enabled. When deriving both, use `#[sensitive(dual)]` to avoid conflicting impls.
 - `NotSensitive` and `NotSensitiveDisplay` do not override `Debug`. There is nothing to redact. Add `#[derive(Debug)]` separately when you need it.
 
 ## Wrapper types
@@ -668,7 +668,7 @@ Compare with `#[sensitive(P)]` attributes, where the field is a bare type at run
 | **slog/tracing safety** | ✅ Via container | ✅ Direct |
 
 \* The `Sensitive` and `SensitiveDisplay` derives generate `Debug` impls that show `[REDACTED]`
-  for sensitive data (disabled in test mode via `cfg(test)` or `feature = "testing"`). This is intentionally stronger than policy-shaped output: derived redacted `Debug` uses the generic placeholder rather than preserving `Email`, `Token`, or other policy-specific shapes. Use `.redact()` plus serialization or logging when you need policy-shaped output.
+  for sensitive data (disabled in your crate's `cfg(test)` builds or via the `redactable/testing` feature). This is intentionally stronger than policy-shaped output: derived redacted `Debug` uses the generic placeholder rather than preserving `Email`, `Token`, or other policy-specific shapes. Use `.redact()` plus serialization or logging when you need policy-shaped output.
 
 ⚠️ **Things to keep in mind:**
 

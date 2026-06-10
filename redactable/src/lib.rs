@@ -61,6 +61,18 @@
 
 pub use redactable_derive::{NotSensitive, NotSensitiveDisplay, Sensitive, SensitiveDisplay};
 
+/// Whether `redactable` itself was compiled with the `testing` feature.
+///
+/// Derive-generated `Debug` impls branch on `cfg!(test) || redactable::__TESTING`
+/// to decide between raw and redacted output. `cfg!(test)` is evaluated in the
+/// consumer crate, so a consumer's own tests still see raw values. This constant
+/// reflects `redactable`'s feature, so enabling `redactable/testing` reveals raw
+/// `Debug` output regardless of the consumer's own feature names.
+///
+/// Not part of the public API; used only by generated code.
+#[doc(hidden)]
+pub const __TESTING: bool = cfg!(feature = "testing");
+
 #[allow(unused_extern_crates)]
 extern crate self as redactable;
 

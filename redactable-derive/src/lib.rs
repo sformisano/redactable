@@ -125,8 +125,8 @@ use redacted_display::derive_redacted_display;
 /// # Generated Impls
 ///
 /// - `RedactableWithMapper`: always generated.
-/// - `Debug`: redacted in production, actual values in test/testing builds. Skipped when
-///   `#[sensitive(dual)]` is set.
+/// - `Debug`: redacted by default; actual values in the consumer's `cfg(test)` builds or when
+///   `redactable`'s `testing` feature is enabled. Skipped when `#[sensitive(dual)]` is set.
 /// - `slog::Value` + `SlogRedacted` (requires `slog` feature): implemented by cloning the value
 ///   and routing it through `redactable::slog::SlogRedactedExt`. Requires `Clone` and
 ///   `serde::Serialize` because it emits structured JSON. The derive first looks for a top-level
@@ -493,7 +493,8 @@ fn expand_not_sensitive_display(input: DeriveInput) -> Result<TokenStream> {
 /// # Generated Impls
 ///
 /// - `RedactableWithFormatter`: always generated.
-/// - `Debug`: redacted in production, actual values in test/testing builds.
+/// - `Debug`: redacted by default; actual values in the consumer's `cfg(test)` builds or when
+///   `redactable`'s `testing` feature is enabled.
 /// - `slog::Value` + `SlogRedacted`: emits the redacted display string (requires `slog` feature).
 ///   Skipped when `#[sensitive(dual)]` is set (Sensitive provides them instead).
 /// - `TracingRedacted`: marker trait (requires `tracing` feature).
@@ -569,7 +570,6 @@ pub(crate) struct DeriveOutput {
     pub(crate) used_generics: Vec<Ident>,
     pub(crate) policy_applicable_generics: Vec<Ident>,
     pub(crate) debug_redacted_body: TokenStream,
-    pub(crate) debug_redacted_generics: Vec<Ident>,
     pub(crate) debug_unredacted_body: TokenStream,
     pub(crate) debug_unredacted_generics: Vec<Ident>,
 }
@@ -641,27 +641,25 @@ fn expand(input: DeriveInput, kind: DeriveKind) -> Result<TokenStream> {
         };
 
         let debug_output = derive_unredacted_debug(&ident, &data, &generics)?;
-        let debug_unredacted_generics = add_debug_bounds(generics.clone(), &debug_output.generics);
-        let (
-            debug_unredacted_impl_generics,
-            debug_unredacted_ty_generics,
-            debug_unredacted_where_clause,
-        ) = debug_unredacted_generics.split_for_impl();
-        let (debug_redacted_impl_generics, debug_redacted_ty_generics, debug_redacted_where_clause) =
-            redacted_display_generics.split_for_impl();
+        // A single impl branches at runtime on `cfg!(test) || redactable::__TESTING`
+        // rather than emitting two `#[cfg]`-gated impls. The `feature = "testing"`
+        // check must resolve against `redactable`'s own feature, not the consumer's,
+        // so it is routed through the `__TESTING` constant. The where-clause is the
+        // union of the formatter bounds (redacted body) and the Debug bounds
+        // (unredacted body) because both bodies live in the same impl.
+        let debug_generics =
+            add_debug_bounds(redacted_display_generics.clone(), &debug_output.generics);
+        let (debug_impl_generics, debug_ty_generics, debug_where_clause) =
+            debug_generics.split_for_impl();
         let debug_unredacted_body = debug_output.body;
         let debug_impl = quote! {
-            #[cfg(any(test, feature = "testing"))]
-            impl #debug_unredacted_impl_generics ::core::fmt::Debug for #ident #debug_unredacted_ty_generics #debug_unredacted_where_clause {
+            impl #debug_impl_generics ::core::fmt::Debug for #ident #debug_ty_generics #debug_where_clause {
                 fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
-                    #debug_unredacted_body
-                }
-            }
-
-            #[cfg(not(any(test, feature = "testing")))]
-            impl #debug_redacted_impl_generics ::core::fmt::Debug for #ident #debug_redacted_ty_generics #debug_redacted_where_clause {
-                fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
-                    #crate_root::RedactableWithFormatter::fmt_redacted(self, f)
+                    if ::core::cfg!(test) || #crate_root::__TESTING {
+                        #debug_unredacted_body
+                    } else {
+                        #crate_root::RedactableWithFormatter::fmt_redacted(self, f)
+                    }
                 }
             }
         };
@@ -749,10 +747,8 @@ fn expand(input: DeriveInput, kind: DeriveKind) -> Result<TokenStream> {
     let policy_generics =
         add_policy_applicable_bounds(policy_generics, &derive_output.policy_applicable_generics);
     let (impl_generics, ty_generics, where_clause) = policy_generics.split_for_impl();
-    let debug_redacted_generics =
-        add_debug_bounds(generics.clone(), &derive_output.debug_redacted_generics);
-    let (debug_redacted_impl_generics, debug_redacted_ty_generics, debug_redacted_where_clause) =
-        debug_redacted_generics.split_for_impl();
+    // The merged Debug impl uses the unredacted bounds (a superset of the
+    // redacted bounds) because both bodies share one impl.
     let debug_unredacted_generics =
         add_debug_bounds(generics.clone(), &derive_output.debug_unredacted_generics);
     let (
@@ -764,21 +760,24 @@ fn expand(input: DeriveInput, kind: DeriveKind) -> Result<TokenStream> {
     let debug_redacted_body = &derive_output.debug_redacted_body;
     let debug_unredacted_body = &derive_output.debug_unredacted_body;
     // In dual mode, SensitiveDisplay provides Debug — skip it here.
+    //
+    // A single impl branches at runtime on `cfg!(test) || redactable::__TESTING`
+    // rather than emitting two `#[cfg]`-gated impls. The `feature = "testing"`
+    // check must resolve against `redactable`'s own feature, not the consumer's,
+    // so it is routed through the `__TESTING` constant. The where-clause uses the
+    // unredacted bounds (a superset of the redacted bounds) because both bodies
+    // live in the same impl.
     let debug_impl = if dual {
         quote! {}
     } else {
         quote! {
-            #[cfg(any(test, feature = "testing"))]
             impl #debug_unredacted_impl_generics ::core::fmt::Debug for #ident #debug_unredacted_ty_generics #debug_unredacted_where_clause {
                 fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
-                    #debug_unredacted_body
-                }
-            }
-
-            #[cfg(not(any(test, feature = "testing")))]
-            impl #debug_redacted_impl_generics ::core::fmt::Debug for #ident #debug_redacted_ty_generics #debug_redacted_where_clause {
-                fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
-                    #debug_redacted_body
+                    if ::core::cfg!(test) || #crate_root::__TESTING {
+                        #debug_unredacted_body
+                    } else {
+                        #debug_redacted_body
+                    }
                 }
             }
         }

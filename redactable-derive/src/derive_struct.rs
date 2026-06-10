@@ -29,7 +29,6 @@ pub(crate) fn derive_struct(
             debug_redacted_body: quote! {
                 f.write_str(stringify!(#name))
             },
-            debug_redacted_generics: Vec::new(),
             debug_unredacted_body: quote! {
                 f.write_str(stringify!(#name))
             },
@@ -51,7 +50,6 @@ fn derive_named_struct(
     let mut debug_redacted_fields = Vec::new();
     let mut debug_redacted_patterns = Vec::new();
     let mut debug_unredacted_fields = Vec::new();
-    let mut debug_redacted_generics = Vec::new();
     let mut debug_unredacted_generics = Vec::new();
 
     let mut ctx = DeriveContext {
@@ -59,7 +57,6 @@ fn derive_named_struct(
         container_path,
         used_generics: &mut used_generics,
         policy_applicable_generics: &mut policy_applicable_generics,
-        debug_redacted_generics: &mut debug_redacted_generics,
         debug_unredacted_generics: &mut debug_unredacted_generics,
     };
 
@@ -113,7 +110,6 @@ fn derive_named_struct(
                 }
             }
         },
-        debug_redacted_generics,
         debug_unredacted_body: quote! {
             match self {
                 Self { #(#bindings),* } => {
@@ -140,7 +136,6 @@ fn derive_unnamed_struct(
     let mut debug_redacted_fields = Vec::new();
     let mut debug_redacted_patterns = Vec::new();
     let mut debug_unredacted_fields = Vec::new();
-    let mut debug_redacted_generics = Vec::new();
     let mut debug_unredacted_generics = Vec::new();
 
     let mut ctx = DeriveContext {
@@ -148,7 +143,6 @@ fn derive_unnamed_struct(
         container_path,
         used_generics: &mut used_generics,
         policy_applicable_generics: &mut policy_applicable_generics,
-        debug_redacted_generics: &mut debug_redacted_generics,
         debug_unredacted_generics: &mut debug_unredacted_generics,
     };
 
@@ -202,7 +196,6 @@ fn derive_unnamed_struct(
                 }
             }
         },
-        debug_redacted_generics,
         debug_unredacted_body: quote! {
             match self {
                 Self ( #(#bindings),* ) => {

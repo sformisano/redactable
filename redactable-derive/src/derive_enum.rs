@@ -33,7 +33,6 @@ pub(crate) fn derive_enum(
     let mut policy_applicable_generics = Vec::new();
     let mut debug_redacted_arms = Vec::new();
     let mut debug_unredacted_arms = Vec::new();
-    let mut debug_redacted_generics = Vec::new();
     let mut debug_unredacted_generics = Vec::new();
 
     for variant in data.variants {
@@ -50,7 +49,6 @@ pub(crate) fn derive_enum(
             container_path: &container_path,
             used_generics: &mut used_generics,
             policy_applicable_generics: &mut policy_applicable_generics,
-            debug_redacted_generics: &mut debug_redacted_generics,
             debug_unredacted_generics: &mut debug_unredacted_generics,
         };
 
@@ -90,7 +88,6 @@ pub(crate) fn derive_enum(
         used_generics,
         policy_applicable_generics,
         debug_redacted_body,
-        debug_redacted_generics,
         debug_unredacted_body,
         debug_unredacted_generics,
     })

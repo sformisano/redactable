@@ -23,7 +23,6 @@ pub(crate) struct DeriveContext<'a> {
     pub(crate) container_path: &'a TokenStream,
     pub(crate) used_generics: &'a mut Vec<Ident>,
     pub(crate) policy_applicable_generics: &'a mut Vec<Ident>,
-    pub(crate) debug_redacted_generics: &'a mut Vec<Ident>,
     pub(crate) debug_unredacted_generics: &'a mut Vec<Ident>,
 }
 
@@ -72,7 +71,6 @@ pub(crate) fn generate_field_transform(
                 Ok(TokenStream::new())
             } else {
                 collect_generics_from_type(ty, ctx.generics, ctx.used_generics);
-                collect_generics_from_type(ty, ctx.generics, ctx.debug_redacted_generics);
                 collect_generics_from_type(ty, ctx.generics, ctx.debug_unredacted_generics);
                 Ok(quote_spanned! { span =>
                     let #binding = #container_path::redact_with(#binding, mapper);
@@ -84,7 +82,6 @@ pub(crate) fn generate_field_transform(
             // This is useful for foreign types that don't implement RedactableWithMapper.
             // Still collect debug generics: the field is printed in generated Debug impls
             // even though it's not transformed, so its type needs a Debug bound.
-            collect_generics_from_type(ty, ctx.generics, ctx.debug_redacted_generics);
             collect_generics_from_type(ty, ctx.generics, ctx.debug_unredacted_generics);
             Ok(TokenStream::new())
         }

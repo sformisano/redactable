@@ -1,5 +1,5 @@
 [workspace]
-members = ["redactable", "redactable-derive"]
+members = ["redactable", "redactable-derive", "test-fixtures"]
 resolver = "2"
 
 [workspace.package]
