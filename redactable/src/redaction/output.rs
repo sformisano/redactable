@@ -25,9 +25,17 @@ use crate::policy::RedactionPolicy;
 // =============================================================================
 
 /// Output produced at a logging boundary.
+///
+/// Marked `#[non_exhaustive]`: the `Json` variant only exists with the `json`
+/// feature, and feature unification means another crate in the build graph can
+/// switch it on. Exhaustive matches would break the moment that happens, so
+/// downstream matches must carry a wildcard arm.
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum RedactedOutput {
+    /// Redacted text output.
     Text(String),
+    /// Redacted structured JSON output (requires the `json` feature).
     #[cfg(feature = "json")]
     Json(JsonValue),
 }
