@@ -9,14 +9,14 @@ permissions:
 
 jobs:
   test:
-    name: Rust checks
+    name: Rust checks (stable)
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@1.93.0
+        uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy, rustfmt
 
@@ -30,10 +30,10 @@ jobs:
         run: cargo install cargo-deny --locked
 
       - name: Format
-        run: cargo +1.93.0 fmt --all -- --check
+        run: cargo fmt --all -- --check
 
       - name: Clippy
-        run: cargo +1.93.0 clippy --all --all-targets --all-features -- -D warnings -D rust-2018-idioms -D rust-2021-compatibility -A deprecated -A dead-code
+        run: cargo clippy --all --all-targets --all-features -- -D warnings -D rust-2018-idioms -D rust-2021-compatibility -A deprecated -A dead-code
 
       - name: Audit dependencies
         run: cargo audit
@@ -42,16 +42,40 @@ jobs:
         run: cargo deny check
 
       - name: Tests (all features)
-        run: cargo +1.93.0 test --all-features --all-targets
+        run: cargo test --all-features --all-targets
+
+      # The `testing` feature is part of --all-features and flips derived Debug
+      # to raw output, so the redacted production-Debug branch is only exercised
+      # by a default-features run.
+      - name: Tests (default features)
+        run: cargo test --all-targets
 
       - name: Doc tests (all features)
-        run: cargo +1.93.0 test --doc --all-features
+        run: cargo test --doc --all-features
 
-      - name: Tests (no default features)
+      - name: Check (no default features)
         run: cargo check --no-default-features
 
-      - name: Tests (policy only)
+      - name: Check (policy only)
         run: cargo check --features policy
 
-      - name: Tests (redaction only)
+      - name: Check (redaction only)
         run: cargo check --features redaction
+
+  msrv:
+    name: MSRV check (1.93)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@1.93.0
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+
+      # Library code only: trybuild snapshots track current stable diagnostics
+      # and are not expected to match older compilers.
+      - name: Check (all features)
+        run: cargo check --workspace --all-features

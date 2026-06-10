@@ -2,6 +2,7 @@
 name = "redactable"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 description = "Automatic redaction of sensitive data in structs for safe logging and debugging"
 license.workspace = true
 repository.workspace = true

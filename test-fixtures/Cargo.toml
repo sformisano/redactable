@@ -2,6 +2,7 @@
 name = "redactable-test-fixtures"
 version = "0.0.0"
 edition.workspace = true
+rust-version.workspace = true
 license.workspace = true
 publish = false
 description = "Non-test fixture types for asserting production Debug behavior"

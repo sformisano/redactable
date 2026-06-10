@@ -2,6 +2,7 @@
 name = "redactable-derive"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 description = "Derive macros for the redactable crate"
 license.workspace = true
 repository.workspace = true
