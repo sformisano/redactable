@@ -250,7 +250,10 @@ impl EmailConfig {
             return REDACTED_PLACEHOLDER.to_string();
         }
 
-        if let Some(at_pos) = value.find('@') {
+        // Split on the LAST '@': quoted local parts may contain '@' (e.g.
+        // `"a@b"@example.com`), and the domain never does, so rfind keeps the
+        // whole local part inside the masked segment.
+        if let Some(at_pos) = value.rfind('@') {
             let local = &value[..at_pos];
             let domain = &value[at_pos..]; // includes the @
 
@@ -497,6 +500,15 @@ mod tests {
     fn email_policy_respects_mask_char() {
         let policy = TextRedactionPolicy::email_local(2).with_mask_char('#');
         assert_eq!(policy.apply_to("alice@example.com"), "al###@example.com");
+    }
+
+    #[test]
+    fn email_policy_splits_on_last_at_sign() {
+        // Quoted local parts may contain '@'; the separator is the last one,
+        // so no fragment of the local part survives in the "domain" segment.
+        let policy = TextRedactionPolicy::email_local(2);
+        assert_eq!(policy.apply_to("\"a@b\"@example.com"), "\"a***@example.com");
+        assert_eq!(policy.apply_to("user@@example.com"), "us***@example.com");
     }
 
     #[test]
