@@ -1,13 +1,16 @@
-//! `.slog_redacted_display()` on a raw passthrough value must not compile.
+//! A raw passthrough value must not satisfy `SlogRedactedDisplayExt`.
 //!
 //! `RedactableWithFormatter` is implemented as passthrough for `String` and
 //! scalars so they can format inside redacted templates. Before
-//! `DeclaredRedactable` gated the extension trait, this compiled, emitted the
-//! raw value to slog, and carried the `SlogRedacted` certification marker.
+//! `DeclaredRedactable` gated the extension trait, `slog_redacted_display()`
+//! compiled on a raw `String`, emitted the raw value to slog, and carried the
+//! `SlogRedacted` certification marker.
 
 use redactable::slog::SlogRedactedDisplayExt;
 
+fn require_certified<T: SlogRedactedDisplayExt>(_: &T) {}
+
 fn main() {
     let password = String::from("hunter2");
-    let _ = password.slog_redacted_display();
+    require_certified(&password);
 }

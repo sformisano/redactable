@@ -1,22 +1,24 @@
-error[E0599]: the method `redacted_output` exists for struct `String`, but its trait bounds were not satisfied
-  --> tests/ui/redacted_output_raw_string_rejected.rs:11:22
+error[E0277]: the trait bound `String: RedactedOutputExt` is not satisfied
+  --> tests/ui/redacted_output_raw_string_rejected.rs:14:23
    |
-11 |     let _ = password.redacted_output();
-   |                      ^^^^^^^^^^^^^^^
+14 |     require_certified(&password);
+   |     ----------------- ^^^^^^^^^ the trait `DeclaredRedactable` is not implemented for `String`
+   |     |
+   |     required by a bound introduced by this call
    |
-  ::: $RUST/alloc/src/string.rs
+   = help: the following other types implement trait `DeclaredRedactable`:
+             Arc<T>
+             BTreeMap<K, V>
+             BTreeSet<T>
+             Box<T>
+             Cell<T>
+             HashMap<K, V, S>
+             HashSet<T, S>
+             NotSensitiveValue<T>
+           and $N others
+   = note: required for `String` to implement `RedactedOutputExt`
+note: required by a bound in `require_certified`
+  --> tests/ui/redacted_output_raw_string_rejected.rs:10:25
    |
-   | pub struct String {
-   | ----------------- doesn't satisfy `String: DeclaredRedactable` or `String: RedactedOutputExt`
-   |
-   = note: the following trait bounds were not satisfied:
-           `String: DeclaredRedactable`
-           which is required by `String: RedactedOutputExt`
-           `str: Sized`
-           which is required by `str: RedactedOutputExt`
-           `str: Redactable`
-           which is required by `str: RedactedOutputExt`
-           `str: Clone`
-           which is required by `str: RedactedOutputExt`
-           `str: DeclaredRedactable`
-           which is required by `str: RedactedOutputExt`
+10 | fn require_certified<T: RedactedOutputExt>(_: &T) {}
+   |                         ^^^^^^^^^^^^^^^^^ required by this bound in `require_certified`

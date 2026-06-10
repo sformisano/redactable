@@ -1,18 +1,24 @@
-error[E0599]: the method `slog_redacted_display` exists for struct `String`, but its trait bounds were not satisfied
-  --> tests/ui/slog_redacted_display_raw_string_rejected.rs:12:22
+error[E0277]: the trait bound `String: SlogRedactedDisplayExt` is not satisfied
+  --> tests/ui/slog_redacted_display_raw_string_rejected.rs:15:23
    |
-12 |     let _ = password.slog_redacted_display();
-   |                      ^^^^^^^^^^^^^^^^^^^^^
+15 |     require_certified(&password);
+   |     ----------------- ^^^^^^^^^ the trait `DeclaredRedactable` is not implemented for `String`
+   |     |
+   |     required by a bound introduced by this call
    |
-  ::: $RUST/alloc/src/string.rs
+   = help: the following other types implement trait `DeclaredRedactable`:
+             Arc<T>
+             BTreeMap<K, V>
+             BTreeSet<T>
+             Box<T>
+             Cell<T>
+             HashMap<K, V, S>
+             HashSet<T, S>
+             NotSensitiveValue<T>
+           and $N others
+   = note: required for `String` to implement `SlogRedactedDisplayExt`
+note: required by a bound in `require_certified`
+  --> tests/ui/slog_redacted_display_raw_string_rejected.rs:11:25
    |
-   | pub struct String {
-   | ----------------- doesn't satisfy `String: DeclaredRedactable` or `String: SlogRedactedDisplayExt`
-   |
-   = note: the following trait bounds were not satisfied:
-           `String: DeclaredRedactable`
-           which is required by `String: SlogRedactedDisplayExt`
-           `str: Sized`
-           which is required by `str: SlogRedactedDisplayExt`
-           `str: DeclaredRedactable`
-           which is required by `str: SlogRedactedDisplayExt`
+11 | fn require_certified<T: SlogRedactedDisplayExt>(_: &T) {}
+   |                         ^^^^^^^^^^^^^^^^^^^^^^ required by this bound in `require_certified`
