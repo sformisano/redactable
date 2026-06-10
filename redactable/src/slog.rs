@@ -209,10 +209,13 @@ impl<'a, T: ?Sized> RedactedDisplayValue<'a, T> {
     }
 }
 
-// Special case: formats directly through RedactableWithFormatter.
+// Special case: formats directly through RedactableWithFormatter. The
+// DeclaredRedactable bound keeps raw formatter passthroughs (String, scalars)
+// from being certified: `RedactedDisplayValue::new(&raw)` would otherwise emit
+// the raw value while carrying the SlogRedacted marker.
 impl<T> SlogValue for RedactedDisplayValue<'_, T>
 where
-    T: RedactableWithFormatter,
+    T: RedactableWithFormatter + DeclaredRedactable,
 {
     fn serialize(
         &self,
@@ -225,12 +228,19 @@ where
     }
 }
 
-impl<T> SlogRedacted for RedactedDisplayValue<'_, T> where T: RedactableWithFormatter {}
+impl<T> SlogRedacted for RedactedDisplayValue<'_, T> where
+    T: RedactableWithFormatter + DeclaredRedactable
+{
+}
 
 /// Extension trait for logging `RedactableWithFormatter` types through slog.
 ///
 /// This is the display-string counterpart to [`SlogRedactedExt::slog_redacted_json`].
 /// Use this when you want redacted display output without JSON serialization overhead.
+///
+/// Requires [`DeclaredRedactable`]: scalar formatter passthroughs like
+/// `String` format unchanged, which would let raw values be certified as
+/// redacted slog output without any transformation.
 ///
 /// ## Example
 /// ```ignore
@@ -248,10 +258,10 @@ pub trait SlogRedactedDisplayExt: RedactableWithFormatter {
     }
 }
 
-impl<T> SlogRedactedDisplayExt for T where T: RedactableWithFormatter {}
+impl<T> SlogRedactedDisplayExt for T where T: RedactableWithFormatter + DeclaredRedactable {}
 
 #[cfg(feature = "tracing")]
 impl<T> crate::tracing::TracingRedacted for RedactedDisplayValue<'_, T> where
-    T: RedactableWithFormatter
+    T: RedactableWithFormatter + DeclaredRedactable
 {
 }

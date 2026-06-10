@@ -1,0 +1,18 @@
+error[E0599]: the method `slog_redacted_display` exists for struct `String`, but its trait bounds were not satisfied
+  --> tests/ui/slog_redacted_display_raw_string_rejected.rs:12:22
+   |
+12 |     let _ = password.slog_redacted_display();
+   |                      ^^^^^^^^^^^^^^^^^^^^^
+   |
+  ::: $RUST/alloc/src/string.rs
+   |
+   | pub struct String {
+   | ----------------- doesn't satisfy `String: DeclaredRedactable` or `String: SlogRedactedDisplayExt`
+   |
+   = note: the following trait bounds were not satisfied:
+           `String: DeclaredRedactable`
+           which is required by `String: SlogRedactedDisplayExt`
+           `str: Sized`
+           which is required by `str: SlogRedactedDisplayExt`
+           `str: DeclaredRedactable`
+           which is required by `str: SlogRedactedDisplayExt`
