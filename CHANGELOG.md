@@ -1,5 +1,76 @@
 # Changelog
 
+## 0.8.0
+
+Security-hardening release driven by a full-crate audit. Several fixes close
+paths where sensitive data could reach logs unredacted; most are breaking.
+
+### Fixed
+- **Breaking:** keep-based policies (`Token`, `CreditCard`, `PhoneNumber`, `Pii`,
+  `IpAddress`, `BlockchainAddress`) now fail closed: values at or below the keep
+  window are fully masked instead of returned unchanged. A 4-character token
+  under `Token` previously passed through `redact()`, `Debug`, and the logging
+  integrations in clear text. The `Email` policy applies the same rule to short
+  local parts.
+- **Breaking:** the unredacted-`Debug` switch is now namespaced to this crate.
+  Generated `Debug` impls branch on `cfg!(test) || redactable::__TESTING`
+  instead of `#[cfg(any(test, feature = "testing"))]`, which resolved in the
+  consumer's crate: enabling `redactable/testing` was a no-op, and a downstream
+  crate with its own feature named `testing` silently got raw `Debug` output in
+  production builds. All field types now need `Debug` in every build mode, not
+  only under test.
+- Variant-level `#[sensitive(...)]` and `#[not_sensitive]` on enums are rejected
+  at compile time. They were silently ignored, so a variant that looked
+  protected leaked its fields through `redact()`, `Debug`, and
+  `redacted_display()`.
+- `#[sensitive(dual)]` with only one of the two derives is now a compile error
+  naming the missing counterpart. It previously compiled while silently
+  dropping the redacted `Debug` impl (Sensitive-only) or the slog/tracing
+  integration (SensitiveDisplay-only).
+- IPv4-mapped IPv6 addresses (`::ffff:a.b.c.d`, the standard dual-stack
+  representation of IPv4 clients) redact with the IPv4 rule. The plain IPv6
+  rule kept the last 16-bit segment, which holds the last two octets of the
+  embedded IPv4 address.
+- The email policy splits on the last `@` instead of the first, so RFC-quoted
+  local parts containing `@` no longer leak into the preserved domain segment.
+
+### Added
+- `DeclaredRedactable`: a marker trait for types whose redaction behavior is
+  explicitly declared. Emitted by the `Sensitive`, `NotSensitive`,
+  `NotSensitiveDisplay`, and `SensitiveDisplay` derives, implemented by
+  `SensitiveValue`, `NotSensitiveValue`, and `serde_json::Value`, and forwarded
+  through std containers.
+- **Breaking:** `RedactedOutputExt`, `RedactedJsonExt`, `SlogRedactedExt`, and
+  `SlogRedactedDisplayExt` now require `DeclaredRedactable`. Raw passthrough
+  values (`String`, scalars, containers of them) previously satisfied these
+  blanket impls as no-ops, so `password.redacted_output()` compiled, performed
+  zero redaction, and carried the `SlogRedacted`/`TracingRedacted`
+  certification markers.
+- `rust-version = "1.93"` declared in both crates; CI tests on current stable
+  with a dedicated MSRV check job.
+- docs.rs builds with all features, so the `slog`, `tracing`, `json`, and
+  `extras` APIs appear in the rendered documentation.
+
+### Changed
+- **Breaking:** `RedactedOutput` is `#[non_exhaustive]`. The `Json` variant is
+  feature-gated, and feature unification meant an exhaustive downstream match
+  could stop compiling when another crate enabled `json`.
+- `redactable` now pins `redactable-derive` with an exact `=` requirement so
+  the runtime/derive pair always resolves together.
+- `RedactableWithFormatter` and `RedactedFormatterRef` are documented public
+  API. They were `#[doc(hidden)]` even though `.redacted_display()` - the
+  flagship `SensitiveDisplay` method - lives on the trait.
+
+### Documentation
+- README quick-start examples now compile as written: missing trait and policy
+  imports added, and the display assertion goes through `.to_string()`.
+- The wrapper-type example defines a local policy, matching the orphan-rule
+  requirement the surrounding text describes.
+- Documented the `chrono`, `time`, `uuid`, and `extras` features, the
+  fail-closed short-value rule, the per-field attribute rule for enums, the
+  IPv4-mapped IPv6 behavior, and the `DeclaredRedactable` certification gate.
+- Fixed section links that pointed at a non-existent anchor.
+
 ## 0.7.1
 
 ### Fixed
