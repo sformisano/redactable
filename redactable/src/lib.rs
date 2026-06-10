@@ -96,7 +96,7 @@ pub use policy::{
 // Re-exports from redaction module: public API
 #[cfg(feature = "redaction")]
 pub use redaction::{
-    NotSensitive, NotSensitiveDebug, NotSensitiveDebugExt, NotSensitiveDisplay,
+    DeclaredRedactable, NotSensitive, NotSensitiveDebug, NotSensitiveDebugExt, NotSensitiveDisplay,
     NotSensitiveDisplayExt, NotSensitiveExt, NotSensitiveValue, Redactable, RedactedOutput,
     RedactedOutputExt, RedactedOutputRef, SensitiveValue, SensitiveWithPolicy, ToRedactedOutput,
 };

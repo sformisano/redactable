@@ -23,8 +23,8 @@ pub use crate::redaction::RedactedJson;
 use crate::{
     policy::RedactionPolicy,
     redaction::{
-        NotSensitive, NotSensitiveDebug, NotSensitiveDisplay, NotSensitiveJson, Redactable,
-        RedactableWithFormatter, RedactedJsonRef, RedactedOutput, RedactedOutputRef,
+        DeclaredRedactable, NotSensitive, NotSensitiveDebug, NotSensitiveDisplay, NotSensitiveJson,
+        Redactable, RedactableWithFormatter, RedactedJsonRef, RedactedOutput, RedactedOutputRef,
         SensitiveValue, SensitiveWithPolicy, ToRedactedOutput,
     },
 };
@@ -134,6 +134,10 @@ impl_slog_redacted!(@ [T] RedactedJsonRef<'_, T> where T: Redactable + Clone + S
 /// and stores the result as a `serde_json::Value`. The original (unredacted)
 /// value is not serialized.
 ///
+/// Requires [`DeclaredRedactable`]: `Redactable` alone is satisfied by no-op
+/// passthrough leaves like `String`, which would let raw values be certified
+/// as redacted slog output without any transformation.
+///
 /// ## Example
 /// ```ignore
 /// use redactable::slog::SlogRedactedExt;
@@ -155,7 +159,7 @@ pub trait SlogRedactedExt: Redactable + fmt::Debug + Serialize + Sized {
     }
 }
 
-impl<T> SlogRedactedExt for T where T: Redactable + fmt::Debug + Serialize {}
+impl<T> SlogRedactedExt for T where T: Redactable + fmt::Debug + Serialize + DeclaredRedactable {}
 
 // Special cases: these don't use emit_output(&self.to_redacted_output(), ...)
 

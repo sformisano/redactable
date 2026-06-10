@@ -1708,4 +1708,33 @@ mod to_redacted_output {
             RedactedOutput::Text("Event { token: \"[REDACTED]\", name: \"alpha\" }".to_string())
         );
     }
+
+    // DeclaredRedactable forwards through std containers, so containers of
+    // derived types keep access to the certified extension methods even though
+    // raw passthrough leaves (String, scalars) do not.
+    #[test]
+    fn containers_of_derived_types_stay_certified() {
+        #[derive(Clone, Sensitive)]
+        #[cfg_attr(feature = "slog", derive(serde::Serialize))]
+        struct Event {
+            #[sensitive(Secret)]
+            token: String,
+        }
+
+        let events = vec![Event {
+            token: "secret".into(),
+        }];
+        assert_eq!(
+            log_redacted(&events.redacted_output()),
+            RedactedOutput::Text("[Event { token: \"[REDACTED]\" }]".to_string())
+        );
+
+        let maybe_event = Some(Event {
+            token: "secret".into(),
+        });
+        assert_eq!(
+            log_redacted(&maybe_event.redacted_output()),
+            RedactedOutput::Text("Some(Event { token: \"[REDACTED]\" })".to_string())
+        );
+    }
 }

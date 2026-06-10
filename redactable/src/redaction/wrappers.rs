@@ -11,6 +11,7 @@ use std::marker::PhantomData;
 use serde::Serialize;
 
 use super::{
+    declared::DeclaredRedactable,
     redact::RedactableMapper,
     traits::{RedactableWithMapper, SensitiveWithPolicy},
 };
@@ -62,6 +63,13 @@ where
         let redacted = mapper.map_sensitive::<T, P>(self.0);
         Self(redacted, PhantomData)
     }
+}
+
+impl<T, P> DeclaredRedactable for SensitiveValue<T, P>
+where
+    T: SensitiveWithPolicy<P>,
+    P: RedactionPolicy,
+{
 }
 
 impl<T, P> From<T> for SensitiveValue<T, P> {
@@ -157,6 +165,10 @@ impl<T> RedactableWithMapper for NotSensitiveValue<T> {
         self
     }
 }
+
+// The wrapper itself is the declaration: wrapping a value in
+// `NotSensitiveValue` is an explicit opt-out, unlike a bare passthrough leaf.
+impl<T> DeclaredRedactable for NotSensitiveValue<T> {}
 
 impl<T> From<T> for NotSensitiveValue<T> {
     fn from(value: T) -> Self {

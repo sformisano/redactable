@@ -14,6 +14,7 @@ use serde::Serialize;
 use serde_json::Value as JsonValue;
 
 use super::{
+    declared::DeclaredRedactable,
     traits::{Redactable, SensitiveWithPolicy},
     wrappers::SensitiveValue,
 };
@@ -37,7 +38,7 @@ pub enum RedactedOutput {
 
 /// Produces a logging-safe output representation.
 ///
-/// This trait is intentionally narrower than [`RedactableWithFormatter`].
+/// This trait is intentionally narrower than `RedactableWithFormatter`.
 /// Passthrough scalar formatting is useful inside redacted templates, but it
 /// does not certify a raw value as safe at a logging boundary.
 pub trait ToRedactedOutput {
@@ -81,6 +82,10 @@ where
 }
 
 /// Extension trait to obtain a redacted output wrapper.
+///
+/// Requires [`DeclaredRedactable`]: `Redactable` alone is satisfied by no-op
+/// passthrough leaves like `String`, which would let raw values be certified
+/// as redacted output without any transformation.
 pub trait RedactedOutputExt {
     /// Wraps the value for explicit logging-safe output.
     fn redacted_output(&self) -> RedactedOutputRef<'_, Self>
@@ -90,7 +95,7 @@ pub trait RedactedOutputExt {
 
 impl<T> RedactedOutputExt for T
 where
-    T: Redactable + Clone + std::fmt::Debug,
+    T: Redactable + Clone + std::fmt::Debug + DeclaredRedactable,
 {
     fn redacted_output(&self) -> RedactedOutputRef<'_, Self> {
         RedactedOutputRef(self)
@@ -150,6 +155,10 @@ where
 }
 
 /// Extension trait to obtain a redacted JSON output wrapper.
+///
+/// Requires [`DeclaredRedactable`]: `Redactable` alone is satisfied by no-op
+/// passthrough leaves like `String`, which would let raw values be certified
+/// as redacted JSON without any transformation.
 #[cfg(feature = "json")]
 pub trait RedactedJsonExt {
     /// Wraps the value for explicit redacted JSON output.
@@ -161,7 +170,7 @@ pub trait RedactedJsonExt {
 #[cfg(feature = "json")]
 impl<T> RedactedJsonExt for T
 where
-    T: Redactable + Clone + Serialize,
+    T: Redactable + Clone + Serialize + DeclaredRedactable,
 {
     fn redacted_json(&self) -> RedactedJsonRef<'_, Self> {
         RedactedJsonRef(self)

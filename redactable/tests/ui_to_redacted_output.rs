@@ -14,4 +14,10 @@ mod to_redacted_output {
         let t = trybuild::TestCases::new();
         t.pass("tests/ui/to_redacted_output_certified_ok.rs");
     }
+
+    #[test]
+    fn rejects_redacted_output_on_raw_string() {
+        let t = trybuild::TestCases::new();
+        t.compile_fail("tests/ui/redacted_output_raw_string_rejected.rs");
+    }
 }
