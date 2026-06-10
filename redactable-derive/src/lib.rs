@@ -125,6 +125,8 @@ use redacted_display::derive_redacted_display;
 /// # Generated Impls
 ///
 /// - `RedactableWithMapper`: always generated.
+/// - `Redactable`: always generated. Provides `.redact()` and certifies the type for the
+///   redacted-output extension traits (`RedactedOutputExt`, `RedactedJsonExt`, `SlogRedactedExt`).
 /// - `Debug`: redacted by default; actual values in the consumer's `cfg(test)` builds or when
 ///   `redactable`'s `testing` feature is enabled. Skipped when `#[sensitive(dual)]` is set.
 /// - `slog::Value` + `SlogRedacted` (requires `slog` feature): implemented by cloning the value
@@ -152,6 +154,8 @@ pub fn derive_sensitive_container(input: proc_macro::TokenStream) -> proc_macro:
 /// # Generated Impls
 ///
 /// - `RedactableWithMapper`: no-op passthrough (the type has no sensitive data)
+/// - `Redactable`: deriving `NotSensitive` is an explicit declaration, so the type is
+///   certified for the redacted-output extension traits
 /// - `slog::Value` and `SlogRedacted` (behind `cfg(feature = "slog")`): serializes the value
 ///   directly as structured JSON without redaction (same format as `Sensitive`, but skips
 ///   the redaction step). Requires `Serialize` on the type.
@@ -332,7 +336,11 @@ fn expand_not_sensitive(input: DeriveInput) -> Result<TokenStream> {
 /// # Generated Impls
 ///
 /// - `RedactableWithMapper`: no-op passthrough (allows use inside `Sensitive` containers)
+/// - `Redactable`: deriving `NotSensitiveDisplay` is an explicit declaration, so the type is
+///   certified for the redacted-output extension traits
 /// - `RedactableWithFormatter`: delegates to `Display::fmt`
+/// - `ToRedactedOutput`: emits the `Display` text; certifies the type for
+///   `slog_redacted_display()` and `tracing_redacted()`
 /// - `slog::Value` and `SlogRedacted` (behind `cfg(feature = "slog")`): uses `RedactableWithFormatter` output
 /// - `TracingRedacted` (behind `cfg(feature = "tracing")`): marker trait
 ///
@@ -513,6 +521,8 @@ fn expand_not_sensitive_display(input: DeriveInput) -> Result<TokenStream> {
 /// # Generated Impls
 ///
 /// - `RedactableWithFormatter`: always generated.
+/// - `ToRedactedOutput`: always generated; emits the redacted display text and certifies the
+///   type for `slog_redacted_display()` and `tracing_redacted()`.
 /// - `Debug`: redacted by default; actual values in the consumer's `cfg(test)` builds or when
 ///   `redactable`'s `testing` feature is enabled.
 /// - `slog::Value` + `SlogRedacted`: emits the redacted display string (requires `slog` feature).

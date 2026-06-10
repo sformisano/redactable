@@ -168,6 +168,8 @@ struct User {
 
 Every field in a `Sensitive` type must implement `RedactableWithMapper`. But redaction [should be opt-in](#design-principles): if you don't annotate a field, nothing should happen to it. Standard leaves like `String` and `u32` square this circle by implementing `RedactableWithMapper` as a no-op. They satisfy the trait bound, but they don't transform anything. You only annotate what you actually want to protect.
 
+Note that this is the *traversal machinery* only. Leaves do **not** implement `Redactable`: calling `.redact()` on a bare `String` — or certifying one as redacted output — is a compile error, because nobody declared what redacting it means. `Redactable` comes from the derives and wrappers.
+
 The following types all have this built-in no-op implementation:
 
 - **Scalars**: `bool`, `char`, `i8`..`i128`, `isize`, `u8`..`u128`, `usize`, `f32`, `f64`, `NonZeroI8`..`NonZeroUsize`
@@ -504,6 +506,7 @@ struct Config {
 
 `NotSensitive` generates:
 - `RedactableWithMapper`: no-op passthrough (the type has no sensitive data)
+- `Redactable`: the derive is an explicit declaration, so the type is certified for `.redacted_output()` and the other redacted-output extension methods
 - `slog::Value` and `SlogRedacted`: serializes the value directly as structured JSON, same format as `Sensitive` but without redaction (when `slog` feature is enabled; requires `Serialize` on the type)
 - `TracingRedacted`: when `tracing` feature is enabled
 
@@ -533,7 +536,9 @@ impl std::fmt::Display for RetryDecision {
 
 `NotSensitiveDisplay` generates:
 - `RedactableWithMapper`: no-op passthrough (allows use inside `Sensitive` containers)
+- `Redactable`: the derive is an explicit declaration, so the type is certified for the redacted-output extension methods
 - `RedactableWithFormatter`: delegates to `Display::fmt` (allows use inside `SensitiveDisplay` containers)
+- `ToRedactedOutput`: emits the `Display` text, certifying the type for `slog_redacted_display()` and `tracing_redacted()`
 - `slog::Value` and `SlogRedacted`: when `slog` feature is enabled
 - `TracingRedacted`: when `tracing` feature is enabled
 
@@ -556,12 +561,14 @@ enum RetryDecision {
 
 ### What all four derives generate
 
-| Derive | `RedactableWithMapper` | `RedactableWithFormatter` | `Debug` |
-|---|---|---|---|
-| `Sensitive` | ✅ | - | ✅ (redacted) |
-| `SensitiveDisplay` | - | ✅ | ✅ (redacted) |
-| `NotSensitive` | ✅ | - | - |
-| `NotSensitiveDisplay` | ✅ | ✅ | - |
+| Derive | `RedactableWithMapper` | `Redactable` | `RedactableWithFormatter` | `ToRedactedOutput` | `Debug` |
+|---|---|---|---|---|---|
+| `Sensitive` | ✅ | ✅ | - | - | ✅ (redacted) |
+| `SensitiveDisplay` | - | - | ✅ | ✅ | ✅ (redacted) |
+| `NotSensitive` | ✅ | ✅ | - | - | - |
+| `NotSensitiveDisplay` | ✅ | ✅ | ✅ | ✅ | - |
+
+`Redactable` and `ToRedactedOutput` are the certifications: only types carrying them (or containers of such types) can use `.redact()`, the redacted-output extension methods, and the slog/tracing certification paths. Bare leaves like `String` participate in traversal but are never certified.
 
 About `Debug`:
 
