@@ -849,7 +849,7 @@ macro_rules! trace_safe {
 
 If you're not using slog or tracing, `ToRedactedOutput` is the single logging-safe bound. It produces a `RedactedOutput`: either `Text(String)` or `Json(serde_json::Value)` (requires `json` feature). This trait is deliberately narrower than `RedactableWithFormatter`: raw `String` and scalar values can format inside a redacted template, but they do not satisfy `ToRedactedOutput` unless you explicitly wrap them as non-sensitive.
 
-The certification methods (`.redacted_output()`, `.redacted_json()`, `.slog_redacted_json()`, `.slog_redacted_display()`) follow the same rule via the `DeclaredRedactable` marker trait: it is implemented by the derives, the wrapper types, and containers of them — never by raw passthrough leaves — so a bare `String` or `Vec<String>` cannot be certified as redacted output. The compile error points at the derives and wrappers to use instead.
+The certification methods follow the same rule through the traits you already know: `.redacted_output()`, `.redacted_json()`, and `.slog_redacted_json()` require `Redactable`, and `.slog_redacted_display()` requires `ToRedactedOutput` — both implemented only by the derives, the wrapper types, and containers of them, never by raw passthrough leaves. A bare `String` or `Vec<String>` cannot be redacted or certified as redacted output; the compile error points at the derives and wrappers to use instead.
 
 | Situation | Method | Returns |
 |---|---|---|

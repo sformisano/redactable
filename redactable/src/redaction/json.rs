@@ -8,7 +8,7 @@
 
 use super::{
     redact::{PolicyApplicable, PolicyApplicableRef, RedactableMapper},
-    traits::RedactableWithMapper,
+    traits::{Redactable, RedactableWithMapper},
 };
 use crate::policy::RedactionPolicy;
 
@@ -41,3 +41,7 @@ impl RedactableWithMapper for serde_json::Value {
         serde_json::Value::String("[REDACTED]".to_string())
     }
 }
+
+// `Value` redaction is declared by the crate itself (full redaction as an
+// opaque leaf), so it is certified for the redacted-output extension traits.
+impl Redactable for serde_json::Value {}

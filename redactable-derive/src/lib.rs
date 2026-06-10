@@ -252,7 +252,7 @@ fn expand_not_sensitive(input: DeriveInput) -> Result<TokenStream> {
     let crate_root = crate_root();
 
     // RedactableWithMapper impl (no-op passthrough). Deriving NotSensitive is
-    // an explicit declaration, so the type also gets DeclaredRedactable.
+    // an explicit declaration, so the type also gets Redactable.
     let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
     let container_impl = quote! {
         impl #impl_generics #crate_root::RedactableWithMapper for #ident #ty_generics #where_clause {
@@ -261,7 +261,7 @@ fn expand_not_sensitive(input: DeriveInput) -> Result<TokenStream> {
             }
         }
 
-        impl #impl_generics #crate_root::DeclaredRedactable for #ident #ty_generics #where_clause {}
+        impl #impl_generics #crate_root::Redactable for #ident #ty_generics #where_clause {}
     };
 
     // slog impl - serialize directly as structured JSON (no redaction needed)
@@ -392,7 +392,7 @@ fn expand_not_sensitive_display(input: DeriveInput) -> Result<TokenStream> {
     // Generate the RedactableWithMapper no-op passthrough impl
     // This is always generated, allowing NotSensitiveDisplay to be used inside Sensitive containers.
     // Deriving NotSensitiveDisplay is an explicit declaration, so the type also
-    // gets DeclaredRedactable.
+    // gets Redactable.
     let (container_impl_generics, container_ty_generics, container_where_clause) =
         generics.split_for_impl();
     let container_impl = quote! {
@@ -402,7 +402,7 @@ fn expand_not_sensitive_display(input: DeriveInput) -> Result<TokenStream> {
             }
         }
 
-        impl #container_impl_generics #crate_root::DeclaredRedactable for #ident #container_ty_generics #container_where_clause {}
+        impl #container_impl_generics #crate_root::Redactable for #ident #container_ty_generics #container_where_clause {}
     };
 
     // Always delegate to Display::fmt (no template parsing for NotSensitiveDisplay)
@@ -420,11 +420,21 @@ fn expand_not_sensitive_display(input: DeriveInput) -> Result<TokenStream> {
     let (display_impl_generics, display_ty_generics, display_where_clause) =
         display_generics.split_for_impl();
 
-    // RedactableWithFormatter impl - delegates to Display
+    // RedactableWithFormatter impl - delegates to Display. ToRedactedOutput is
+    // the formatter-side certification (an explicitly non-sensitive type's
+    // display IS its safe output), keeping slog_redacted_display() available.
     let redacted_display_impl = quote! {
         impl #display_impl_generics #crate_root::RedactableWithFormatter for #ident #display_ty_generics #display_where_clause {
             fn fmt_redacted(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
                 ::core::fmt::Display::fmt(self, f)
+            }
+        }
+
+        impl #display_impl_generics #crate_root::ToRedactedOutput for #ident #display_ty_generics #display_where_clause {
+            fn to_redacted_output(&self) -> #crate_root::RedactedOutput {
+                #crate_root::RedactedOutput::Text(
+                    #crate_root::RedactableWithFormatter::redacted_display(self).to_string(),
+                )
             }
         }
     };
@@ -663,26 +673,12 @@ fn expand(input: DeriveInput, kind: DeriveKind) -> Result<TokenStream> {
         let (display_impl_generics, display_ty_generics, display_where_clause) =
             redacted_display_generics.split_for_impl();
         let redacted_display_body = redacted_display_output.body;
-        // Deriving SensitiveDisplay is an explicit declaration, so the type
-        // also gets DeclaredRedactable (certifying it for the formatter-side
-        // logging extensions). In dual mode Sensitive emits the marker instead.
-        let declared_impl = if dual {
-            quote! {}
-        } else {
-            let (marker_impl_generics, marker_ty_generics, marker_where_clause) =
-                generics.split_for_impl();
-            quote! {
-                impl #marker_impl_generics #crate_root::DeclaredRedactable for #ident #marker_ty_generics #marker_where_clause {}
-            }
-        };
         let redacted_display_impl = quote! {
             impl #display_impl_generics #crate_root::RedactableWithFormatter for #ident #display_ty_generics #display_where_clause {
                 fn fmt_redacted(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
                     #redacted_display_body
                 }
             }
-
-            #declared_impl
         };
         let to_redacted_output_impl = quote! {
             impl #display_impl_generics #crate_root::ToRedactedOutput for #ident #display_ty_generics #display_where_clause {
@@ -893,7 +889,7 @@ fn expand(input: DeriveInput, kind: DeriveKind) -> Result<TokenStream> {
             }
         }
 
-        impl #impl_generics #crate_root::DeclaredRedactable for #ident #ty_generics #where_clause {}
+        impl #impl_generics #crate_root::Redactable for #ident #ty_generics #where_clause {}
 
         #debug_impl
 

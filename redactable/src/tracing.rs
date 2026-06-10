@@ -239,6 +239,9 @@ mod tests {
             }
         }
 
+        // Manual machinery impls must also declare certification explicitly.
+        impl Redactable for MockValuableRedactable {}
+
         #[test]
         fn tracing_redacted_valuable_creates_wrapper() {
             let mock = MockValuableRedactable {

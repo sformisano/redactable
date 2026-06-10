@@ -23,8 +23,8 @@ pub use crate::redaction::RedactedJson;
 use crate::{
     policy::RedactionPolicy,
     redaction::{
-        DeclaredRedactable, NotSensitive, NotSensitiveDebug, NotSensitiveDisplay, NotSensitiveJson,
-        Redactable, RedactableWithFormatter, RedactedJsonRef, RedactedOutput, RedactedOutputRef,
+        NotSensitive, NotSensitiveDebug, NotSensitiveDisplay, NotSensitiveJson, Redactable,
+        RedactableWithFormatter, RedactedJsonRef, RedactedOutput, RedactedOutputRef,
         SensitiveValue, SensitiveWithPolicy, ToRedactedOutput,
     },
 };
@@ -134,9 +134,9 @@ impl_slog_redacted!(@ [T] RedactedJsonRef<'_, T> where T: Redactable + Clone + S
 /// and stores the result as a `serde_json::Value`. The original (unredacted)
 /// value is not serialized.
 ///
-/// Requires [`DeclaredRedactable`]: `Redactable` alone is satisfied by no-op
-/// passthrough leaves like `String`, which would let raw values be certified
-/// as redacted slog output without any transformation.
+/// Requires [`Redactable`], which only types with declared redaction behavior
+/// implement - raw passthrough leaves like `String` cannot be certified as
+/// redacted slog output.
 ///
 /// ## Example
 /// ```ignore
@@ -159,7 +159,7 @@ pub trait SlogRedactedExt: Redactable + fmt::Debug + Serialize + Sized {
     }
 }
 
-impl<T> SlogRedactedExt for T where T: Redactable + fmt::Debug + Serialize + DeclaredRedactable {}
+impl<T> SlogRedactedExt for T where T: Redactable + fmt::Debug + Serialize {}
 
 // Special cases: these don't use emit_output(&self.to_redacted_output(), ...)
 
@@ -210,12 +210,13 @@ impl<'a, T: ?Sized> RedactedDisplayValue<'a, T> {
 }
 
 // Special case: formats directly through RedactableWithFormatter. The
-// DeclaredRedactable bound keeps raw formatter passthroughs (String, scalars)
+// ToRedactedOutput bound keeps raw formatter passthroughs (String, scalars)
 // from being certified: `RedactedDisplayValue::new(&raw)` would otherwise emit
-// the raw value while carrying the SlogRedacted marker.
+// the raw value while carrying the SlogRedacted marker. SensitiveDisplay and
+// NotSensitiveDisplay derives generate ToRedactedOutput; passthroughs do not.
 impl<T> SlogValue for RedactedDisplayValue<'_, T>
 where
-    T: RedactableWithFormatter + DeclaredRedactable,
+    T: RedactableWithFormatter + ToRedactedOutput,
 {
     fn serialize(
         &self,
@@ -229,7 +230,7 @@ where
 }
 
 impl<T> SlogRedacted for RedactedDisplayValue<'_, T> where
-    T: RedactableWithFormatter + DeclaredRedactable
+    T: RedactableWithFormatter + ToRedactedOutput
 {
 }
 
@@ -238,9 +239,10 @@ impl<T> SlogRedacted for RedactedDisplayValue<'_, T> where
 /// This is the display-string counterpart to [`SlogRedactedExt::slog_redacted_json`].
 /// Use this when you want redacted display output without JSON serialization overhead.
 ///
-/// Requires [`DeclaredRedactable`]: scalar formatter passthroughs like
-/// `String` format unchanged, which would let raw values be certified as
-/// redacted slog output without any transformation.
+/// Requires [`ToRedactedOutput`]: scalar formatter passthroughs like `String`
+/// format unchanged, which would let raw values be certified as redacted slog
+/// output without any transformation. The display derives generate
+/// `ToRedactedOutput`; raw values never implement it.
 ///
 /// ## Example
 /// ```ignore
@@ -258,10 +260,10 @@ pub trait SlogRedactedDisplayExt: RedactableWithFormatter {
     }
 }
 
-impl<T> SlogRedactedDisplayExt for T where T: RedactableWithFormatter + DeclaredRedactable {}
+impl<T> SlogRedactedDisplayExt for T where T: RedactableWithFormatter + ToRedactedOutput {}
 
 #[cfg(feature = "tracing")]
 impl<T> crate::tracing::TracingRedacted for RedactedDisplayValue<'_, T> where
-    T: RedactableWithFormatter + DeclaredRedactable
+    T: RedactableWithFormatter + ToRedactedOutput
 {
 }

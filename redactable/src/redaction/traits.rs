@@ -87,14 +87,30 @@ pub trait RedactableWithMapper: Sized {
 // Redactable - User-facing .redact() method
 // =============================================================================
 
-/// Public entrypoint for redaction on traversable types.
+/// Public entrypoint for redaction on types with declared redaction behavior.
 ///
-/// This trait is blanket-implemented for all [`RedactableWithMapper`] types and
-/// provides a convenience `redact()` method.
+/// `Redactable` is implemented by the `Sensitive`, `NotSensitive`, and
+/// `NotSensitiveDisplay` derives, by `SensitiveValue` / `NotSensitiveValue`,
+/// by `serde_json::Value` (with the `json` feature), and by std containers of
+/// such types. It provides the `redact()` method and certifies the type for
+/// the logging-boundary extension traits (`RedactedOutputExt`,
+/// `RedactedJsonExt`, `SlogRedactedExt`).
+///
+/// Passthrough leaves like `String` and scalars deliberately do **not**
+/// implement it: they participate in traversal (so unannotated fields work
+/// inside derived containers), but nobody declared what redacting them means,
+/// so calling `redact()` on them - or certifying them as redacted output -
+/// must not compile.
 ///
 /// `redact` is implemented in terms of the default mapping behavior provided by
-/// [`super::redact::redact`], which applies policies associated with policy markers
-/// types.
+/// [`super::redact::redact`], which applies policies associated with policy
+/// marker types.
+#[diagnostic::on_unimplemented(
+    message = "`{Self}` has no declared redaction behavior",
+    label = "raw values cannot be redacted or certified as redacted output",
+    note = "derive `Sensitive`, `NotSensitive`, or `NotSensitiveDisplay` on the type",
+    note = "or wrap the value in `SensitiveValue<T, P>` / `NotSensitiveValue<T>`"
+)]
 pub trait Redactable: RedactableWithMapper {
     /// Redacts the value using policy-bound redaction.
     ///
@@ -105,7 +121,45 @@ pub trait Redactable: RedactableWithMapper {
     }
 }
 
-impl<T> Redactable for T where T: RedactableWithMapper {}
+// Containers forward the certification exactly like redaction traversal walks
+// them. Map keys are exempt, mirroring values-only map redaction. The bounds
+// mirror the matching `RedactableWithMapper` container impls so the supertrait
+// is always satisfied.
+
+impl<T: Redactable> Redactable for Option<T> {}
+
+impl<T: Redactable, E: Redactable> Redactable for Result<T, E> {}
+
+impl<T: Redactable> Redactable for Vec<T> {}
+
+impl<T: Redactable> Redactable for Box<T> {}
+
+impl<T: Redactable + Clone> Redactable for std::sync::Arc<T> {}
+
+impl<T: Redactable + Clone> Redactable for std::rc::Rc<T> {}
+
+impl<T: Redactable> Redactable for std::cell::RefCell<T> {}
+
+impl<T: Redactable + Copy> Redactable for std::cell::Cell<T> {}
+
+impl<K, V, S> Redactable for std::collections::HashMap<K, V, S>
+where
+    K: std::hash::Hash + Eq,
+    V: Redactable,
+    S: std::hash::BuildHasher + Clone,
+{
+}
+
+impl<K: Ord, V: Redactable> Redactable for std::collections::BTreeMap<K, V> {}
+
+impl<T, S> Redactable for std::collections::HashSet<T, S>
+where
+    T: Redactable + std::hash::Hash + Eq,
+    S: std::hash::BuildHasher + Clone,
+{
+}
+
+impl<T: Redactable + Ord> Redactable for std::collections::BTreeSet<T> {}
 
 // =============================================================================
 // Tests

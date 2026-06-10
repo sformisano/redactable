@@ -2,11 +2,11 @@ error[E0277]: the trait bound `String: RedactedOutputExt` is not satisfied
   --> tests/ui/redacted_output_raw_string_rejected.rs:14:23
    |
 14 |     require_certified(&password);
-   |     ----------------- ^^^^^^^^^ the trait `DeclaredRedactable` is not implemented for `String`
+   |     ----------------- ^^^^^^^^^ the trait `Redactable` is not implemented for `String`
    |     |
    |     required by a bound introduced by this call
    |
-   = help: the following other types implement trait `DeclaredRedactable`:
+   = help: the following other types implement trait `Redactable`:
              Arc<T>
              BTreeMap<K, V>
              BTreeSet<T>

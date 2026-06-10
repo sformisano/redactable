@@ -13,7 +13,6 @@
 //! Policy marker types and text policies live in `crate::policy`.
 
 mod containers;
-mod declared;
 mod display;
 mod escape_hatches;
 #[cfg(feature = "json")]
@@ -24,7 +23,6 @@ mod traits;
 mod wrappers;
 
 // Re-export core traits
-pub use declared::DeclaredRedactable;
 // Re-export display types
 pub use display::{PolicyRedactedFormatterRef, RedactableWithFormatter, RedactedFormatterRef};
 // Re-export escape hatches

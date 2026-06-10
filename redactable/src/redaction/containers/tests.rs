@@ -9,6 +9,15 @@ use std::{
 
 use crate::{Secret, Sensitive, redaction::traits::Redactable};
 
+/// Runs the traversal machinery on a value regardless of certification.
+///
+/// Leaf passthroughs deliberately do not implement `Redactable` (no declared
+/// redaction behavior), but their machinery-level passthrough is still a
+/// contract worth asserting.
+fn machine_redact<T: crate::redaction::traits::RedactableWithMapper>(value: T) -> T {
+    crate::redaction::redact::redact(value)
+}
+
 #[derive(Clone, Sensitive)]
 #[cfg_attr(feature = "json", derive(serde::Serialize))]
 struct SensitiveString {
@@ -19,15 +28,15 @@ struct SensitiveString {
 #[test]
 fn passthrough_string_unchanged() {
     let s = "hello".to_string();
-    let redacted = s.clone().redact();
+    let redacted = machine_redact(s.clone());
     assert_eq!(redacted, s);
 }
 
 #[test]
 fn passthrough_integers_unchanged() {
-    assert_eq!(0i32.redact(), 0i32);
-    assert_eq!(42u64.redact(), 42u64);
-    assert_eq!((-1i8).redact(), -1i8);
+    assert_eq!(machine_redact(0i32), 0i32);
+    assert_eq!(machine_redact(42u64), 42u64);
+    assert_eq!(machine_redact(-1i8), -1i8);
 }
 
 #[test]
@@ -37,8 +46,8 @@ fn passthrough_nonzero_integers_unchanged() {
     let signed = NonZeroI32::new(42).unwrap();
     let unsigned = NonZeroU64::new(100).unwrap();
 
-    assert_eq!(signed.redact(), signed);
-    assert_eq!(unsigned.redact(), unsigned);
+    assert_eq!(machine_redact(signed), signed);
+    assert_eq!(machine_redact(unsigned), unsigned);
 }
 
 #[test]
@@ -46,7 +55,7 @@ fn passthrough_duration_unchanged() {
     use std::time::Duration;
 
     let duration = Duration::from_mins(1);
-    assert_eq!(duration.redact(), duration);
+    assert_eq!(machine_redact(duration), duration);
 }
 
 #[test]
@@ -54,7 +63,7 @@ fn passthrough_instant_unchanged() {
     use std::time::Instant;
 
     let instant = Instant::now();
-    assert_eq!(instant.redact(), instant);
+    assert_eq!(machine_redact(instant), instant);
 }
 
 #[test]
@@ -62,16 +71,16 @@ fn passthrough_system_time_unchanged() {
     use std::time::SystemTime;
 
     let system_time = SystemTime::now();
-    assert_eq!(system_time.redact(), system_time);
+    assert_eq!(machine_redact(system_time), system_time);
 }
 
 #[test]
 fn passthrough_ordering_unchanged() {
     use std::cmp::Ordering;
 
-    assert_eq!(Ordering::Less.redact(), Ordering::Less);
-    assert_eq!(Ordering::Equal.redact(), Ordering::Equal);
-    assert_eq!(Ordering::Greater.redact(), Ordering::Greater);
+    assert_eq!(machine_redact(Ordering::Less), Ordering::Less);
+    assert_eq!(machine_redact(Ordering::Equal), Ordering::Equal);
+    assert_eq!(machine_redact(Ordering::Greater), Ordering::Greater);
 }
 
 #[test]
@@ -86,7 +95,7 @@ fn option_traversal_redacts_inner() {
 #[test]
 fn option_none_unchanged() {
     let o: Option<String> = None;
-    let redacted = o.redact();
+    let redacted = machine_redact(o);
     assert!(redacted.is_none());
 }
 
@@ -219,7 +228,7 @@ fn map_keys_are_never_redacted() {
 fn btreeset_traversal_keeps_elements() {
     let mut set: BTreeSet<String> = BTreeSet::new();
     set.insert("public".to_string());
-    let redacted = set.redact();
+    let redacted = machine_redact(set);
     assert!(redacted.contains("public"));
 }
 
@@ -227,7 +236,7 @@ fn btreeset_traversal_keeps_elements() {
 fn hashset_traversal_keeps_elements() {
     let mut set: HashSet<String> = HashSet::new();
     set.insert("public".to_string());
-    let redacted = set.redact();
+    let redacted = machine_redact(set);
     assert!(redacted.contains("public"));
 }
 
@@ -252,7 +261,7 @@ fn refcell_traversal_redacts_inner() {
 #[test]
 fn cell_passthrough_unchanged() {
     let c = Cell::new(42u32);
-    let redacted = c.redact();
+    let redacted = machine_redact(c);
     assert_eq!(redacted.get(), 42);
 }
 
@@ -262,7 +271,7 @@ fn ipaddr_passthrough_unchanged() {
     use std::net::IpAddr;
 
     let ip: IpAddr = "192.168.1.100".parse().expect("valid IPv4");
-    let redacted = ip.redact();
+    let redacted = machine_redact(ip);
 
     assert_eq!(redacted, ip);
 }
@@ -273,7 +282,7 @@ fn socketaddr_passthrough_unchanged() {
     use std::net::SocketAddr;
 
     let addr: SocketAddr = "10.1.2.3:443".parse().expect("valid socket addr");
-    let redacted = addr.redact();
+    let redacted = machine_redact(addr);
 
     assert_eq!(redacted, addr);
 }
@@ -332,7 +341,7 @@ fn passthrough_chrono_duration_unchanged() {
     use chrono::Duration;
 
     let duration = Duration::seconds(3600);
-    assert_eq!(duration.redact(), duration);
+    assert_eq!(machine_redact(duration), duration);
 }
 
 #[cfg(feature = "chrono")]
@@ -340,8 +349,8 @@ fn passthrough_chrono_duration_unchanged() {
 fn passthrough_chrono_month_unchanged() {
     use chrono::Month;
 
-    assert_eq!(Month::January.redact(), Month::January);
-    assert_eq!(Month::December.redact(), Month::December);
+    assert_eq!(machine_redact(Month::January), Month::January);
+    assert_eq!(machine_redact(Month::December), Month::December);
 }
 
 #[cfg(feature = "chrono")]
@@ -349,8 +358,8 @@ fn passthrough_chrono_month_unchanged() {
 fn passthrough_chrono_weekday_unchanged() {
     use chrono::Weekday;
 
-    assert_eq!(Weekday::Mon.redact(), Weekday::Mon);
-    assert_eq!(Weekday::Sun.redact(), Weekday::Sun);
+    assert_eq!(machine_redact(Weekday::Mon), Weekday::Mon);
+    assert_eq!(machine_redact(Weekday::Sun), Weekday::Sun);
 }
 
 // =============================================================================
@@ -363,7 +372,7 @@ fn passthrough_time_duration_unchanged() {
     use time::Duration;
 
     let duration = Duration::hours(2);
-    assert_eq!(duration.redact(), duration);
+    assert_eq!(machine_redact(duration), duration);
 }
 
 #[cfg(feature = "time")]
@@ -372,7 +381,7 @@ fn passthrough_time_utc_offset_unchanged() {
     use time::UtcOffset;
 
     let offset = UtcOffset::from_hms(5, 30, 0).unwrap();
-    assert_eq!(offset.redact(), offset);
+    assert_eq!(machine_redact(offset), offset);
 }
 
 #[cfg(feature = "time")]
@@ -380,8 +389,8 @@ fn passthrough_time_utc_offset_unchanged() {
 fn passthrough_time_month_unchanged() {
     use time::Month;
 
-    assert_eq!(Month::January.redact(), Month::January);
-    assert_eq!(Month::December.redact(), Month::December);
+    assert_eq!(machine_redact(Month::January), Month::January);
+    assert_eq!(machine_redact(Month::December), Month::December);
 }
 
 #[cfg(feature = "time")]
@@ -389,6 +398,6 @@ fn passthrough_time_month_unchanged() {
 fn passthrough_time_weekday_unchanged() {
     use time::Weekday;
 
-    assert_eq!(Weekday::Monday.redact(), Weekday::Monday);
-    assert_eq!(Weekday::Sunday.redact(), Weekday::Sunday);
+    assert_eq!(machine_redact(Weekday::Monday), Weekday::Monday);
+    assert_eq!(machine_redact(Weekday::Sunday), Weekday::Sunday);
 }

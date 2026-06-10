@@ -1,0 +1,26 @@
+error[E0277]: `String` has no declared redaction behavior
+  --> tests/ui/redactable_raw_string_rejected.rs:14:24
+   |
+14 |     require_redactable(&password);
+   |     ------------------ ^^^^^^^^^ raw values cannot be redacted or certified as redacted output
+   |     |
+   |     required by a bound introduced by this call
+   |
+   = help: the trait `Redactable` is not implemented for `String`
+   = note: derive `Sensitive`, `NotSensitive`, or `NotSensitiveDisplay` on the type
+   = note: or wrap the value in `SensitiveValue<T, P>` / `NotSensitiveValue<T>`
+   = help: the following other types implement trait `Redactable`:
+             Arc<T>
+             BTreeMap<K, V>
+             BTreeSet<T>
+             Box<T>
+             Cell<T>
+             HashMap<K, V, S>
+             HashSet<T, S>
+             NotSensitiveValue<T>
+           and $N others
+note: required by a bound in `require_redactable`
+  --> tests/ui/redactable_raw_string_rejected.rs:10:26
+   |
+10 | fn require_redactable<T: Redactable>(_: &T) {}
+   |                          ^^^^^^^^^^ required by this bound in `require_redactable`

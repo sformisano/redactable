@@ -1,24 +1,23 @@
 error[E0277]: the trait bound `String: SlogRedactedDisplayExt` is not satisfied
-  --> tests/ui/slog_redacted_display_raw_string_rejected.rs:15:23
+  --> tests/ui/slog_redacted_display_raw_string_rejected.rs:16:23
    |
-15 |     require_certified(&password);
-   |     ----------------- ^^^^^^^^^ the trait `DeclaredRedactable` is not implemented for `String`
+16 |     require_certified(&password);
+   |     ----------------- ^^^^^^^^^ the trait `ToRedactedOutput` is not implemented for `String`
    |     |
    |     required by a bound introduced by this call
    |
-   = help: the following other types implement trait `DeclaredRedactable`:
-             Arc<T>
-             BTreeMap<K, V>
-             BTreeSet<T>
-             Box<T>
-             Cell<T>
-             HashMap<K, V, S>
-             HashSet<T, S>
-             NotSensitiveValue<T>
-           and $N others
+   = help: the following other types implement trait `ToRedactedOutput`:
+             NotSensitiveDebug<T>
+             NotSensitiveDisplay<T>
+             NotSensitiveJson<'_, T>
+             RedactedJson
+             RedactedJsonRef<'_, T>
+             RedactedOutput
+             RedactedOutputRef<'_, T>
+             SensitiveValue<T, P>
    = note: required for `String` to implement `SlogRedactedDisplayExt`
 note: required by a bound in `require_certified`
-  --> tests/ui/slog_redacted_display_raw_string_rejected.rs:11:25
+  --> tests/ui/slog_redacted_display_raw_string_rejected.rs:12:25
    |
-11 | fn require_certified<T: SlogRedactedDisplayExt>(_: &T) {}
+12 | fn require_certified<T: SlogRedactedDisplayExt>(_: &T) {}
    |                         ^^^^^^^^^^^^^^^^^^^^^^ required by this bound in `require_certified`

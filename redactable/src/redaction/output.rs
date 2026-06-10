@@ -14,7 +14,6 @@ use serde::Serialize;
 use serde_json::Value as JsonValue;
 
 use super::{
-    declared::DeclaredRedactable,
     traits::{Redactable, SensitiveWithPolicy},
     wrappers::SensitiveValue,
 };
@@ -91,9 +90,9 @@ where
 
 /// Extension trait to obtain a redacted output wrapper.
 ///
-/// Requires [`DeclaredRedactable`]: `Redactable` alone is satisfied by no-op
-/// passthrough leaves like `String`, which would let raw values be certified
-/// as redacted output without any transformation.
+/// Requires [`Redactable`], which only types with declared redaction behavior
+/// implement - raw passthrough leaves like `String` cannot be certified as
+/// redacted output.
 pub trait RedactedOutputExt {
     /// Wraps the value for explicit logging-safe output.
     fn redacted_output(&self) -> RedactedOutputRef<'_, Self>
@@ -103,7 +102,7 @@ pub trait RedactedOutputExt {
 
 impl<T> RedactedOutputExt for T
 where
-    T: Redactable + Clone + std::fmt::Debug + DeclaredRedactable,
+    T: Redactable + Clone + std::fmt::Debug,
 {
     fn redacted_output(&self) -> RedactedOutputRef<'_, Self> {
         RedactedOutputRef(self)
@@ -164,9 +163,9 @@ where
 
 /// Extension trait to obtain a redacted JSON output wrapper.
 ///
-/// Requires [`DeclaredRedactable`]: `Redactable` alone is satisfied by no-op
-/// passthrough leaves like `String`, which would let raw values be certified
-/// as redacted JSON without any transformation.
+/// Requires [`Redactable`], which only types with declared redaction behavior
+/// implement - raw passthrough leaves like `String` cannot be certified as
+/// redacted JSON.
 #[cfg(feature = "json")]
 pub trait RedactedJsonExt {
     /// Wraps the value for explicit redacted JSON output.
@@ -178,7 +177,7 @@ pub trait RedactedJsonExt {
 #[cfg(feature = "json")]
 impl<T> RedactedJsonExt for T
 where
-    T: Redactable + Clone + Serialize + DeclaredRedactable,
+    T: Redactable + Clone + Serialize,
 {
     fn redacted_json(&self) -> RedactedJsonRef<'_, Self> {
         RedactedJsonRef(self)

@@ -1709,7 +1709,7 @@ mod to_redacted_output {
         );
     }
 
-    // DeclaredRedactable forwards through std containers, so containers of
+    // Redactable forwards through std containers, so containers of
     // derived types keep access to the certified extension methods even though
     // raw passthrough leaves (String, scalars) do not.
     #[test]
