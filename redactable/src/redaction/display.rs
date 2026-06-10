@@ -30,11 +30,12 @@ use std::{
 /// Formats a redacted string representation without requiring `Clone` or `Serialize`.
 ///
 /// This is intended for types that want redacted logging output while keeping
-/// their own `Display` implementations.
+/// their own `Display` implementations. Import this trait to call
+/// [`redacted_display`](RedactableWithFormatter::redacted_display) on types
+/// deriving `SensitiveDisplay`.
 ///
 /// Common scalars (`String`, `bool`, integers, etc.) implement this as passthrough,
 /// while types deriving `SensitiveDisplay` implement it with redaction logic.
-#[doc(hidden)]
 pub trait RedactableWithFormatter {
     /// Formats a redacted representation of `self`.
     fn fmt_redacted(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result;
@@ -53,7 +54,10 @@ pub trait RedactableWithFormatter {
 // =============================================================================
 
 /// Display wrapper that uses `RedactableWithFormatter::fmt_redacted`.
-#[doc(hidden)]
+///
+/// Returned by [`RedactableWithFormatter::redacted_display`]; implements
+/// `Display` and `Debug` with the redacted representation, so it can be
+/// formatted directly or converted with `.to_string()`.
 pub struct RedactedFormatterRef<'a, T: ?Sized>(&'a T);
 
 impl<T: RedactableWithFormatter + ?Sized> std::fmt::Display for RedactedFormatterRef<'_, T> {

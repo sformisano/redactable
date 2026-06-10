@@ -1,15 +1,15 @@
-error[E0277]: the trait bound `ApiKey: redactable::RedactableWithFormatter` is not satisfied
+error[E0277]: the trait bound `ApiKey: RedactableWithFormatter` is not satisfied
   --> tests/ui/sensitive_dual_without_display_rejected.rs:15:8
    |
 15 | struct ApiKey(#[sensitive(redactable::Token)] String);
    |        ^^^^^^ unsatisfied trait bound
    |
-help: the trait `redactable::RedactableWithFormatter` is not implemented for `ApiKey`
+help: the trait `RedactableWithFormatter` is not implemented for `ApiKey`
   --> tests/ui/sensitive_dual_without_display_rejected.rs:15:1
    |
 15 | struct ApiKey(#[sensitive(redactable::Token)] String);
    | ^^^^^^^^^^^^^
-   = help: the following other types implement trait `redactable::RedactableWithFormatter`:
+   = help: the following other types implement trait `RedactableWithFormatter`:
              &T
              ()
              Arc<T>

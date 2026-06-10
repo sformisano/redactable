@@ -97,8 +97,9 @@ pub use policy::{
 #[cfg(feature = "redaction")]
 pub use redaction::{
     DeclaredRedactable, NotSensitive, NotSensitiveDebug, NotSensitiveDebugExt, NotSensitiveDisplay,
-    NotSensitiveDisplayExt, NotSensitiveExt, NotSensitiveValue, Redactable, RedactedOutput,
-    RedactedOutputExt, RedactedOutputRef, SensitiveValue, SensitiveWithPolicy, ToRedactedOutput,
+    NotSensitiveDisplayExt, NotSensitiveExt, NotSensitiveValue, Redactable,
+    RedactableWithFormatter, RedactedFormatterRef, RedactedOutput, RedactedOutputExt,
+    RedactedOutputRef, SensitiveValue, SensitiveWithPolicy, ToRedactedOutput,
 };
 #[cfg(feature = "json")]
 pub use redaction::{
@@ -111,9 +112,8 @@ pub use redaction::PolicyRedactedFormatterRef;
 #[doc(hidden)]
 #[cfg(feature = "redaction")]
 pub use redaction::{
-    PolicyApplicable, PolicyApplicableRef, RedactableMapper, RedactableWithFormatter,
-    RedactableWithMapper, RedactedFormatterRef, ScalarRedaction, apply_policy, apply_policy_ref,
-    redact,
+    PolicyApplicable, PolicyApplicableRef, RedactableMapper, RedactableWithMapper, ScalarRedaction,
+    apply_policy, apply_policy_ref, redact,
 };
 #[cfg(feature = "slog")]
 pub use slog::{RedactedDisplayValue, SlogRedactedDisplayExt, SlogRedactedExt};
