@@ -47,14 +47,15 @@ There are two derive macros for types with sensitive data. Which one to use depe
 
 Use `Sensitive` when you need the **redacted value as a structured type**. E.g. `.redact()` returns a `User` with redacted fields, not a string. The result can be serialized to JSON, passed to slog, inspected via `valuable` in tracing, or consumed by anything that works with typed data.
 
-Use `SensitiveDisplay` when you need the **redacted value as a formatted string**. `.redacted_display()` returns a string with sensitive parts replaced. This is the natural fit for error messages, display output, flat log lines, and any context that expects text.
+Use `SensitiveDisplay` when you need the **redacted value as a formatted string**. `.redacted_display()` (from the `RedactableWithFormatter` trait) returns a displayable value with sensitive parts replaced — format it directly or call `.to_string()`. This is the natural fit for error messages, display output, flat log lines, and any context that expects text.
 
 ### Quick examples
 
 **Structured** (`Sensitive`), logged as JSON:
 
 ```rust
-use redactable::Sensitive;
+use redactable::{Email, Redactable, Sensitive};
+use serde::Serialize;
 
 #[derive(Clone, Sensitive, Serialize)]
 struct User {
@@ -76,7 +77,7 @@ slog::info!(logger, "user"; "user" => &user);
 **String** (`SensitiveDisplay`), logged as text:
 
 ```rust
-use redactable::SensitiveDisplay;
+use redactable::{RedactableWithFormatter, Secret, SensitiveDisplay};
 
 #[derive(SensitiveDisplay)]
 enum AuthError {
@@ -92,7 +93,10 @@ let err = AuthError::InvalidCredentials {
     user: "alice".into(),
     password: "hunter2".into(),
 };
-assert_eq!(err.redacted_display(), "login failed for alice with [REDACTED]");
+assert_eq!(
+    err.redacted_display().to_string(),
+    "login failed for alice with [REDACTED]"
+);
 ```
 
 ### What each derive generates
@@ -114,7 +118,7 @@ assert_eq!(err.redacted_display(), "login failed for alice with [REDACTED]");
   struct Email(#[sensitive(Token)] String);
   ```
 
-  `#[sensitive(dual)]` coordinates both macros: `Sensitive` skips `Debug` (letting `SensitiveDisplay` provide it) and `SensitiveDisplay` skips `slog`/`tracing` (letting `Sensitive` provide them). Each macro generates only its non-overlapping impls.
+  `#[sensitive(dual)]` coordinates both macros: `Sensitive` skips `Debug` (letting `SensitiveDisplay` provide it) and `SensitiveDisplay` skips `slog`/`tracing` (letting `Sensitive` provide them). Each macro generates only its non-overlapping impls. Using `dual` with only one of the two derives is a compile error naming the missing counterpart.
 
 ## Design principles
 
@@ -170,6 +174,7 @@ The following types all have this built-in no-op implementation:
 - **Strings**: `String`, `Cow<str>`
 - **Containers** (delegate to inner values): `Option`, `Vec`, `Box`, `Arc`, `Rc`, `RefCell`, `Cell`, `Result`, `HashMap`, `BTreeMap`, `HashSet`, `BTreeSet`
 - **Other**: `Duration`, `Instant`, `SystemTime`, `Ordering`, `PhantomData`; with the `ip-address` feature, `IpAddr`, `Ipv4Addr`, `Ipv6Addr`, and `SocketAddr`
+- **Feature-gated**: the `chrono` feature adds passthroughs for `DateTime<Utc|Local|FixedOffset>`, `NaiveDateTime`, `NaiveDate`, `NaiveTime`, `Duration`, `Month`, and `Weekday`; the `time` feature adds `OffsetDateTime`, `PrimitiveDateTime`, `Date`, `Time`, `Duration`, `UtcOffset`, `Month`, and `Weekday`; the `uuid` feature adds `Uuid`. The `extras` feature enables `chrono`, `time`, `uuid`, and `ip-address` together
 
 ```rust
 #[derive(Clone, Sensitive)]
@@ -225,7 +230,7 @@ If a field type does not implement `RedactableWithMapper`, you get a compilation
   }
   ```
 
-  `#[not_sensitive]` is the simplest escape hatch. Alternatively, the library provides dedicated wrapper types covered in [Wrapper types for foreign types](#wrapper-types-for-foreign-types).
+  `#[not_sensitive]` is the simplest escape hatch. Alternatively, the library provides dedicated wrapper types covered in [Wrapper types for foreign types](#foreign-types).
 
 ### The `#[sensitive(Policy)]` attribute
 
@@ -414,7 +419,7 @@ If a template references a field whose type does not implement `RedactableWithFo
   }
   ```
 
-  `#[not_sensitive]` is the simplest escape hatch. See [Wrapper types for foreign types](#wrapper-types-for-foreign-types) for more patterns.
+  `#[not_sensitive]` is the simplest escape hatch. See [Wrapper types for foreign types](#foreign-types) for more patterns.
 
 ### The `#[sensitive(Policy)]` attribute in templates
 
@@ -588,7 +593,9 @@ You can't derive macros on types defined in other crates, and the orphan rule pr
 For sensitive foreign types, implement `SensitiveWithPolicy<P>` with a [custom policy](#custom-policies) (the orphan rule requires the policy type to be local) and wrap with `SensitiveValue`:
 
 ```rust
-use redactable::{SensitiveValue, SensitiveWithPolicy, Sensitive, Token, TextRedactionPolicy};
+use redactable::{
+    RedactionPolicy, Sensitive, SensitiveValue, SensitiveWithPolicy, TextRedactionPolicy,
+};
 
 // Imagine this comes from a payments SDK.
 // It exposes accessors but no redaction support.
@@ -603,7 +610,18 @@ impl MerchantAccount {
     fn tax_id(&self) -> &str { &self.tax_id }
 }
 
-impl SensitiveWithPolicy<Pii> for MerchantAccount {
+// The policy type must be local to your crate: that is what satisfies the
+// orphan rule for the SensitiveWithPolicy impl on the foreign type.
+#[derive(Clone, Copy)]
+struct MerchantPii;
+
+impl RedactionPolicy for MerchantPii {
+    fn policy() -> TextRedactionPolicy {
+        TextRedactionPolicy::keep_last(2)
+    }
+}
+
+impl SensitiveWithPolicy<MerchantPii> for MerchantAccount {
     fn redact_with_policy(self, policy: &TextRedactionPolicy) -> Self {
         Self {
             id: self.id,
@@ -618,7 +636,7 @@ impl SensitiveWithPolicy<Pii> for MerchantAccount {
 
 #[derive(Clone, Sensitive)]
 struct PaymentConfig {
-    merchant: SensitiveValue<MerchantAccount, Pii>,
+    merchant: SensitiveValue<MerchantAccount, MerchantPii>,
 }
 ```
 
@@ -692,7 +710,7 @@ The `slog` feature enables automatic redaction. Just log your values and they're
 
 ```toml
 [dependencies]
-redactable = { version = "0.7", features = ["slog"] }
+redactable = { version = "0.8", features = ["slog"] }
 ```
 
 **Containers**: the `Sensitive` derive generates `slog::Value` automatically:
@@ -736,7 +754,7 @@ For structured logging with tracing, use the `valuable` integration:
 
 ```toml
 [dependencies]
-redactable = { version = "0.7", features = ["tracing-valuable"] }
+redactable = { version = "0.8", features = ["tracing-valuable"] }
 ```
 
 ```rust
@@ -831,6 +849,8 @@ macro_rules! trace_safe {
 
 If you're not using slog or tracing, `ToRedactedOutput` is the single logging-safe bound. It produces a `RedactedOutput`: either `Text(String)` or `Json(serde_json::Value)` (requires `json` feature). This trait is deliberately narrower than `RedactableWithFormatter`: raw `String` and scalar values can format inside a redacted template, but they do not satisfy `ToRedactedOutput` unless you explicitly wrap them as non-sensitive.
 
+The certification methods (`.redacted_output()`, `.redacted_json()`, `.slog_redacted_json()`, `.slog_redacted_display()`) follow the same rule via the `DeclaredRedactable` marker trait: it is implemented by the derives, the wrapper types, and containers of them — never by raw passthrough leaves — so a bare `String` or `Vec<String>` cannot be certified as redacted output. The compile error points at the derives and wrappers to use instead.
+
 | Situation | Method | Returns |
 |---|---|---|
 | Structured container → redacted text | `.redacted_output()` | `RedactedOutput::Text` |
@@ -894,7 +914,7 @@ flowchart TD
 
 Containers (`Option`, `Vec`, `HashMap`, etc.) are walked automatically. Policy annotations apply through them. Map keys are formatted with `Debug` and are not redacted.
 
-IP address types (`IpAddr`, `Ipv4Addr`, `Ipv6Addr`, `SocketAddr`) are available with the `ip-address` feature. Unannotated IP fields pass through unchanged; use `#[sensitive(IpAddress)]` to redact them.
+IP address types (`IpAddr`, `Ipv4Addr`, `Ipv6Addr`, `SocketAddr`) are available with the `ip-address` feature. Unannotated IP fields pass through unchanged; use `#[sensitive(IpAddress)]` to redact them. IPv4 addresses keep only the last octet (`0.0.0.77`), IPv6 addresses keep only the last 16-bit segment, and IPv4-mapped IPv6 addresses (`::ffff:a.b.c.d`) are redacted with the IPv4 rule so dual-stack listeners don't leak extra octets.
 
 `serde_json::Value` (requires `json` feature) is treated as an opaque leaf that fully redacts to `Value::String("[REDACTED]")`, even when unannotated, since its dynamic structure could contain anything sensitive.
 
@@ -909,6 +929,8 @@ For the full list of types with built-in passthrough implementations, see [Why d
 **Short values are fully masked.** Keep-based policies (`Token`, `CreditCard`, `Pii`, etc.) fail closed: when the value is at or below the keep window (e.g. a 4-character token under `Token`'s keep-last-4), every character is masked instead of revealed. The `Email` policy applies the same rule to the local part.
 
 **Unannotated containers whose type derives `Sensitive` are still walked**. If a nested type has `#[sensitive(Policy)]` annotations on its leaves, those are applied even when the outer container is unannotated.
+
+**Sensitivity attributes are per-field.** Placing `#[sensitive(...)]` or `#[not_sensitive]` on an enum *variant* is a compile error; annotate the variant's fields instead.
 
 **Sets can collapse after redaction**. `HashSet`/`BTreeSet` are redacted element-by-element and then collected back into a set. If redaction makes elements equal (e.g., multiple values redact to `"[REDACTED]"`), the resulting set may shrink. If cardinality matters, prefer a `Vec`.
 
