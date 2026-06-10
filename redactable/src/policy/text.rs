@@ -14,8 +14,8 @@ pub const MASK_CHAR: char = '*';
 
 /// Configuration that keeps selected segments visible while masking the remainder.
 ///
-/// The policy operates on Unicode scalar values. If the configuration keeps the
-/// entire value visible, the output is unchanged.
+/// The policy operates on Unicode scalar values and fails closed: values at or
+/// below the keep window length are fully masked rather than revealed.
 ///
 /// Use the constructor methods [`KeepConfig::first`] and [`KeepConfig::last`]
 /// to create instances.
@@ -53,7 +53,8 @@ impl KeepConfig {
     /// Constructs a configuration that keeps both leading and trailing characters visible.
     ///
     /// If `visible_prefix + visible_suffix >= total_length`, the entire value
-    /// is kept visible (no masking occurs).
+    /// is masked: a keep window that covers the whole value would otherwise
+    /// reveal it completely.
     #[must_use]
     pub fn both(visible_prefix: usize, visible_suffix: usize) -> Self {
         Self {
@@ -80,7 +81,9 @@ impl KeepConfig {
     /// Empty strings are fully redacted using [`REDACTED_PLACEHOLDER`].
     ///
     /// If `visible_prefix + visible_suffix >= total_length`, the entire value
-    /// is kept visible (no masking occurs).
+    /// is masked. Keep policies fail closed: a keep window that covers the
+    /// whole value (e.g. a 4-character token under a keep-last-4 policy) would
+    /// otherwise reveal it completely.
     pub(crate) fn apply_to(&self, value: &str) -> String {
         let mut chars: Vec<char> = value.chars().collect();
         let total = chars.len();
@@ -88,8 +91,9 @@ impl KeepConfig {
             return REDACTED_PLACEHOLDER.to_string();
         }
 
-        // If keep spans cover or exceed the total length, return unchanged
+        // Fail closed: if keep spans cover or exceed the total length, mask everything
         if self.visible_prefix.saturating_add(self.visible_suffix) >= total {
+            chars.fill(self.mask_char);
             return chars.into_iter().collect();
         }
 
@@ -204,7 +208,8 @@ impl MaskConfig {
 /// Configuration for email address redaction.
 ///
 /// Masks the local part (before `@`) while preserving the domain. If no `@` is
-/// present, the input is masked like a prefix-keep policy.
+/// present, the input is masked like a prefix-keep policy. Fails closed: local
+/// parts at or below the keep length are fully masked rather than revealed.
 #[derive(Clone, Copy, Debug)]
 pub struct EmailConfig {
     /// Number of leading characters of the local part to keep visible.
@@ -252,9 +257,11 @@ impl EmailConfig {
             let local_chars: Vec<char> = local.chars().collect();
             let local_len = local_chars.len();
 
+            // Fail closed: a keep window covering the whole local part would
+            // otherwise reveal it completely.
             if self.visible_prefix >= local_len {
-                // Keep entire local part
-                return value.to_string();
+                let masked: String = std::iter::repeat_n(self.mask_char, local_len).collect();
+                return format!("{masked}{domain}");
             }
 
             let visible: String = local_chars[..self.visible_prefix].iter().collect();
@@ -263,11 +270,13 @@ impl EmailConfig {
 
             format!("{visible}{masked}{domain}")
         } else {
+            let mut result = chars;
+            // Fail closed: mask everything when the keep window covers the value.
             if self.visible_prefix >= total {
-                return value.to_string();
+                result.fill(self.mask_char);
+                return result.into_iter().collect();
             }
 
-            let mut result = chars;
             for ch in &mut result[self.visible_prefix..] {
                 *ch = self.mask_char;
             }
@@ -413,9 +422,16 @@ mod tests {
     use super::{KeepConfig, MaskConfig, REDACTED_PLACEHOLDER, TextRedactionPolicy};
 
     #[test]
-    fn keep_policy_allows_full_visibility() {
+    fn keep_policy_masks_short_values() {
+        // Fail closed: values at or below the keep window are fully masked.
         let policy = TextRedactionPolicy::keep_with(KeepConfig::first(3));
-        assert_eq!(policy.apply_to("ab"), "ab");
+        assert_eq!(policy.apply_to("ab"), "**");
+        assert_eq!(policy.apply_to("abc"), "***");
+
+        // A 4-char token under keep-last-4 must not be revealed.
+        let policy = TextRedactionPolicy::keep_last(4);
+        assert_eq!(policy.apply_to("1234"), "****");
+        assert_eq!(policy.apply_to("12345"), "*2345");
     }
 
     #[test]
@@ -456,7 +472,8 @@ mod tests {
         let policy = TextRedactionPolicy::email_local(2);
         assert_eq!(policy.apply_to("alice@example.com"), "al***@example.com");
         assert_eq!(policy.apply_to("bob@company.io"), "bo*@company.io");
-        assert_eq!(policy.apply_to("x@a.com"), "x@a.com"); // single char local, prefix=2 keeps all
+        // Fail closed: single char local with prefix=2 masks the local part.
+        assert_eq!(policy.apply_to("x@a.com"), "*@a.com");
     }
 
     #[test]
@@ -469,11 +486,11 @@ mod tests {
         // Empty string
         assert_eq!(policy.apply_to(""), REDACTED_PLACEHOLDER);
 
-        // Short local part
-        assert_eq!(policy.apply_to("ab@x.com"), "ab@x.com"); // exactly 2 chars, no masking
+        // Fail closed: local part exactly at the keep length is fully masked
+        assert_eq!(policy.apply_to("ab@x.com"), "**@x.com");
 
-        // Very short email
-        assert_eq!(policy.apply_to("a@b.c"), "a@b.c"); // 1 char local, prefix=2 keeps all
+        // Fail closed: local part below the keep length is fully masked
+        assert_eq!(policy.apply_to("a@b.c"), "*@b.c");
     }
 
     #[test]
@@ -499,21 +516,21 @@ mod tests {
     }
 
     #[test]
-    fn keep_both_overlap_keeps_entire_value() {
-        // When prefix + suffix >= total, keep everything visible
+    fn keep_both_overlap_masks_entire_value() {
+        // Fail closed: when prefix + suffix >= total, mask everything
         let policy = TextRedactionPolicy::keep_with(KeepConfig::both(2, 2));
-        assert_eq!(policy.apply_to("abc"), "abc"); // 2 + 2 = 4 >= 3
+        assert_eq!(policy.apply_to("abc"), "***"); // 2 + 2 = 4 >= 3
 
         let policy = TextRedactionPolicy::keep_with(KeepConfig::both(3, 3));
-        assert_eq!(policy.apply_to("abcd"), "abcd"); // 3 + 3 = 6 >= 4
+        assert_eq!(policy.apply_to("abcd"), "****"); // 3 + 3 = 6 >= 4
 
         // Edge case: exactly equals total
         let policy = TextRedactionPolicy::keep_with(KeepConfig::both(2, 2));
-        assert_eq!(policy.apply_to("abcd"), "abcd"); // 2 + 2 = 4 >= 4
+        assert_eq!(policy.apply_to("abcd"), "****"); // 2 + 2 = 4 >= 4
 
-        // Overflow-safe: large values still keep entire value
+        // Overflow-safe: large values still mask the entire value
         let policy = TextRedactionPolicy::keep_with(KeepConfig::both(usize::MAX, usize::MAX));
-        assert_eq!(policy.apply_to("abcd"), "abcd");
+        assert_eq!(policy.apply_to("abcd"), "****");
     }
 
     #[test]

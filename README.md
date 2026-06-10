@@ -906,6 +906,8 @@ For the full list of types with built-in passthrough implementations, see [Why d
 
 **Empty strings redact to the placeholder.** Policies that would otherwise keep or mask part of the input return `"[REDACTED]"` for an empty string so redaction is visible.
 
+**Short values are fully masked.** Keep-based policies (`Token`, `CreditCard`, `Pii`, etc.) fail closed: when the value is at or below the keep window (e.g. a 4-character token under `Token`'s keep-last-4), every character is masked instead of revealed. The `Email` policy applies the same rule to the local part.
+
 **Unannotated containers whose type derives `Sensitive` are still walked**. If a nested type has `#[sensitive(Policy)]` annotations on its leaves, those are applied even when the outer container is unannotated.
 
 **Sets can collapse after redaction**. `HashSet`/`BTreeSet` are redacted element-by-element and then collected back into a set. If redaction makes elements equal (e.g., multiple values redact to `"[REDACTED]"`), the resulting set may shrink. If cardinality matters, prefer a `Vec`.

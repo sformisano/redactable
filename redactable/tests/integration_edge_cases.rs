@@ -2,7 +2,8 @@
 //!
 //! These tests focus on behavior across Unicode scalar values (including
 //! multi-byte characters and combining marks) and on boundary cases such as
-//! empty or very short inputs where keep policies may leave values unchanged.
+//! empty or very short inputs, where keep policies fail closed and mask the
+//! entire value.
 
 use redactable::TextRedactionPolicy;
 
@@ -23,8 +24,9 @@ mod empty_and_short_strings {
 
     #[test]
     fn handles_single_character() {
+        // Fail closed: a value at or below the keep window is fully masked.
         let policy = TextRedactionPolicy::keep_last(4);
-        assert_eq!(policy.apply_to("x"), "x");
+        assert_eq!(policy.apply_to("x"), "*");
 
         let policy = TextRedactionPolicy::mask_first(1);
         assert_eq!(policy.apply_to("x"), "*");

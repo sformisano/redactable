@@ -126,8 +126,9 @@ impl RedactionPolicy for PhoneNumber {
 
 /// Policy marker for personally identifiable information.
 ///
-/// Keeps the last 2 characters visible to protect short names
-/// (e.g., `"John Doe"` → `"******oe"`).
+/// Keeps the last 2 characters visible (e.g., `"John Doe"` → `"******oe"`).
+/// Values of 2 characters or fewer are fully masked: keep policies fail
+/// closed rather than revealing values shorter than the keep window.
 #[derive(Clone, Copy)]
 pub struct Pii;
 
