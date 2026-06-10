@@ -14,6 +14,9 @@ confidence-threshold = 0.8
 [bans]
 multiple-versions = "warn"
 wildcards = "deny"
+# Unpublished workspace-internal path dependencies (e.g. the test-fixtures
+# crate) have no version requirement by design.
+allow-wildcard-paths = true
 
 [sources]
 unknown-registry = "deny"
