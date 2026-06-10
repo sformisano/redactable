@@ -45,7 +45,7 @@ fn passthrough_nonzero_integers_unchanged() {
 fn passthrough_duration_unchanged() {
     use std::time::Duration;
 
-    let duration = Duration::from_secs(60);
+    let duration = Duration::from_mins(1);
     assert_eq!(duration.redact(), duration);
 }
 
