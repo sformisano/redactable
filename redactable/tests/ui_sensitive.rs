@@ -10,4 +10,10 @@ mod sensitive {
         let t = trybuild::TestCases::new();
         t.compile_fail("tests/ui/sensitive_variant_attr_rejected.rs");
     }
+
+    #[test]
+    fn rejects_dual_without_sensitive_display() {
+        let t = trybuild::TestCases::new();
+        t.compile_fail("tests/ui/sensitive_dual_without_display_rejected.rs");
+    }
 }

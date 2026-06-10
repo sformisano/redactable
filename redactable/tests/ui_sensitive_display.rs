@@ -52,4 +52,10 @@ mod sensitive_display {
         let t = trybuild::TestCases::new();
         t.compile_fail("tests/ui/sensitive_display_variant_attr_rejected.rs");
     }
+
+    #[test]
+    fn rejects_dual_without_sensitive() {
+        let t = trybuild::TestCases::new();
+        t.compile_fail("tests/ui/sensitive_display_dual_without_sensitive_rejected.rs");
+    }
 }

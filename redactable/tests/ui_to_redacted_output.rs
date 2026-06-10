@@ -1,4 +1,8 @@
 mod to_redacted_output {
+    // The expected stderr lists every ToRedactedOutput implementor, and that
+    // list includes json-gated types, so the snapshot only matches when the
+    // json feature is enabled (CI covers it via the all-features run).
+    #[cfg(feature = "json")]
     #[test]
     fn rejects_raw_string() {
         let t = trybuild::TestCases::new();

@@ -1,0 +1,27 @@
+error[E0277]: the trait bound `ApiKey: redactable::RedactableWithFormatter` is not satisfied
+  --> tests/ui/sensitive_dual_without_display_rejected.rs:15:8
+   |
+15 | struct ApiKey(#[sensitive(redactable::Token)] String);
+   |        ^^^^^^ unsatisfied trait bound
+   |
+help: the trait `redactable::RedactableWithFormatter` is not implemented for `ApiKey`
+  --> tests/ui/sensitive_dual_without_display_rejected.rs:15:1
+   |
+15 | struct ApiKey(#[sensitive(redactable::Token)] String);
+   | ^^^^^^^^^^^^^
+   = help: the following other types implement trait `redactable::RedactableWithFormatter`:
+             &T
+             ()
+             Arc<T>
+             BTreeMap<K, V>
+             BTreeSet<T>
+             Box<T>
+             Cell<T>
+             Cow<'_, str>
+           and $N others
+note: required by a bound in `dual_requires_sensitive_display`
+  --> tests/ui/sensitive_dual_without_display_rejected.rs:13:24
+   |
+13 | #[derive(Clone, Debug, Sensitive, serde::Serialize)]
+   |                        ^^^^^^^^^ required by this bound in `dual_requires_sensitive_display`
+   = note: this error originates in the derive macro `Sensitive` (in Nightly builds, run with -Z macro-backtrace for more info)

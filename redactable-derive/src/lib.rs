@@ -607,6 +607,36 @@ fn expand(input: DeriveInput, kind: DeriveKind) -> Result<TokenStream> {
 
     let crate_root = crate_root();
 
+    // `#[sensitive(dual)]` is honor-system between the two macros: each one
+    // skips impls it expects the other to provide, and a macro cannot see its
+    // sibling derives. Assert at compile time that the counterpart's trait
+    // actually exists so dual with only one derive fails loudly instead of
+    // silently dropping the redacted Debug (or slog/tracing) impls. The
+    // assertion needs a fully concrete type name, so generic types are not
+    // checked.
+    let dual_pairing_assert = if dual && generics.params.is_empty() {
+        match kind {
+            DeriveKind::Sensitive => quote! {
+                const _: fn() = || {
+                    // dual skips Debug here because SensitiveDisplay provides it;
+                    // this fails to compile when SensitiveDisplay is not derived.
+                    fn dual_requires_sensitive_display<T: #crate_root::RedactableWithFormatter>() {}
+                    dual_requires_sensitive_display::<#ident>();
+                };
+            },
+            DeriveKind::SensitiveDisplay => quote! {
+                const _: fn() = || {
+                    // dual skips slog/tracing here because Sensitive provides them;
+                    // this fails to compile when Sensitive is not derived.
+                    fn dual_requires_sensitive<T: #crate_root::RedactableWithMapper>() {}
+                    dual_requires_sensitive::<#ident>();
+                };
+            },
+        }
+    } else {
+        quote! {}
+    };
+
     if matches!(kind, DeriveKind::SensitiveDisplay) {
         let redacted_display_output = derive_redacted_display(&ident, &data, &attrs, &generics)?;
         let redacted_display_generics =
@@ -730,6 +760,7 @@ fn expand(input: DeriveInput, kind: DeriveKind) -> Result<TokenStream> {
             #debug_impl
             #slog_impl
             #tracing_impl
+            #dual_pairing_assert
         });
     }
 
@@ -846,6 +877,8 @@ fn expand(input: DeriveInput, kind: DeriveKind) -> Result<TokenStream> {
         #slog_impl
 
         #tracing_impl
+
+        #dual_pairing_assert
     };
     Ok(trait_impl)
 }
