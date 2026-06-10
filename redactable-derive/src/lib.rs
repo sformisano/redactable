@@ -178,9 +178,9 @@ pub fn derive_not_sensitive(input: proc_macro::TokenStream) -> proc_macro::Token
 
 /// Rejects `#[sensitive]` and `#[not_sensitive]` attributes on a non-sensitive type.
 ///
-/// Checks both container-level and field-level attributes. `#[sensitive]` is wrong
-/// because the type is explicitly non-sensitive; `#[not_sensitive]` is redundant
-/// because the entire type is already non-sensitive.
+/// Checks container-level, variant-level, and field-level attributes. `#[sensitive]`
+/// is wrong because the type is explicitly non-sensitive; `#[not_sensitive]` is
+/// redundant because the entire type is already non-sensitive.
 fn reject_sensitivity_attrs(attrs: &[syn::Attribute], data: &Data, macro_name: &str) -> Result<()> {
     let check_attr = |attr: &syn::Attribute| -> Result<()> {
         if attr.path().is_ident("sensitive") {
@@ -214,6 +214,9 @@ fn reject_sensitivity_attrs(attrs: &[syn::Attribute], data: &Data, macro_name: &
         }
         Data::Enum(data) => {
             for variant in &data.variants {
+                for attr in &variant.attrs {
+                    check_attr(attr)?;
+                }
                 for field in &variant.fields {
                     for attr in &field.attrs {
                         check_attr(attr)?;

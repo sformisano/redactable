@@ -15,7 +15,7 @@ use syn::{Attribute, Data, DataEnum, DataStruct, Fields, LitStr, Result, spanned
 use crate::{
     crate_path,
     generics::collect_generics_from_type,
-    strategy::{Strategy, parse_field_strategy},
+    strategy::{Strategy, parse_field_strategy, reject_variant_sensitivity_attrs},
     types::{is_ip_address_type, is_nonzero_type, is_scalar_type},
 };
 
@@ -123,6 +123,7 @@ fn derive_enum_display(
     let mut nested_generics = Vec::new();
 
     for variant in &data.variants {
+        reject_variant_sensitivity_attrs(&variant.attrs)?;
         let template = template_from_attrs(&variant.attrs, variant.ident.span())?;
         let fields = build_fields_from_syn(&variant.fields)?;
         let format_args = build_format_args(&template, &fields, generics)?;

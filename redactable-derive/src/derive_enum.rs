@@ -9,7 +9,7 @@ use syn::{DataEnum, Fields, Result, spanned::Spanned};
 
 use crate::{
     DeriveOutput, crate_path,
-    strategy::{Strategy, parse_field_strategy},
+    strategy::{Strategy, parse_field_strategy, reject_variant_sensitivity_attrs},
     transform::{DeriveContext, generate_field_transform},
 };
 
@@ -36,6 +36,7 @@ pub(crate) fn derive_enum(
     let mut debug_unredacted_generics = Vec::new();
 
     for variant in data.variants {
+        reject_variant_sensitivity_attrs(&variant.attrs)?;
         let variant_ident = &variant.ident;
         let mut variant_ctx = VariantContext {
             name,

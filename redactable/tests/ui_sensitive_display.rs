@@ -46,4 +46,10 @@ mod sensitive_display {
         let t = trybuild::TestCases::new();
         t.compile_fail("tests/ui/sensitive_display_unsupported_specifier_rejected.rs");
     }
+
+    #[test]
+    fn rejects_variant_level_attribute() {
+        let t = trybuild::TestCases::new();
+        t.compile_fail("tests/ui/sensitive_display_variant_attr_rejected.rs");
+    }
 }

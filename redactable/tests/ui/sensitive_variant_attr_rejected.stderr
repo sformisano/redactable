@@ -1,0 +1,5 @@
+error: `#[sensitive(...)]` is not supported on enum variants; annotate the variant's fields instead
+ --> tests/ui/sensitive_variant_attr_rejected.rs:8:5
+  |
+8 |     #[sensitive(redactable::Secret)]
+  |     ^

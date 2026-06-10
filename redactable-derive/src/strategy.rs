@@ -39,6 +39,31 @@ fn set_strategy(target: &mut Option<Strategy>, next: Strategy, span: Span) -> Re
     Ok(())
 }
 
+/// Rejects `#[sensitive(...)]` and `#[not_sensitive]` attributes on enum variants.
+///
+/// Sensitivity is a per-field property. A variant-level annotation used to be
+/// silently ignored, which read as "this variant is protected" while redacting
+/// nothing; rejecting it at compile time closes that gap.
+pub(crate) fn reject_variant_sensitivity_attrs(attrs: &[Attribute]) -> Result<()> {
+    for attr in attrs {
+        if attr.path().is_ident("sensitive") {
+            return Err(syn::Error::new(
+                attr.span(),
+                "`#[sensitive(...)]` is not supported on enum variants; \
+                 annotate the variant's fields instead",
+            ));
+        }
+        if attr.path().is_ident("not_sensitive") {
+            return Err(syn::Error::new(
+                attr.span(),
+                "`#[not_sensitive]` is not supported on enum variants; \
+                 annotate the variant's fields instead",
+            ));
+        }
+    }
+    Ok(())
+}
+
 pub(crate) fn parse_field_strategy(attrs: &[Attribute]) -> Result<Strategy> {
     let mut strategy: Option<Strategy> = None;
     for attr in attrs {
