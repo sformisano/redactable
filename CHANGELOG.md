@@ -1,5 +1,38 @@
 # Changelog
 
+## 0.9.0
+
+`Redactable` is now the certification trait, replacing the `DeclaredRedactable`
+marker introduced in 0.8.0. One trait now carries both meanings: "this type has
+declared redaction behavior" and "this type can be redacted".
+
+### Changed
+- **Breaking:** `Redactable` is no longer blanket-implemented over the traversal
+  machinery. It is implemented by the `Sensitive`, `NotSensitive`, and
+  `NotSensitiveDisplay` derives, by `SensitiveValue` / `NotSensitiveValue` and
+  `serde_json::Value`, and forwarded through std containers of such types -
+  never by bare leaves. `password.redact()` on a raw `String` no longer
+  compiles: it was a no-op that read like a security action. Unannotated
+  fields inside derived containers are unaffected (traversal uses the internal
+  machinery, not `Redactable`).
+- **Breaking:** the redacted-output extension traits (`RedactedOutputExt`,
+  `RedactedJsonExt`, `SlogRedactedExt`) require plain `Redactable` again; the
+  display-side gate (`SlogRedactedDisplayExt`, `RedactedDisplayValue`) requires
+  `ToRedactedOutput`, which the display derives generate. Manual
+  `RedactableWithMapper` implementors that opted into 0.8.0's
+  `DeclaredRedactable` should implement `Redactable` instead.
+- `tracing_redacted_valuable()` now also rejects raw values: it bounds on
+  `Redactable`, which raw leaves no longer satisfy.
+
+### Added
+- `NotSensitiveDisplay` generates `ToRedactedOutput` (the `Display` text), so
+  explicitly non-sensitive display types keep `slog_redacted_display()` and
+  gain `tracing_redacted()`.
+
+### Removed
+- **Breaking:** the `DeclaredRedactable` marker trait. Its role is folded into
+  `Redactable` (structural side) and `ToRedactedOutput` (display side).
+
 ## 0.8.0
 
 Security-hardening release driven by a full-crate audit. Several fixes close

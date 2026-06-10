@@ -717,7 +717,7 @@ The `slog` feature enables automatic redaction. Just log your values and they're
 
 ```toml
 [dependencies]
-redactable = { version = "0.8", features = ["slog"] }
+redactable = { version = "0.9", features = ["slog"] }
 ```
 
 **Containers**: the `Sensitive` derive generates `slog::Value` automatically:
@@ -761,7 +761,7 @@ For structured logging with tracing, use the `valuable` integration:
 
 ```toml
 [dependencies]
-redactable = { version = "0.8", features = ["tracing-valuable"] }
+redactable = { version = "0.9", features = ["tracing-valuable"] }
 ```
 
 ```rust
