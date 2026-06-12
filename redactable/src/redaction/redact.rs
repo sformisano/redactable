@@ -30,7 +30,7 @@
 use std::{
     borrow::Cow,
     cell::{Cell, RefCell},
-    collections::{BTreeMap, BTreeSet, HashMap, HashSet},
+    collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque},
     hash::{BuildHasher, Hash},
     rc::Rc,
     sync::Arc,
@@ -176,7 +176,8 @@ where
 ///
 /// ## Implementors
 ///
-/// - **Wrapper types** (`Option`, `Vec`, `Box`, maps, sets): Recursively apply to contents
+/// - **Wrapper types** (`Option`, `Vec`, `VecDeque`, arrays, `Box`, maps, sets):
+///   Recursively apply to contents
 /// - **Leaf types** (`String`, `Cow<str>`): Apply the redaction policy directly
 ///
 /// ## Example
@@ -342,6 +343,38 @@ where
     }
 }
 
+impl<T> PolicyApplicableRef for VecDeque<T>
+where
+    T: PolicyApplicableRef,
+{
+    type Output = VecDeque<T::Output>;
+
+    fn apply_policy_ref<P, M>(&self, mapper: &M) -> Self::Output
+    where
+        P: RedactionPolicy,
+        M: RedactableMapper,
+    {
+        self.iter()
+            .map(|v| v.apply_policy_ref::<P, M>(mapper))
+            .collect()
+    }
+}
+
+impl<T, const N: usize> PolicyApplicableRef for [T; N]
+where
+    T: PolicyApplicableRef,
+{
+    type Output = [T::Output; N];
+
+    fn apply_policy_ref<P, M>(&self, mapper: &M) -> Self::Output
+    where
+        P: RedactionPolicy,
+        M: RedactableMapper,
+    {
+        self.each_ref().map(|v| v.apply_policy_ref::<P, M>(mapper))
+    }
+}
+
 impl<T> PolicyApplicableRef for Box<T>
 where
     T: PolicyApplicableRef,
@@ -447,6 +480,28 @@ impl<T: PolicyApplicable> PolicyApplicable for Vec<T> {
         self.into_iter()
             .map(|v| v.apply_policy::<P, M>(mapper))
             .collect()
+    }
+}
+
+impl<T: PolicyApplicable> PolicyApplicable for VecDeque<T> {
+    fn apply_policy<P, M>(self, mapper: &M) -> Self
+    where
+        P: RedactionPolicy,
+        M: RedactableMapper,
+    {
+        self.into_iter()
+            .map(|v| v.apply_policy::<P, M>(mapper))
+            .collect()
+    }
+}
+
+impl<T: PolicyApplicable, const N: usize> PolicyApplicable for [T; N] {
+    fn apply_policy<P, M>(self, mapper: &M) -> Self
+    where
+        P: RedactionPolicy,
+        M: RedactableMapper,
+    {
+        self.map(|v| v.apply_policy::<P, M>(mapper))
     }
 }
 

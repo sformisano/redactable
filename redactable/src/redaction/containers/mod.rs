@@ -1,8 +1,48 @@
 //! `RedactableWithMapper` implementations for standard library types.
 //!
 //! This module provides `RedactableWithMapper` implementations for common std
-//! containers (`Option`, `Vec`, `Box`, maps, sets). When walking into these
-//! containers, they recursively apply redaction to their contents.
+//! containers (`Option`, `Vec`, `VecDeque`, arrays, tuples, `Box`, locks, maps,
+//! sets). When walking into these containers, they recursively apply redaction
+//! to their contents.
+//!
+//! Passthrough leaf types still are not certified for `.redact()`. Container
+//! certification forwards only when the contained values have declared
+//! redaction behavior:
+//!
+//! ```compile_fail
+//! use redactable::Redactable;
+//!
+//! let values = std::collections::VecDeque::from([String::from("raw")]);
+//! let _ = values.redact();
+//! ```
+//!
+//! ```compile_fail
+//! use redactable::Redactable;
+//!
+//! let values = [String::from("raw")];
+//! let _ = values.redact();
+//! ```
+//!
+//! ```compile_fail
+//! use redactable::Redactable;
+//!
+//! let values = (String::from("raw"),);
+//! let _ = values.redact();
+//! ```
+//!
+//! ```compile_fail
+//! use redactable::Redactable;
+//!
+//! let value = std::sync::Mutex::new(String::from("raw"));
+//! let _ = value.redact();
+//! ```
+//!
+//! ```compile_fail
+//! use redactable::Redactable;
+//!
+//! let value = std::sync::RwLock::new(String::from("raw"));
+//! let _ = value.redact();
+//! ```
 //!
 //! ## Map Keys Are Not Redacted
 //!

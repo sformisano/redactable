@@ -10,6 +10,10 @@
 //! Common scalar types implement `RedactableWithFormatter` as passthrough (unchanged output):
 //! `String`, `str`, `bool`, `char`, integers, floats, `Cow<str>`, `PhantomData`, `()`.
 //!
+//! Container implementations format inner values recursively. `RefCell`,
+//! `Mutex`, and `RwLock` use non-blocking borrow/lock attempts so display
+//! redaction does not panic or wait behind an active writer.
+//!
 //! Feature-gated types: `chrono` date/time types, `time` crate types, `Uuid`.
 
 use std::{
@@ -20,6 +24,7 @@ use std::{
         NonZeroI8, NonZeroI16, NonZeroI32, NonZeroI64, NonZeroI128, NonZeroIsize, NonZeroU8,
         NonZeroU16, NonZeroU32, NonZeroU64, NonZeroU128, NonZeroUsize,
     },
+    sync::{Mutex, RwLock, TryLockError},
     time::{Duration, Instant, SystemTime},
 };
 
@@ -258,6 +263,12 @@ impl<T: RedactableWithFormatter> RedactableWithFormatter for [T] {
     }
 }
 
+impl<T: RedactableWithFormatter, const N: usize> RedactableWithFormatter for [T; N] {
+    fn fmt_redacted(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.as_slice().fmt_redacted(f)
+    }
+}
+
 impl<T: RedactableWithFormatter> RedactableWithFormatter for std::collections::VecDeque<T> {
     fn fmt_redacted(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let mut list = f.debug_list();
@@ -265,6 +276,60 @@ impl<T: RedactableWithFormatter> RedactableWithFormatter for std::collections::V
             list.entry(&item.redacted_display());
         }
         list.finish()
+    }
+}
+
+impl<T0: RedactableWithFormatter> RedactableWithFormatter for (T0,) {
+    fn fmt_redacted(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("(")?;
+        self.0.fmt_redacted(f)?;
+        f.write_str(",)")
+    }
+}
+
+impl<T0: RedactableWithFormatter, T1: RedactableWithFormatter> RedactableWithFormatter
+    for (T0, T1)
+{
+    fn fmt_redacted(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("(")?;
+        self.0.fmt_redacted(f)?;
+        f.write_str(", ")?;
+        self.1.fmt_redacted(f)?;
+        f.write_str(")")
+    }
+}
+
+impl<T0: RedactableWithFormatter, T1: RedactableWithFormatter, T2: RedactableWithFormatter>
+    RedactableWithFormatter for (T0, T1, T2)
+{
+    fn fmt_redacted(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("(")?;
+        self.0.fmt_redacted(f)?;
+        f.write_str(", ")?;
+        self.1.fmt_redacted(f)?;
+        f.write_str(", ")?;
+        self.2.fmt_redacted(f)?;
+        f.write_str(")")
+    }
+}
+
+impl<
+    T0: RedactableWithFormatter,
+    T1: RedactableWithFormatter,
+    T2: RedactableWithFormatter,
+    T3: RedactableWithFormatter,
+> RedactableWithFormatter for (T0, T1, T2, T3)
+{
+    fn fmt_redacted(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("(")?;
+        self.0.fmt_redacted(f)?;
+        f.write_str(", ")?;
+        self.1.fmt_redacted(f)?;
+        f.write_str(", ")?;
+        self.2.fmt_redacted(f)?;
+        f.write_str(", ")?;
+        self.3.fmt_redacted(f)?;
+        f.write_str(")")
     }
 }
 
@@ -362,7 +427,30 @@ impl<T: RedactableWithFormatter + Copy> RedactableWithFormatter for std::cell::C
 
 impl<T: RedactableWithFormatter + ?Sized> RedactableWithFormatter for std::cell::RefCell<T> {
     fn fmt_redacted(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.borrow().fmt_redacted(f)
+        match self.try_borrow() {
+            Ok(value) => value.fmt_redacted(f),
+            Err(_) => f.write_str("<borrowed>"),
+        }
+    }
+}
+
+impl<T: RedactableWithFormatter + ?Sized> RedactableWithFormatter for Mutex<T> {
+    fn fmt_redacted(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self.try_lock() {
+            Ok(value) => value.fmt_redacted(f),
+            Err(TryLockError::WouldBlock) => f.write_str("<locked>"),
+            Err(TryLockError::Poisoned(err)) => err.into_inner().fmt_redacted(f),
+        }
+    }
+}
+
+impl<T: RedactableWithFormatter + ?Sized> RedactableWithFormatter for RwLock<T> {
+    fn fmt_redacted(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self.try_read() {
+            Ok(value) => value.fmt_redacted(f),
+            Err(TryLockError::WouldBlock) => f.write_str("<locked>"),
+            Err(TryLockError::Poisoned(err)) => err.into_inner().fmt_redacted(f),
+        }
     }
 }
 
@@ -390,11 +478,11 @@ mod tests {
         cell::{Cell, RefCell},
         collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque},
         rc::Rc,
-        sync::Arc,
+        sync::{Arc, Mutex, RwLock},
     };
 
     use super::RedactableWithFormatter;
-    use crate::SensitiveDisplay;
+    use crate::{Secret, SensitiveDisplay};
 
     #[derive(Eq, Hash, Ord, PartialEq, PartialOrd)]
     struct Key(&'static str);
@@ -409,6 +497,13 @@ mod tests {
         fn fmt_redacted(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             f.write_str("[REDACTED]")
         }
+    }
+
+    #[derive(SensitiveDisplay)]
+    #[error("{value}")]
+    struct DisplaySecret {
+        #[sensitive(Secret)]
+        value: String,
     }
 
     #[test]
@@ -448,6 +543,118 @@ mod tests {
         v.push_back("a".to_string());
         v.push_back("b".to_string());
         assert_eq!(format!("{}", v.redacted_display()), "[a, b]");
+    }
+
+    #[test]
+    fn array_displays_redacted_elements() {
+        let values = [
+            DisplaySecret {
+                value: "first".to_string(),
+            },
+            DisplaySecret {
+                value: "second".to_string(),
+            },
+        ];
+        assert_eq!(
+            format!("{}", values.redacted_display()),
+            "[[REDACTED], [REDACTED]]"
+        );
+    }
+
+    #[test]
+    fn tuple_displays_redacted_elements_for_all_arities() {
+        let single = (DisplaySecret {
+            value: "single".to_string(),
+        },);
+        assert_eq!(format!("{}", single.redacted_display()), "([REDACTED],)");
+
+        let pair = (
+            DisplaySecret {
+                value: "first".to_string(),
+            },
+            DisplaySecret {
+                value: "second".to_string(),
+            },
+        );
+        assert_eq!(
+            format!("{}", pair.redacted_display()),
+            "([REDACTED], [REDACTED])"
+        );
+
+        let triple = (
+            DisplaySecret {
+                value: "first".to_string(),
+            },
+            DisplaySecret {
+                value: "second".to_string(),
+            },
+            DisplaySecret {
+                value: "third".to_string(),
+            },
+        );
+        assert_eq!(
+            format!("{}", triple.redacted_display()),
+            "([REDACTED], [REDACTED], [REDACTED])"
+        );
+
+        let quad = (
+            DisplaySecret {
+                value: "first".to_string(),
+            },
+            DisplaySecret {
+                value: "second".to_string(),
+            },
+            DisplaySecret {
+                value: "third".to_string(),
+            },
+            DisplaySecret {
+                value: "fourth".to_string(),
+            },
+        );
+        assert_eq!(
+            format!("{}", quad.redacted_display()),
+            "([REDACTED], [REDACTED], [REDACTED], [REDACTED])"
+        );
+    }
+
+    #[test]
+    fn vecdeque_policy_ref_redacts_raw_string_elements() {
+        #[derive(SensitiveDisplay)]
+        #[error("{values}")]
+        struct WithVecDeque {
+            #[sensitive(Secret)]
+            values: VecDeque<String>,
+        }
+
+        let values = ["first", "second"]
+            .into_iter()
+            .map(str::to_string)
+            .collect();
+        let display = WithVecDeque { values };
+
+        assert_eq!(
+            format!("{}", display.redacted_display()),
+            "[[REDACTED], [REDACTED]]"
+        );
+    }
+
+    #[test]
+    fn array_policy_ref_redacts_raw_string_elements() {
+        #[derive(SensitiveDisplay)]
+        #[error("{values}")]
+        struct WithArray {
+            #[sensitive(Secret)]
+            values: [String; 2],
+        }
+
+        let display = WithArray {
+            values: ["first".to_string(), "second".to_string()],
+        };
+
+        assert_eq!(
+            format!("{}", display.redacted_display()),
+            "[[REDACTED], [REDACTED]]"
+        );
     }
 
     #[test]
@@ -531,6 +738,43 @@ mod tests {
     fn refcell_displays_inner() {
         let r = RefCell::new("refcelled".to_string());
         assert_eq!(format!("{}", r.redacted_display()), "refcelled");
+    }
+
+    #[test]
+    fn refcell_displays_borrowed_during_mutable_borrow() {
+        let r = RefCell::new("refcelled".to_string());
+        let _borrow = r.borrow_mut();
+        assert_eq!(format!("{}", r.redacted_display()), "<borrowed>");
+    }
+
+    #[test]
+    fn mutex_displays_redacted_inner() {
+        let value = Mutex::new(DisplaySecret {
+            value: "secret".to_string(),
+        });
+        assert_eq!(format!("{}", value.redacted_display()), "[REDACTED]");
+    }
+
+    #[test]
+    fn mutex_displays_locked_on_contention() {
+        let value = Mutex::new("locked".to_string());
+        let _guard = value.lock().unwrap();
+        assert_eq!(format!("{}", value.redacted_display()), "<locked>");
+    }
+
+    #[test]
+    fn rwlock_displays_redacted_inner() {
+        let value = RwLock::new(DisplaySecret {
+            value: "secret".to_string(),
+        });
+        assert_eq!(format!("{}", value.redacted_display()), "[REDACTED]");
+    }
+
+    #[test]
+    fn rwlock_displays_locked_on_contention() {
+        let value = RwLock::new("locked".to_string());
+        let _guard = value.write().unwrap();
+        assert_eq!(format!("{}", value.redacted_display()), "<locked>");
     }
 
     #[test]

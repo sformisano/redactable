@@ -6,7 +6,7 @@
 //! - [`RedactableWithMapper`]: Types that participate in redaction traversal
 //! - [`Redactable`]: User-facing `.redact()` method
 
-use std::borrow::Cow;
+use std::{borrow::Cow, collections::VecDeque};
 
 use super::redact::RedactableMapper;
 use crate::policy::{RedactionPolicy, TextRedactionPolicy};
@@ -102,6 +102,21 @@ pub trait RedactableWithMapper: Sized {
 /// so calling `redact()` on them - or certifying them as redacted output -
 /// must not compile.
 ///
+/// Containers preserve that boundary: forwarding applies only when their
+/// contents are also certified.
+///
+/// ```compile_fail
+/// use redactable::Redactable;
+///
+/// fn require_redactable<T: Redactable>(_: T) {}
+///
+/// require_redactable(std::collections::VecDeque::from([String::from("raw")]));
+/// require_redactable([String::from("raw")]);
+/// require_redactable((String::from("raw"),));
+/// require_redactable(std::sync::Mutex::new(String::from("raw")));
+/// require_redactable(std::sync::RwLock::new(String::from("raw")));
+/// ```
+///
 /// `redact` is implemented in terms of the default mapping behavior provided by
 /// [`super::redact::redact`], which applies policies associated with policy
 /// marker types.
@@ -132,6 +147,10 @@ impl<T: Redactable, E: Redactable> Redactable for Result<T, E> {}
 
 impl<T: Redactable> Redactable for Vec<T> {}
 
+impl<T: Redactable> Redactable for VecDeque<T> {}
+
+impl<T: Redactable, const N: usize> Redactable for [T; N] {}
+
 impl<T: Redactable> Redactable for Box<T> {}
 
 impl<T: Redactable + Clone> Redactable for std::sync::Arc<T> {}
@@ -141,6 +160,10 @@ impl<T: Redactable + Clone> Redactable for std::rc::Rc<T> {}
 impl<T: Redactable> Redactable for std::cell::RefCell<T> {}
 
 impl<T: Redactable + Copy> Redactable for std::cell::Cell<T> {}
+
+impl<T: Redactable> Redactable for std::sync::Mutex<T> {}
+
+impl<T: Redactable> Redactable for std::sync::RwLock<T> {}
 
 impl<K, V, S> Redactable for std::collections::HashMap<K, V, S>
 where
@@ -160,6 +183,21 @@ where
 }
 
 impl<T: Redactable + Ord> Redactable for std::collections::BTreeSet<T> {}
+
+macro_rules! impl_tuple_redactable {
+    ($($name:ident),+ $(,)?) => {
+        impl<$($name),+> Redactable for ($($name,)+)
+        where
+            $($name: Redactable,)+
+        {
+        }
+    };
+}
+
+impl_tuple_redactable!(T0);
+impl_tuple_redactable!(T0, T1);
+impl_tuple_redactable!(T0, T1, T2);
+impl_tuple_redactable!(T0, T1, T2, T3);
 
 // =============================================================================
 // Tests

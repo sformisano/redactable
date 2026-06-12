@@ -2,9 +2,9 @@
 
 use std::{
     cell::{Cell, RefCell},
-    collections::{BTreeMap, BTreeSet, HashMap, HashSet},
+    collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque},
     rc::Rc,
-    sync::Arc,
+    sync::{Arc, Mutex, RwLock},
 };
 
 use crate::{Secret, Sensitive, redaction::traits::Redactable};
@@ -133,6 +133,137 @@ fn vec_traversal_redacts_all_elements() {
 }
 
 #[test]
+fn vecdeque_traversal_redacts_all_elements() {
+    let values: VecDeque<_> = [
+        SensitiveString {
+            value: "first".to_string(),
+        },
+        SensitiveString {
+            value: "second".to_string(),
+        },
+    ]
+    .into_iter()
+    .collect();
+    let redacted = values.redact();
+    assert!(
+        redacted
+            .into_iter()
+            .all(|value| value.value == "[REDACTED]")
+    );
+}
+
+#[test]
+fn array_traversal_redacts_all_elements() {
+    let values = [
+        SensitiveString {
+            value: "first".to_string(),
+        },
+        SensitiveString {
+            value: "second".to_string(),
+        },
+    ];
+    let redacted = values.redact();
+    assert!(
+        redacted
+            .into_iter()
+            .all(|value| value.value == "[REDACTED]")
+    );
+}
+
+#[test]
+fn tuple_traversal_redacts_all_arities() {
+    let single = (SensitiveString {
+        value: "single".to_string(),
+    },)
+        .redact();
+    assert_eq!(single.0.value, "[REDACTED]");
+
+    let pair = (
+        SensitiveString {
+            value: "first".to_string(),
+        },
+        SensitiveString {
+            value: "second".to_string(),
+        },
+    )
+        .redact();
+    assert_eq!(pair.0.value, "[REDACTED]");
+    assert_eq!(pair.1.value, "[REDACTED]");
+
+    let triple = (
+        SensitiveString {
+            value: "first".to_string(),
+        },
+        SensitiveString {
+            value: "second".to_string(),
+        },
+        SensitiveString {
+            value: "third".to_string(),
+        },
+    )
+        .redact();
+    assert_eq!(triple.0.value, "[REDACTED]");
+    assert_eq!(triple.1.value, "[REDACTED]");
+    assert_eq!(triple.2.value, "[REDACTED]");
+
+    let quad = (
+        SensitiveString {
+            value: "first".to_string(),
+        },
+        SensitiveString {
+            value: "second".to_string(),
+        },
+        SensitiveString {
+            value: "third".to_string(),
+        },
+        SensitiveString {
+            value: "fourth".to_string(),
+        },
+    )
+        .redact();
+    assert_eq!(quad.0.value, "[REDACTED]");
+    assert_eq!(quad.1.value, "[REDACTED]");
+    assert_eq!(quad.2.value, "[REDACTED]");
+    assert_eq!(quad.3.value, "[REDACTED]");
+}
+
+#[test]
+fn vecdeque_policy_redacts_raw_string_elements() {
+    #[derive(Clone, Sensitive)]
+    #[cfg_attr(feature = "json", derive(serde::Serialize))]
+    struct WithVecDeque {
+        #[sensitive(Secret)]
+        values: VecDeque<String>,
+    }
+
+    let values = ["first", "second"]
+        .into_iter()
+        .map(str::to_string)
+        .collect();
+    let redacted = WithVecDeque { values }.redact();
+    assert_eq!(
+        redacted.values.into_iter().collect::<Vec<_>>(),
+        vec!["[REDACTED]", "[REDACTED]"]
+    );
+}
+
+#[test]
+fn array_policy_redacts_raw_string_elements() {
+    #[derive(Clone, Sensitive)]
+    #[cfg_attr(feature = "json", derive(serde::Serialize))]
+    struct WithArray {
+        #[sensitive(Secret)]
+        values: [String; 2],
+    }
+
+    let redacted = WithArray {
+        values: ["first".to_string(), "second".to_string()],
+    }
+    .redact();
+    assert_eq!(redacted.values, ["[REDACTED]", "[REDACTED]"]);
+}
+
+#[test]
 fn box_traversal_redacts_inner() {
     let b = Box::new(SensitiveString {
         value: "secret".to_string(),
@@ -157,6 +288,54 @@ fn rc_traversal_redacts_inner() {
     });
     let redacted = r.redact();
     assert_eq!(redacted.value, "[REDACTED]");
+}
+
+#[test]
+fn mutex_traversal_redacts_inner() {
+    let value = Mutex::new(SensitiveString {
+        value: "secret".to_string(),
+    });
+    let redacted = value.redact();
+    assert_eq!(redacted.into_inner().unwrap().value, "[REDACTED]");
+}
+
+#[test]
+fn mutex_traversal_recovers_poisoned_inner() {
+    let value = Mutex::new(SensitiveString {
+        value: "secret".to_string(),
+    });
+    let result = std::panic::catch_unwind(|| {
+        let _guard = value.lock().unwrap();
+        panic!("poison mutex");
+    });
+    assert!(result.is_err());
+
+    let redacted = value.redact();
+    assert_eq!(redacted.into_inner().unwrap().value, "[REDACTED]");
+}
+
+#[test]
+fn rwlock_traversal_redacts_inner() {
+    let value = RwLock::new(SensitiveString {
+        value: "secret".to_string(),
+    });
+    let redacted = value.redact();
+    assert_eq!(redacted.into_inner().unwrap().value, "[REDACTED]");
+}
+
+#[test]
+fn rwlock_traversal_recovers_poisoned_inner() {
+    let value = RwLock::new(SensitiveString {
+        value: "secret".to_string(),
+    });
+    let result = std::panic::catch_unwind(|| {
+        let _guard = value.write().unwrap();
+        panic!("poison rwlock");
+    });
+    assert!(result.is_err());
+
+    let redacted = value.redact();
+    assert_eq!(redacted.into_inner().unwrap().value, "[REDACTED]");
 }
 
 #[test]
@@ -238,6 +417,32 @@ fn hashset_traversal_keeps_elements() {
     set.insert("public".to_string());
     let redacted = machine_redact(set);
     assert!(redacted.contains("public"));
+}
+
+#[test]
+fn new_raw_leaf_container_machinery_passthroughs_are_unchanged() {
+    let deque: VecDeque<String> = ["first", "second"]
+        .into_iter()
+        .map(str::to_string)
+        .collect();
+    assert_eq!(machine_redact(deque.clone()), deque);
+
+    let array = ["first".to_string(), "second".to_string()];
+    assert_eq!(machine_redact(array.clone()), array);
+
+    let tuple = (
+        "first".to_string(),
+        "second".to_string(),
+        "third".to_string(),
+        "fourth".to_string(),
+    );
+    assert_eq!(machine_redact(tuple.clone()), tuple);
+
+    let mutex = machine_redact(Mutex::new("secret".to_string()));
+    assert_eq!(mutex.into_inner().unwrap(), "secret");
+
+    let rwlock = machine_redact(RwLock::new("secret".to_string()));
+    assert_eq!(rwlock.into_inner().unwrap(), "secret");
 }
 
 #[test]
@@ -400,4 +605,27 @@ fn passthrough_time_weekday_unchanged() {
 
     assert_eq!(machine_redact(Weekday::Monday), Weekday::Monday);
     assert_eq!(machine_redact(Weekday::Sunday), Weekday::Sunday);
+}
+
+// =============================================================================
+// UUID passthrough tests
+// =============================================================================
+
+#[cfg(feature = "uuid")]
+#[test]
+fn passthrough_uuid_unchanged() {
+    use uuid::Uuid;
+
+    let id = Uuid::parse_str("67e55044-10b1-426f-9247-bb680e5fe0c8").expect("valid UUID");
+    assert_eq!(machine_redact(id), id);
+}
+
+#[cfg(feature = "uuid")]
+#[test]
+fn passthrough_uuid_formatter_unchanged() {
+    use crate::RedactableWithFormatter;
+    use uuid::Uuid;
+
+    let id = Uuid::parse_str("67e55044-10b1-426f-9247-bb680e5fe0c8").expect("valid UUID");
+    assert_eq!(id.redacted_display().to_string(), id.to_string());
 }
