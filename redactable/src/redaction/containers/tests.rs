@@ -492,6 +492,35 @@ fn socketaddr_passthrough_unchanged() {
     assert_eq!(redacted, addr);
 }
 
+// The documented workaround for IP values inside containers: container-of-IP
+// with #[sensitive(IpAddress)] is a targeted compile error, and the wrapper
+// carries the policy through instead.
+#[cfg(feature = "ip-address")]
+#[test]
+fn ip_in_container_redacts_via_sensitive_value_workaround() {
+    use std::net::IpAddr;
+
+    use crate::{IpAddress, SensitiveValue};
+
+    #[derive(Clone, Sensitive)]
+    #[cfg_attr(feature = "json", derive(serde::Serialize))]
+    struct Peer {
+        addr: Option<SensitiveValue<IpAddr, IpAddress>>,
+    }
+
+    let peer = Peer {
+        addr: Some(SensitiveValue::from(
+            "203.0.113.77".parse::<IpAddr>().expect("valid IPv4"),
+        )),
+    };
+    let redacted = peer.redact();
+    let inner = redacted.addr.expect("Some is preserved");
+    assert_eq!(
+        *inner.expose(),
+        "0.0.0.77".parse::<IpAddr>().expect("valid IPv4")
+    );
+}
+
 #[cfg(feature = "ip-address")]
 #[test]
 fn annotated_ipaddr_redacts() {

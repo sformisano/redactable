@@ -370,6 +370,8 @@ enum ApiError {
 
 Both support named placeholders (`{field_name}`), positional placeholders (`{0}`, `{1}`), and debug formatting (`{field:?}`).
 
+Note that `{field:?}` on an unannotated field renders through redacted-display semantics, not standard `Debug`: a `String` prints without quotes or escaping. If you need genuine `Debug` output (quoting, escape sequences), mark the field `#[not_sensitive]` — which formats the raw value with real `Debug` — or pre-format the value yourself.
+
 Positional placeholders must be contiguous starting at `0`; `{1}` without `{0}` is rejected. Dynamic width or precision, such as `{value:.*}`, and non-Display/Debug specifiers such as `{value:x}` are rejected.
 
 ### Why do scalars implement RedactableWithFormatter?
