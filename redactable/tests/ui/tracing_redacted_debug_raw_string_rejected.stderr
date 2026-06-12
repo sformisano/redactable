@@ -1,0 +1,24 @@
+error[E0277]: the trait bound `String: TracingRedactedDebugExt` is not satisfied
+  --> tests/ui/tracing_redacted_debug_raw_string_rejected.rs:13:27
+   |
+13 |     require_tracing_debug(&password);
+   |     --------------------- ^^^^^^^^^ the trait `Redactable` is not implemented for `String`
+   |     |
+   |     required by a bound introduced by this call
+   |
+   = help: the following other types implement trait `Redactable`:
+             (T0, T1)
+             (T0, T1, T2)
+             (T0, T1, T2, T3)
+             (T0,)
+             Arc<T>
+             BTreeMap<K, V>
+             BTreeSet<T>
+             Box<T>
+           and $N others
+   = note: required for `String` to implement `TracingRedactedDebugExt`
+note: required by a bound in `require_tracing_debug`
+  --> tests/ui/tracing_redacted_debug_raw_string_rejected.rs:9:29
+   |
+ 9 | fn require_tracing_debug<T: TracingRedactedDebugExt>(_: &T) {}
+   |                             ^^^^^^^^^^^^^^^^^^^^^^^ required by this bound in `require_tracing_debug`

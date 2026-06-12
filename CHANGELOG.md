@@ -3,6 +3,9 @@
 ## Unreleased
 
 ### Added
+- `TracingRedactedDebugExt` now provides a plain `tracing` helper for
+  structural `Sensitive` values, redacting a clone before recording it as a
+  `Debug` field.
 - `SensitiveValue<T, P>` and `NotSensitiveValue<T>` now implement `Deserialize`
   behind the `json` feature by deserializing the raw inner value and wrapping it,
   matching their raw `Serialize` behavior.

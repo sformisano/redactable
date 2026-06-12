@@ -1,31 +1,51 @@
 //! Adapters for emitting redacted values through `tracing`.
 //!
-//! This module provides two approaches for logging redacted values:
+//! This module provides three explicit tracing paths:
 //!
-//! - **`TracingRedactedExt`**: Logs redacted values as display strings. Works with any
-//!   tracing subscriber but loses structure.
+//! - **[`TracingRedactedDebugExt`]**: redacts a structural [`Redactable`] value
+//!   before handing its `Debug` form to tracing.
 //!
-//! - **`TracingValuableExt`** (requires `tracing-valuable` feature): Logs redacted values
-//!   as structured data via the `valuable` crate. Subscribers that support `valuable` can
-//!   traverse fields as nested, typed structures.
+//! - **[`TracingRedactedExt`]**: logs `ToRedactedOutput` values as display
+//!   strings. Works with any tracing subscriber but loses structure.
+//!
+//! - **[`TracingValuableExt`]** (requires the `tracing-valuable` feature and
+//!   `RUSTFLAGS="--cfg tracing_unstable"`): logs redacted values as structured
+//!   data via the `valuable` crate.
 //!
 //! # Example
 //!
-//! ```ignore
-//! use redactable::tracing::{TracingRedactedExt, TracingValuableExt};
+//! ```no_run
+//! # #![allow(hidden_glob_reexports)]
+//! # pub use redactable::*;
+//! use redactable::{Secret, Sensitive, SensitiveValue};
+//! use redactable::tracing::{TracingRedactedDebugExt, TracingRedactedExt};
 //!
-//! // As display string (always available with "tracing" feature)
-//! tracing::info!(user = %user.tracing_redacted());
+//! #[derive(Clone, Sensitive, serde::Serialize)]
+//! struct User {
+//!     name: String,
+//!     #[sensitive(Secret)]
+//!     token: String,
+//! }
 //!
-//! // As structured valuable (requires "tracing-valuable" feature)
-//! tracing::info!(user = user.tracing_redacted_valuable());
+//! # fn main() {
+//! let user = User {
+//!     name: "alice".to_owned(),
+//!     token: "api-token".to_owned(),
+//! };
+//! let leaf_token = SensitiveValue::<String, Secret>::from("api-token".to_owned());
+//!
+//! ::tracing::info!(
+//!     user = user.tracing_redacted_debug(),
+//!     leaf_token = leaf_token.tracing_redacted(),
+//! );
+//! # }
 //! ```
 
 use std::fmt;
 
 #[cfg(feature = "json")]
 use serde::Serialize;
-use tracing::field::{DisplayValue, display};
+use tracing::field::{DebugValue, DisplayValue, debug, display};
 
 use crate::{
     policy::RedactionPolicy,
@@ -39,16 +59,40 @@ use crate::{
 /// Marker trait for types whose `tracing` integration always emits redacted output.
 ///
 /// This marker indicates that the type will produce redacted output when used
-/// with tracing (via `TracingRedactedExt` or `TracingValuableExt`).
+/// with tracing (via `TracingRedactedDebugExt`, `TracingRedactedExt`, or
+/// `TracingValuableExt`).
 ///
 /// This trait is implemented only for sink adapters and wrappers that redact
 /// before logging. It is not a blanket impl for raw types.
 pub trait TracingRedacted {}
 
+/// Extension trait for logging structural redacted values as `Debug` fields.
+///
+/// This is the plain `tracing` path for types that derive `Sensitive` or
+/// otherwise implement [`Redactable`]. The helper clones and redacts the value
+/// before it reaches the subscriber, then records the redacted clone through
+/// `tracing::field::debug`.
+pub trait TracingRedactedDebugExt: Redactable + Clone + fmt::Debug {
+    /// Redacts the value and wraps the redacted clone for `tracing` debug
+    /// recording.
+    fn tracing_redacted_debug(&self) -> DebugValue<Self>;
+}
+
+impl<T> TracingRedactedDebugExt for T
+where
+    T: Redactable + Clone + fmt::Debug,
+{
+    fn tracing_redacted_debug(&self) -> DebugValue<Self> {
+        debug(self.clone().redact())
+    }
+}
+
 /// Extension trait for logging redacted values as display strings.
 ///
 /// This works with any tracing subscriber but the output is a flat string,
-/// not structured data. For structured output, see `TracingValuableExt`.
+/// not structured data. For structural `Debug` output, use
+/// [`TracingRedactedDebugExt`]. For structured `valuable` output, see
+/// [`TracingValuableExt`].
 pub trait TracingRedactedExt {
     /// Wraps the value for `tracing` logging as a display value.
     ///
@@ -99,9 +143,10 @@ impl<T> TracingRedacted for RedactedJsonRef<'_, T> where T: Redactable + Clone +
 
 /// A redacted value that implements `valuable::Valuable` for structured tracing output.
 ///
-/// This wrapper holds the redacted form of a value and exposes it via the `valuable`
-/// crate's inspection traits, allowing tracing subscribers to traverse fields as
-/// nested, typed structures.
+/// This wrapper is constructed by [`TracingValuableExt::tracing_redacted_valuable`]
+/// so callers cannot build structured tracing payloads without first applying
+/// redaction. Pass a reference to the wrapper through `tracing::field::valuable`
+/// when compiling with `RUSTFLAGS="--cfg tracing_unstable"`.
 #[cfg(feature = "tracing-valuable")]
 #[derive(Clone, Debug)]
 pub struct RedactedValuable<T> {
@@ -137,13 +182,19 @@ impl<T> TracingRedacted for RedactedValuable<T> {}
 
 /// Extension trait for logging redacted values as structured `valuable` data.
 ///
-/// This requires the `tracing-valuable` feature and a tracing subscriber that
-/// supports the `valuable` crate. The redacted value's fields can be traversed
-/// as nested, typed structures in telemetry systems.
+/// This requires the `tracing-valuable` feature, `RUSTFLAGS="--cfg
+/// tracing_unstable"`, and a tracing subscriber that supports the `valuable`
+/// crate. The returned wrapper is not itself a `tracing::Value`; bind it first,
+/// then pass a reference through `tracing::field::valuable`.
 ///
 /// # Example
 ///
+/// `tracing::field::valuable` is hidden by upstream `tracing` unless the crate
+/// is compiled with `RUSTFLAGS="--cfg tracing_unstable"`, so this example cannot
+/// be compiled by ordinary doctest runs.
+///
 /// ```ignore
+/// use redactable::{Secret, Sensitive};
 /// use redactable::tracing::TracingValuableExt;
 ///
 /// #[derive(Clone, Sensitive, valuable::Valuable)]
@@ -155,8 +206,8 @@ impl<T> TracingRedacted for RedactedValuable<T> {}
 ///
 /// let user = User { username: "alice".into(), password: "secret".into() };
 ///
-/// // Log as structured data - subscriber can traverse user.username, user.password
-/// tracing::info!(user = user.tracing_redacted_valuable());
+/// let redacted = user.tracing_redacted_valuable();
+/// tracing::info!(user = tracing::field::valuable(&redacted));
 /// ```
 #[cfg(feature = "tracing-valuable")]
 pub trait TracingValuableExt {
@@ -166,7 +217,8 @@ pub trait TracingValuableExt {
     /// Redacts the value and wraps it for structured tracing output.
     ///
     /// The returned `RedactedValuable` implements `valuable::Valuable`, allowing
-    /// tracing subscribers to inspect the redacted structure.
+    /// tracing subscribers to inspect the redacted structure when passed through
+    /// `tracing::field::valuable(&binding)` under `tracing_unstable`.
     fn tracing_redacted_valuable(&self) -> RedactedValuable<Self::Redacted>;
 }
 
@@ -215,6 +267,35 @@ mod tests {
         };
         let display_value = mock.tracing_redacted();
         let _ = format!("{display_value:?}");
+    }
+
+    #[derive(Clone, Debug)]
+    struct MockStructuralRedactable {
+        password: String,
+    }
+
+    impl crate::redaction::RedactableWithMapper for MockStructuralRedactable {
+        fn redact_with<M: crate::redaction::RedactableMapper>(self, _mapper: &M) -> Self {
+            Self {
+                password: "[REDACTED]".to_string(),
+            }
+        }
+    }
+
+    impl Redactable for MockStructuralRedactable {}
+
+    #[test]
+    fn tracing_redacted_debug_wraps_redacted_clone() {
+        let mock = MockStructuralRedactable {
+            password: "secret".into(),
+        };
+
+        assert_eq!(mock.password, "secret");
+        let debug_value = mock.tracing_redacted_debug();
+        let output = format!("{debug_value:?}");
+
+        assert!(output.contains("[REDACTED]"));
+        assert!(!output.contains("secret"));
     }
 
     #[cfg(feature = "tracing-valuable")]

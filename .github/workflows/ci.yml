@@ -44,6 +44,9 @@ jobs:
       - name: Tests (all features)
         run: cargo test --all-features --all-targets
 
+      - name: Tests (tracing valuable unstable)
+        run: RUSTFLAGS="--cfg tracing_unstable" cargo test -p redactable --test integration_tracing --features tracing-valuable valuable_structured_output
+
       # The `testing` feature is part of --all-features and flips derived Debug
       # to raw output, so the redacted production-Debug branch is only exercised
       # by a default-features run.

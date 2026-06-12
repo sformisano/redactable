@@ -759,7 +759,41 @@ Both work because they implement `slog::Value`. Containers get it via the derive
 
 ### tracing
 
-For structured logging with tracing, use the `valuable` integration:
+For structural values with any tracing subscriber, use the plain `tracing`
+feature and log the redacted `Debug` form:
+
+```toml
+[dependencies]
+redactable = { version = "0.9", features = ["tracing"] }
+```
+
+```rust
+use redactable::{Email, Sensitive, Token};
+use redactable::tracing::TracingRedactedDebugExt;
+
+#[derive(Clone, Sensitive)]
+struct AuthEvent {
+    #[sensitive(Token)]
+    api_key: String,
+    #[sensitive(Email)]
+    user_email: String,
+    action: String,
+}
+
+let event = AuthEvent {
+    api_key: "sk-secret-key-12345".into(),
+    user_email: "alice@example.com".into(),
+    action: "login".into(),
+};
+
+// Redacts a clone before the value reaches the tracing subscriber.
+tracing::info!(event = event.tracing_redacted_debug());
+// Logged: {api_key: "***************2345", user_email: "al***@example.com", action: "login"}
+```
+
+For typed structured logging, use the `valuable` integration. Upstream tracing
+requires `RUSTFLAGS="--cfg tracing_unstable"` for `tracing::field::valuable`,
+and the field expression must pass a reference through that adapter:
 
 ```toml
 [dependencies]
@@ -767,6 +801,7 @@ redactable = { version = "0.9", features = ["tracing-valuable"] }
 ```
 
 ```rust
+use redactable::{Email, Sensitive, Token};
 use redactable::tracing::TracingValuableExt;
 
 #[derive(Clone, Sensitive, valuable::Valuable)]
@@ -784,16 +819,21 @@ let event = AuthEvent {
     action: "login".into(),
 };
 
-// Redacts and logs as structured data - subscriber can traverse containers
-tracing::info!(event = event.tracing_redacted_valuable());
+let redacted = event.tracing_redacted_valuable();
+tracing::info!(event = tracing::field::valuable(&redacted));
 // Logged: {api_key: "***************2345", user_email: "al***@example.com", action: "login"}
 ```
 
-Unlike slog where `slog::Value` can be implemented automatically via the derive macro, tracing's `Value` trait is sealed. The `valuable` crate provides the structured data path. `.tracing_redacted_valuable()` redacts first, then wraps for `valuable` inspection.
+Unlike slog where `slog::Value` can be implemented automatically via the derive
+macro, tracing's `Value` trait is sealed. The `valuable` crate provides the
+structured data path, but `RedactedValuable<T>` is not itself a tracing field
+value. `.tracing_redacted_valuable()` redacts first; `tracing::field::valuable`
+adapts the binding for subscribers that support `valuable`.
 
-**For individual values** (without `valuable`):
+**For flat display values** (without `valuable`):
 
 ```rust
+use redactable::{Email, SensitiveValue, Token};
 use redactable::tracing::TracingRedactedExt;
 
 let api_key: SensitiveValue<String, Token> = SensitiveValue::from("sk-secret-key-12345".into());
@@ -807,7 +847,8 @@ tracing::info!(
 // Logged: api_key="***************2345" user_email="al***@example.com" action="login"
 ```
 
-⚠️ **Note:** The `valuable` integration in tracing is still marked as unstable and requires a compatible subscriber.
+The display path also works for `SensitiveDisplay`, `NotSensitiveDisplay`, and
+other values that implement `ToRedactedOutput`.
 
 ## Logging safety
 
@@ -815,9 +856,14 @@ For most use cases, the [slog](#slog) and [tracing](#tracing) integrations handl
 
 ### Enforcing redaction at compile time
 
-`SlogRedacted` and `TracingRedacted` are marker traits that certify a type is safe to log through a specific sink. They guarantee the sink adapter routes through the redacted path rather than exposing raw values. All four derive macros implement them automatically when the corresponding feature is enabled, as does `SensitiveValue<T, P>`.
+`SlogRedacted` and `TracingRedacted` are marker traits for values that have
+redactable sink integrations. All four derive macros implement them
+automatically when the corresponding feature is enabled, as does
+`SensitiveValue<T, P>`. A bound is only half of the contract: your macro must
+also call the redacting adapter instead of passing raw values to the sink.
 
-Use these traits as bounds in your own logging macros to make unredacted logging a compile error:
+For slog, use `SlogRedacted` with `slog::Value` and pass the value to slog's
+field API:
 
 ```rust
 use redactable::slog::SlogRedacted;
@@ -840,16 +886,17 @@ slog_safe!(logger, "auth"; "token" => &api_token);  // SensitiveValue<String, To
 slog_safe!(logger, "user"; "email" => &user.email);
 ```
 
-The same pattern works for tracing:
+For structural tracing fields, use the extension trait as the compile-time
+gate:
 
 ```rust
-use redactable::tracing::TracingRedacted;
+use redactable::tracing::TracingRedactedDebugExt;
 
 macro_rules! trace_safe {
     ($($key:ident = $value:expr),* $(,)?) => {{
-        fn assert_tracing_safe<T: TracingRedacted>(_: &T) {}
+        fn assert_tracing_safe<T: TracingRedactedDebugExt>(_: &T) {}
         $(assert_tracing_safe(&$value);)*
-        tracing::info!($($key = tracing::field::debug(&$value)),*);
+        tracing::info!($($key = $value.tracing_redacted_debug()),*);
     }};
 }
 ```
@@ -908,10 +955,11 @@ flowchart TD
 | Situation | Use |
 |---|---|
 | slog | Log containers directly: `slog::info!(logger, "msg"; "key" => &value)` |
-| tracing (structured) | `.tracing_redacted_valuable()` on containers |
-| tracing (individual values) | `.tracing_redacted()` on `SensitiveValue` wrappers |
+| tracing (structural Debug) | `.tracing_redacted_debug()` on `Redactable + Clone + Debug` values |
+| tracing (valuable structured) | `let redacted = value.tracing_redacted_valuable(); tracing::field::valuable(&redacted)` with `RUSTFLAGS="--cfg tracing_unstable"` |
+| tracing (flat display) | `.tracing_redacted()` on `ToRedactedOutput` values |
 | Custom logging pipeline | `ToRedactedOutput` trait bound ([details](#toredactedoutput-for-custom-pipelines)) |
-| Compile-time enforcement | `SlogRedacted`/`TracingRedacted` bounds in macros ([details](#enforcing-redaction-at-compile-time)) |
+| Compile-time enforcement | `SlogRedacted`, `TracingRedactedDebugExt`, or `ToRedactedOutput` bounds in macros ([details](#enforcing-redaction-at-compile-time)) |
 
 ## Reference
 
