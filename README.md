@@ -118,7 +118,7 @@ assert_eq!(
   struct Email(#[sensitive(Token)] String);
   ```
 
-  `#[sensitive(dual)]` coordinates both macros: `Sensitive` skips `Debug` (letting `SensitiveDisplay` provide it) and `SensitiveDisplay` skips `slog`/`tracing` (letting `Sensitive` provide them). Each macro generates only its non-overlapping impls. Using `dual` with only one of the two derives is a compile error naming the missing counterpart.
+  `#[sensitive(dual)]` coordinates both macros: `Sensitive` skips `Debug` (letting `SensitiveDisplay` provide it) and `SensitiveDisplay` skips `slog`/`tracing` (letting `Sensitive` provide them). Each macro generates only its non-overlapping impls. Using `dual` with only one of the two derives is a compile error naming the missing counterpart. This missing-pair guard does not currently fire for generic types, so generic dual-derive types must keep both derives together by convention and tests.
 
 ## Design principles
 
@@ -174,7 +174,7 @@ The following types all have this built-in no-op implementation:
 
 - **Scalars**: `bool`, `char`, `i8`..`i128`, `isize`, `u8`..`u128`, `usize`, `f32`, `f64`, `NonZeroI8`..`NonZeroUsize`
 - **Strings**: `String`, `Cow<str>`
-- **Containers** (delegate to inner values): `Option`, `Vec`, `Box`, `Arc`, `Rc`, `RefCell`, `Cell`, `Result`, `HashMap`, `BTreeMap`, `HashSet`, `BTreeSet`
+- **Containers** (delegate to inner values): `Option`, `Vec`, `VecDeque`, arrays, tuples up to four elements, `Box`, `Arc`, `Rc`, `RefCell`, `Cell`, `Mutex`, `RwLock`, `Result`, `HashMap`, `BTreeMap`, `HashSet`, `BTreeSet`
 - **Other**: `Duration`, `Instant`, `SystemTime`, `Ordering`, `PhantomData`; with the `ip-address` feature, `IpAddr`, `Ipv4Addr`, `Ipv6Addr`, and `SocketAddr`
 - **Feature-gated**: the `chrono` feature adds passthroughs for `DateTime<Utc|Local|FixedOffset>`, `NaiveDateTime`, `NaiveDate`, `NaiveTime`, `Duration`, `Month`, and `Weekday`; the `time` feature adds `OffsetDateTime`, `PrimitiveDateTime`, `Date`, `Time`, `Duration`, `UtcOffset`, `Month`, and `Weekday`; the `uuid` feature adds `Uuid`. The `extras` feature enables `chrono`, `time`, `uuid`, and `ip-address` together
 
@@ -919,9 +919,9 @@ flowchart TD
 
 `#[sensitive(Secret)]` also works on scalars: integers are replaced with `0`, floats with `0.0`, `bool` with `false`, `char` with `'*'`. `NonZero*` integer types cannot be policy-annotated because redaction may need to produce zero; leave them unannotated or wrap a different representation.
 
-Containers (`Option`, `Vec`, `HashMap`, etc.) are walked automatically. Policy annotations apply through them. Map keys are formatted with `Debug` and are not redacted.
+Containers (`Option`, `Vec`, `VecDeque`, arrays, tuples up to four elements, maps, sets, and pointer/cell/lock wrappers) are walked automatically. Policy annotations apply through supported policy containers such as `Option`, `Vec`, `VecDeque`, arrays, `Result`, maps, and sets. Map keys are formatted with `Debug` and are not redacted.
 
-IP address types (`IpAddr`, `Ipv4Addr`, `Ipv6Addr`, `SocketAddr`) are available with the `ip-address` feature. Unannotated IP fields pass through unchanged; use `#[sensitive(IpAddress)]` to redact them. IPv4 addresses keep only the last octet (`0.0.0.77`), IPv6 addresses keep only the last 16-bit segment, and IPv4-mapped IPv6 addresses (`::ffff:a.b.c.d`) are redacted with the IPv4 rule so dual-stack listeners don't leak extra octets.
+IP address types (`IpAddr`, `Ipv4Addr`, `Ipv6Addr`, `SocketAddr`) are available with the `ip-address` feature. Unannotated IP fields pass through unchanged. `#[sensitive(IpAddress)]` applies to bare IP fields only; it does not currently apply through `Option<IpAddr>`, `Vec<IpAddr>`, or other containers. For IP values inside containers, wrap each value with `SensitiveValue<IpAddr, IpAddress>` or the matching concrete IP type. IPv4 addresses keep only the last octet (`0.0.0.77`), IPv6 addresses keep only the last 16-bit segment, and IPv4-mapped IPv6 addresses (`::ffff:a.b.c.d`) are redacted with the IPv4 rule so dual-stack listeners don't leak extra octets.
 
 `serde_json::Value` (requires `json` feature) is treated as an opaque leaf that fully redacts to `Value::String("[REDACTED]")`, even when unannotated, since its dynamic structure could contain anything sensitive.
 
