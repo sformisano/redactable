@@ -470,3 +470,88 @@ mod combined_wrappers {
         assert_eq!(redacted.password, "[REDACTED]");
     }
 }
+
+#[cfg(feature = "json")]
+mod serde_json_round_trip {
+    use super::*;
+    use serde::{Deserialize, Serialize};
+
+    #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+    struct ExternalSecret {
+        value: String,
+    }
+
+    #[derive(Clone, Copy)]
+    struct ExternalSecretPolicy;
+
+    impl RedactionPolicy for ExternalSecretPolicy {
+        fn policy() -> TextRedactionPolicy {
+            TextRedactionPolicy::keep_last(3)
+        }
+    }
+
+    impl SensitiveWithPolicy<ExternalSecretPolicy> for ExternalSecret {
+        fn redact_with_policy(self, policy: &TextRedactionPolicy) -> Self {
+            Self {
+                value: policy.apply_to(&self.value),
+            }
+        }
+
+        fn redacted_string(&self, policy: &TextRedactionPolicy) -> String {
+            policy.apply_to(&self.value)
+        }
+    }
+
+    #[test]
+    fn sensitive_value_deserializes_inner_value_and_round_trips_raw_json() {
+        let wrapped =
+            SensitiveValue::<ExternalSecret, ExternalSecretPolicy>::from(ExternalSecret {
+                value: "secret-123".to_string(),
+            });
+
+        let json = serde_json::to_value(&wrapped).expect("serialize sensitive wrapper");
+        assert_eq!(json, serde_json::json!({ "value": "secret-123" }));
+
+        let decoded: SensitiveValue<ExternalSecret, ExternalSecretPolicy> =
+            serde_json::from_value(json).expect("deserialize sensitive wrapper");
+
+        assert_eq!(
+            decoded.expose(),
+            &ExternalSecret {
+                value: "secret-123".to_string(),
+            }
+        );
+        assert_eq!(decoded.redacted(), "*******123");
+    }
+
+    #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+    struct ForeignConfig {
+        timeout_secs: u64,
+        retries: u8,
+    }
+
+    #[test]
+    fn not_sensitive_value_deserializes_inner_value_and_round_trips_raw_json() {
+        let wrapped = NotSensitiveValue::from(ForeignConfig {
+            timeout_secs: 30,
+            retries: 2,
+        });
+
+        let json = serde_json::to_value(&wrapped).expect("serialize not-sensitive wrapper");
+        assert_eq!(
+            json,
+            serde_json::json!({ "timeout_secs": 30, "retries": 2 })
+        );
+
+        let decoded: NotSensitiveValue<ForeignConfig> =
+            serde_json::from_value(json).expect("deserialize not-sensitive wrapper");
+
+        assert_eq!(
+            decoded.0,
+            ForeignConfig {
+                timeout_secs: 30,
+                retries: 2,
+            }
+        );
+    }
+}

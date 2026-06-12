@@ -8,7 +8,7 @@
 use std::marker::PhantomData;
 
 #[cfg(feature = "json")]
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use super::{
     redact::RedactableMapper,
@@ -127,6 +127,19 @@ where
     }
 }
 
+#[cfg(feature = "json")]
+impl<'de, T, P> Deserialize<'de> for SensitiveValue<T, P>
+where
+    T: Deserialize<'de>,
+{
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        T::deserialize(deserializer).map(Self::from)
+    }
+}
+
 // =============================================================================
 // NotSensitiveValue - Wrapper for foreign types that should not be redacted
 // =============================================================================
@@ -202,5 +215,18 @@ impl<T: Serialize> Serialize for NotSensitiveValue<T> {
         S: serde::Serializer,
     {
         self.0.serialize(serializer)
+    }
+}
+
+#[cfg(feature = "json")]
+impl<'de, T> Deserialize<'de> for NotSensitiveValue<T>
+where
+    T: Deserialize<'de>,
+{
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        T::deserialize(deserializer).map(Self::from)
     }
 }

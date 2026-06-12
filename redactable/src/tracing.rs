@@ -111,7 +111,7 @@ pub struct RedactedValuable<T> {
 #[cfg(feature = "tracing-valuable")]
 impl<T> RedactedValuable<T> {
     /// Creates a new `RedactedValuable` from an already-redacted value.
-    pub fn new(redacted: T) -> Self {
+    pub(crate) fn new(redacted: T) -> Self {
         Self { redacted }
     }
 
