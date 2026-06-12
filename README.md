@@ -719,7 +719,7 @@ The `slog` feature enables automatic redaction. Just log your values and they're
 
 ```toml
 [dependencies]
-redactable = { version = "0.9", features = ["slog"] }
+redactable = { version = "0.10", features = ["slog"] }
 ```
 
 **Containers**: the `Sensitive` derive generates `slog::Value` automatically:
@@ -764,7 +764,7 @@ feature and log the redacted `Debug` form:
 
 ```toml
 [dependencies]
-redactable = { version = "0.9", features = ["tracing"] }
+redactable = { version = "0.10", features = ["tracing"] }
 ```
 
 ```rust
@@ -797,7 +797,7 @@ and the field expression must pass a reference through that adapter:
 
 ```toml
 [dependencies]
-redactable = { version = "0.9", features = ["tracing-valuable"] }
+redactable = { version = "0.10", features = ["tracing-valuable"] }
 ```
 
 ```rust

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.10.0
+
 ### Added
 - `TracingRedactedDebugExt` now provides a plain `tracing` helper for
   structural `Sensitive` values, redacting a clone before recording it as a
