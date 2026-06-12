@@ -1,0 +1,5 @@
+error: missing policy: use #[sensitive(Policy)] (e.g., #[sensitive(Secret)], #[sensitive(Token)])
+ --> tests/ui/sensitive_bare_sensitive_rejected.rs:5:5
+  |
+5 |     #[sensitive]
+  |     ^

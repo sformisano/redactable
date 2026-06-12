@@ -12,12 +12,12 @@ help: the trait `RedactableWithFormatter` is not implemented for `ApiKey`
    = help: the following other types implement trait `RedactableWithFormatter`:
              &T
              ()
+             (T0, T1)
+             (T0, T1, T2)
+             (T0, T1, T2, T3)
+             (T0,)
              Arc<T>
              BTreeMap<K, V>
-             BTreeSet<T>
-             Box<T>
-             Cell<T>
-             Cow<'_, str>
            and $N others
 note: required by a bound in `dual_requires_sensitive_display`
   --> tests/ui/sensitive_dual_without_display_rejected.rs:13:24

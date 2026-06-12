@@ -103,6 +103,9 @@ use redacted_display::derive_redacted_display;
 /// - `#[sensitive(dual)]` - Use when deriving both `Sensitive` and `SensitiveDisplay` on the same
 ///   type. `Sensitive` skips its `Debug` impl (letting `SensitiveDisplay` provide it), and
 ///   `SensitiveDisplay` skips its `slog`/`tracing` impls (letting `Sensitive` provide them).
+///   For non-generic types, generated code checks that the counterpart derive is present.
+///   Generic `dual` types cannot be checked at derive time; missing counterparts surface later as
+///   trait-bound errors when the type is used.
 ///
 /// # Field Attributes
 ///
@@ -433,8 +436,8 @@ fn expand_not_sensitive_display(input: DeriveInput) -> Result<TokenStream> {
     // display IS its safe output), keeping slog_redacted_display() available.
     let redacted_display_impl = quote! {
         impl #display_impl_generics #crate_root::RedactableWithFormatter for #ident #display_ty_generics #display_where_clause {
-            fn fmt_redacted(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
-                ::core::fmt::Display::fmt(self, f)
+            fn fmt_redacted(&self, __redactable_f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+                ::core::fmt::Display::fmt(self, __redactable_f)
             }
         }
 
@@ -517,6 +520,10 @@ fn expand_not_sensitive_display(input: DeriveInput) -> Result<TokenStream> {
 /// doc comments (displaydoc-style). If neither is present, the derive fails.
 ///
 /// Fields are redacted by reference, so field types do not need `Clone`.
+///
+/// When `#[sensitive(dual)]` is used with a non-generic type, generated code checks that the
+/// matching `Sensitive` derive is also present. Generic `dual` types cannot be checked at derive
+/// time; missing counterparts surface later as trait-bound errors when the type is used.
 ///
 /// # Generated Impls
 ///
@@ -685,7 +692,7 @@ fn expand(input: DeriveInput, kind: DeriveKind) -> Result<TokenStream> {
         let redacted_display_body = redacted_display_output.body;
         let redacted_display_impl = quote! {
             impl #display_impl_generics #crate_root::RedactableWithFormatter for #ident #display_ty_generics #display_where_clause {
-                fn fmt_redacted(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+                fn fmt_redacted(&self, __redactable_f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
                     #redacted_display_body
                 }
             }
@@ -714,11 +721,11 @@ fn expand(input: DeriveInput, kind: DeriveKind) -> Result<TokenStream> {
         let debug_unredacted_body = debug_output.body;
         let debug_impl = quote! {
             impl #debug_impl_generics ::core::fmt::Debug for #ident #debug_ty_generics #debug_where_clause {
-                fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+                fn fmt(&self, __redactable_f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
                     if ::core::cfg!(test) || #crate_root::__TESTING {
                         #debug_unredacted_body
                     } else {
-                        #crate_root::RedactableWithFormatter::fmt_redacted(self, f)
+                        #crate_root::RedactableWithFormatter::fmt_redacted(self, __redactable_f)
                     }
                 }
             }
@@ -833,7 +840,7 @@ fn expand(input: DeriveInput, kind: DeriveKind) -> Result<TokenStream> {
     } else {
         quote! {
             impl #debug_unredacted_impl_generics ::core::fmt::Debug for #ident #debug_unredacted_ty_generics #debug_unredacted_where_clause {
-                fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+                fn fmt(&self, __redactable_f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
                     if ::core::cfg!(test) || #crate_root::__TESTING {
                         #debug_unredacted_body
                     } else {
@@ -893,7 +900,7 @@ fn expand(input: DeriveInput, kind: DeriveKind) -> Result<TokenStream> {
 
     let trait_impl = quote! {
         impl #impl_generics #crate_root::RedactableWithMapper for #ident #ty_generics #where_clause {
-            fn redact_with<M: #crate_root::RedactableMapper>(self, mapper: &M) -> Self {
+            fn redact_with<M: #crate_root::RedactableMapper>(self, __redactable_mapper: &M) -> Self {
                 use #crate_root::RedactableWithMapper as _;
                 #redaction_body
             }
@@ -945,16 +952,16 @@ fn derive_unredacted_debug_struct(
                 bindings.push(ident.clone());
                 collect_generics_from_type(&field.ty, generics, &mut debug_generics);
                 debug_fields.push(quote! {
-                    debug.field(stringify!(#ident), #ident);
+                    __redactable_debug.field(stringify!(#ident), #ident);
                 });
             }
             DebugOutput {
                 body: quote! {
                     match self {
                         Self { #(#bindings),* } => {
-                            let mut debug = f.debug_struct(stringify!(#name));
+                            let mut __redactable_debug = __redactable_f.debug_struct(stringify!(#name));
                             #(#debug_fields)*
-                            debug.finish()
+                            __redactable_debug.finish()
                         }
                     }
                 },
@@ -969,16 +976,16 @@ fn derive_unredacted_debug_struct(
                 bindings.push(ident.clone());
                 collect_generics_from_type(&field.ty, generics, &mut debug_generics);
                 debug_fields.push(quote! {
-                    debug.field(#ident);
+                    __redactable_debug.field(#ident);
                 });
             }
             DebugOutput {
                 body: quote! {
                     match self {
                         Self ( #(#bindings),* ) => {
-                            let mut debug = f.debug_tuple(stringify!(#name));
+                            let mut __redactable_debug = __redactable_f.debug_tuple(stringify!(#name));
                             #(#debug_fields)*
-                            debug.finish()
+                            __redactable_debug.finish()
                         }
                     }
                 },
@@ -987,7 +994,7 @@ fn derive_unredacted_debug_struct(
         }
         Fields::Unit => DebugOutput {
             body: quote! {
-                f.write_str(stringify!(#name))
+                __redactable_f.write_str(stringify!(#name))
             },
             generics: debug_generics,
         },
@@ -1003,10 +1010,11 @@ fn derive_unredacted_debug_enum(
     let mut debug_arms = Vec::new();
     for variant in &data.variants {
         let variant_ident = &variant.ident;
+        let debug_name = quote! { concat!(stringify!(#name), "::", stringify!(#variant_ident)) };
         match &variant.fields {
             Fields::Unit => {
                 debug_arms.push(quote! {
-                    #name::#variant_ident => f.write_str(stringify!(#name::#variant_ident))
+                    #name::#variant_ident => __redactable_f.write_str(#debug_name)
                 });
             }
             Fields::Named(fields) => {
@@ -1020,14 +1028,14 @@ fn derive_unredacted_debug_enum(
                     bindings.push(ident.clone());
                     collect_generics_from_type(&field.ty, generics, &mut debug_generics);
                     debug_fields.push(quote! {
-                        debug.field(stringify!(#ident), #ident);
+                        __redactable_debug.field(stringify!(#ident), #ident);
                     });
                 }
                 debug_arms.push(quote! {
                     #name::#variant_ident { #(#bindings),* } => {
-                        let mut debug = f.debug_struct(stringify!(#name::#variant_ident));
+                        let mut __redactable_debug = __redactable_f.debug_struct(#debug_name);
                         #(#debug_fields)*
-                        debug.finish()
+                        __redactable_debug.finish()
                     }
                 });
             }
@@ -1039,25 +1047,30 @@ fn derive_unredacted_debug_enum(
                     bindings.push(ident.clone());
                     collect_generics_from_type(&field.ty, generics, &mut debug_generics);
                     debug_fields.push(quote! {
-                        debug.field(#ident);
+                        __redactable_debug.field(#ident);
                     });
                 }
                 debug_arms.push(quote! {
                     #name::#variant_ident ( #(#bindings),* ) => {
-                        let mut debug = f.debug_tuple(stringify!(#name::#variant_ident));
+                        let mut __redactable_debug = __redactable_f.debug_tuple(#debug_name);
                         #(#debug_fields)*
-                        debug.finish()
+                        __redactable_debug.finish()
                     }
                 });
             }
         }
     }
-    DebugOutput {
-        body: quote! {
+    let body = if debug_arms.is_empty() {
+        quote! { match *self {} }
+    } else {
+        quote! {
             match self {
                 #(#debug_arms),*
             }
-        },
+        }
+    };
+    DebugOutput {
+        body,
         generics: debug_generics,
     }
 }

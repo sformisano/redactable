@@ -16,7 +16,9 @@ use crate::{
     crate_path,
     generics::collect_generics_from_type,
     strategy::{Strategy, parse_field_strategy, reject_variant_sensitivity_attrs},
-    types::{is_ip_address_type, is_nonzero_type, is_scalar_type},
+    types::{
+        contains_unwrapped_ip_address_type, is_ip_address_type, is_nonzero_type, is_scalar_type,
+    },
 };
 
 pub(crate) struct RedactedDisplayOutput {
@@ -147,10 +149,17 @@ fn derive_enum_display(
         nested_generics.extend(format_args.nested_generics);
     }
 
-    let body = quote! {
-        #[allow(unused_variables, unused_assignments)]
-        match self {
-            #(#arms),*
+    let body = if arms.is_empty() {
+        quote! {
+            #[allow(unused_variables, unused_assignments)]
+            match *self {}
+        }
+    } else {
+        quote! {
+            #[allow(unused_variables, unused_assignments)]
+            match self {
+                #(#arms),*
+            }
         }
     };
 
@@ -229,6 +238,16 @@ fn validate_policy_type(
         return Err(syn::Error::new(
             span,
             "IP address fields can only use #[sensitive(IpAddress)]",
+        ));
+    }
+    if is_ip_address_policy(policy)
+        && !is_ip_address_type(ty)
+        && contains_unwrapped_ip_address_type(ty)
+    {
+        return Err(syn::Error::new(
+            span,
+            "containers of IP address fields cannot use #[sensitive(IpAddress)] directly; \
+             wrap the IP leaf instead, for example `Option<SensitiveValue<IpAddr, IpAddress>>`",
         ));
     }
     Ok(())
@@ -351,7 +370,7 @@ fn build_format_args(
 
     let prelude = quote! {
         #(#prelude_bindings)*
-        f.write_fmt(#format_args)
+        __redactable_f.write_fmt(#format_args)
     };
 
     Ok(FormatArgsOutput {
@@ -626,10 +645,16 @@ fn format_mode_from_spec(spec_part: &str, span: Span) -> Result<FormatMode> {
     if spec.is_empty() {
         return Ok(FormatMode::Display);
     }
-    if spec.contains('$') || spec.contains('*') {
+    if has_dynamic_width_or_precision(spec) {
         return Err(syn::Error::new(
             span,
             "format specifiers with dynamic width/precision are not supported",
+        ));
+    }
+    if is_unsupported_debug_specifier(spec) {
+        return Err(syn::Error::new(
+            span,
+            format!("unsupported format specifier `{spec}`; only Display and Debug are supported"),
         ));
     }
     let last = spec.chars().last().unwrap_or_default();
@@ -643,6 +668,34 @@ fn format_mode_from_spec(spec_part: &str, span: Span) -> Result<FormatMode> {
     }
 }
 
+fn has_dynamic_width_or_precision(spec: &str) -> bool {
+    let spec = spec_after_fill_alignment(spec);
+    spec.contains('$') || spec.contains(".*")
+}
+
+fn spec_after_fill_alignment(spec: &str) -> &str {
+    let mut chars = spec.char_indices();
+    let Some(_) = chars.next() else {
+        return spec;
+    };
+    let Some((align_index, align)) = chars.next() else {
+        return spec;
+    };
+    if matches!(align, '<' | '>' | '^') {
+        &spec[align_index + align.len_utf8()..]
+    } else {
+        spec
+    }
+}
+
+fn is_unsupported_debug_specifier(spec: &str) -> bool {
+    let Some(spec) = spec.strip_suffix('?') else {
+        return false;
+    };
+    let spec = spec.trim_end();
+    spec.ends_with('x') || spec.ends_with('X')
+}
+
 fn is_ident(value: &str) -> bool {
     let mut chars = value.chars();
     match chars.next() {
@@ -650,4 +703,33 @@ fn is_ident(value: &str) -> bool {
         _ => return false,
     }
     chars.all(|ch| ch == '_' || ch.is_ascii_alphanumeric())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn format_mode_allows_star_and_dollar_fill_chars() {
+        assert_eq!(
+            format_mode_from_spec("*>12", Span::call_site()).unwrap(),
+            FormatMode::Display
+        );
+        assert_eq!(
+            format_mode_from_spec("$<12", Span::call_site()).unwrap(),
+            FormatMode::Display
+        );
+    }
+
+    #[test]
+    fn format_mode_rejects_dynamic_width_and_precision() {
+        assert!(format_mode_from_spec("width$", Span::call_site()).is_err());
+        assert!(format_mode_from_spec(".*", Span::call_site()).is_err());
+    }
+
+    #[test]
+    fn format_mode_rejects_hex_debug_specifiers() {
+        assert!(format_mode_from_spec("x?", Span::call_site()).is_err());
+        assert!(format_mode_from_spec("X?", Span::call_site()).is_err());
+    }
 }

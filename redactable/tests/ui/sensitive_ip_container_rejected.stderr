@@ -1,0 +1,5 @@
+error: containers of IP address fields cannot use #[sensitive(IpAddress)] directly; wrap the IP leaf instead, for example `Option<SensitiveValue<IpAddr, IpAddress>>`
+  --> tests/ui/sensitive_ip_container_rejected.rs:18:5
+   |
+18 |     #[sensitive(IpAddress)]
+   |     ^

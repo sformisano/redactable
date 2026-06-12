@@ -1,0 +1,5 @@
+error: `Sensitive` cannot be derived for unions
+ --> tests/ui/sensitive_union_rejected.rs:4:1
+  |
+4 | union SecretUnion {
+  | ^^^^^

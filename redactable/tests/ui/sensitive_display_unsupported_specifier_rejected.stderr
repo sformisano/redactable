@@ -3,3 +3,15 @@ error: unsupported format specifier `x`; only Display and Debug are supported
   |
 4 | #[error("value {value:x}")]
   |         ^^^^^^^^^^^^^^^^^
+
+error: unsupported format specifier `x?`; only Display and Debug are supported
+  --> tests/ui/sensitive_display_unsupported_specifier_rejected.rs:10:9
+   |
+10 | #[error("value {value:x?}")]
+   |         ^^^^^^^^^^^^^^^^^^
+
+error: unsupported format specifier `X?`; only Display and Debug are supported
+  --> tests/ui/sensitive_display_unsupported_specifier_rejected.rs:16:9
+   |
+16 | #[error("value {value:X?}")]
+   |         ^^^^^^^^^^^^^^^^^^

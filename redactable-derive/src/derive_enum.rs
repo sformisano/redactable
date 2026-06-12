@@ -72,15 +72,23 @@ pub(crate) fn derive_enum(
         }
     };
 
-    let debug_redacted_body = quote! {
-        match self {
-            #(#debug_redacted_arms),*
+    let debug_redacted_body = if debug_redacted_arms.is_empty() {
+        quote! { match *self {} }
+    } else {
+        quote! {
+            match self {
+                #(#debug_redacted_arms),*
+            }
         }
     };
 
-    let debug_unredacted_body = quote! {
-        match self {
-            #(#debug_unredacted_arms),*
+    let debug_unredacted_body = if debug_unredacted_arms.is_empty() {
+        quote! { match *self {} }
+    } else {
+        quote! {
+            match self {
+                #(#debug_unredacted_arms),*
+            }
         }
     };
 
@@ -97,14 +105,15 @@ pub(crate) fn derive_enum(
 fn derive_unit_variant(ctx: &mut VariantContext<'_>) {
     let name = ctx.name;
     let variant_ident = ctx.variant_ident;
+    let debug_name = quote! { concat!(stringify!(#name), "::", stringify!(#variant_ident)) };
 
     ctx.arms
         .push(quote! { #name::#variant_ident => #name::#variant_ident });
     ctx.debug_redacted_arms.push(quote! {
-        #name::#variant_ident => f.write_str(stringify!(#name::#variant_ident))
+        #name::#variant_ident => __redactable_f.write_str(#debug_name)
     });
     ctx.debug_unredacted_arms.push(quote! {
-        #name::#variant_ident => f.write_str(stringify!(#name::#variant_ident))
+        #name::#variant_ident => __redactable_f.write_str(#debug_name)
     });
 }
 
@@ -115,6 +124,7 @@ fn derive_named_variant(
 ) -> Result<()> {
     let name = variant_ctx.name;
     let variant_ident = variant_ctx.variant_ident;
+    let debug_name = quote! { concat!(stringify!(#name), "::", stringify!(#variant_ident)) };
 
     let mut bindings = Vec::new();
     let mut transforms = Vec::new();
@@ -137,17 +147,17 @@ fn derive_named_variant(
             // Sensitive: use wildcard pattern to avoid unused binding
             debug_redacted_patterns.push(quote_spanned! { span => #binding: _ });
             quote_spanned! { span =>
-                debug.field(stringify!(#binding), &"[REDACTED]");
+                __redactable_debug.field(stringify!(#binding), &"[REDACTED]");
             }
         } else {
             // Non-sensitive: normal binding, referenced in the field output
             debug_redacted_patterns.push(quote_spanned! { span => #binding });
             quote_spanned! { span =>
-                debug.field(stringify!(#binding), #binding);
+                __redactable_debug.field(stringify!(#binding), #binding);
             }
         };
         let debug_unredacted_field = quote_spanned! { span =>
-            debug.field(stringify!(#binding), #binding);
+            __redactable_debug.field(stringify!(#binding), #binding);
         };
 
         transforms.push(transform);
@@ -165,16 +175,16 @@ fn derive_named_variant(
     });
     variant_ctx.debug_redacted_arms.push(quote! {
         #name::#variant_ident #debug_redacted_pattern => {
-            let mut debug = f.debug_struct(stringify!(#name::#variant_ident));
+            let mut __redactable_debug = __redactable_f.debug_struct(#debug_name);
             #(#debug_redacted_fields)*
-            debug.finish()
+            __redactable_debug.finish()
         }
     });
     variant_ctx.debug_unredacted_arms.push(quote! {
         #name::#variant_ident #pattern => {
-            let mut debug = f.debug_struct(stringify!(#name::#variant_ident));
+            let mut __redactable_debug = __redactable_f.debug_struct(#debug_name);
             #(#debug_unredacted_fields)*
-            debug.finish()
+            __redactable_debug.finish()
         }
     });
     Ok(())
@@ -187,6 +197,7 @@ fn derive_unnamed_variant(
 ) -> Result<()> {
     let name = variant_ctx.name;
     let variant_ident = variant_ctx.variant_ident;
+    let debug_name = quote! { concat!(stringify!(#name), "::", stringify!(#variant_ident)) };
 
     let mut bindings = Vec::new();
     let mut transforms = Vec::new();
@@ -209,17 +220,17 @@ fn derive_unnamed_variant(
             // Sensitive: use wildcard pattern to avoid unused binding
             debug_redacted_patterns.push(quote_spanned! { span => _ });
             quote_spanned! { span =>
-                debug.field(&"[REDACTED]");
+                __redactable_debug.field(&"[REDACTED]");
             }
         } else {
             // Non-sensitive: normal binding, referenced in the field output
             debug_redacted_patterns.push(quote_spanned! { span => #binding });
             quote_spanned! { span =>
-                debug.field(#binding);
+                __redactable_debug.field(#binding);
             }
         };
         let debug_unredacted_field = quote_spanned! { span =>
-            debug.field(#binding);
+            __redactable_debug.field(#binding);
         };
 
         transforms.push(transform);
@@ -235,16 +246,16 @@ fn derive_unnamed_variant(
     });
     variant_ctx.debug_redacted_arms.push(quote! {
         #name::#variant_ident ( #(#debug_redacted_patterns),* ) => {
-            let mut debug = f.debug_tuple(stringify!(#name::#variant_ident));
+            let mut __redactable_debug = __redactable_f.debug_tuple(#debug_name);
             #(#debug_redacted_fields)*
-            debug.finish()
+            __redactable_debug.finish()
         }
     });
     variant_ctx.debug_unredacted_arms.push(quote! {
         #name::#variant_ident ( #(#bindings),* ) => {
-            let mut debug = f.debug_tuple(stringify!(#name::#variant_ident));
+            let mut __redactable_debug = __redactable_f.debug_tuple(#debug_name);
             #(#debug_unredacted_fields)*
-            debug.finish()
+            __redactable_debug.finish()
         }
     });
     Ok(())

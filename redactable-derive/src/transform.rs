@@ -11,7 +11,10 @@ use crate::{
     crate_path,
     generics::collect_generics_from_type,
     strategy::Strategy,
-    types::{is_ip_address_type, is_nonzero_type, is_phantom_data, is_scalar_type},
+    types::{
+        contains_unwrapped_ip_address_type, is_ip_address_type, is_nonzero_type, is_phantom_data,
+        is_scalar_type,
+    },
 };
 
 /// Accumulated state during field processing.
@@ -40,6 +43,14 @@ fn nonzero_policy_error(span: Span) -> syn::Error {
         span,
         "NonZero integer fields cannot use #[sensitive(Policy)] because redaction \
          may need to produce zero; use a nullable scalar or a policy-aware wrapper",
+    )
+}
+
+fn ip_container_policy_error(span: Span) -> syn::Error {
+    syn::Error::new(
+        span,
+        "containers of IP address fields cannot use #[sensitive(IpAddress)] directly; \
+         wrap the IP leaf instead, for example `Option<SensitiveValue<IpAddr, IpAddress>>`",
     )
 }
 
@@ -73,7 +84,7 @@ pub(crate) fn generate_field_transform(
                 collect_generics_from_type(ty, ctx.generics, ctx.used_generics);
                 collect_generics_from_type(ty, ctx.generics, ctx.debug_unredacted_generics);
                 Ok(quote_spanned! { span =>
-                    let #binding = #container_path::redact_with(#binding, mapper);
+                    let #binding = #container_path::redact_with(#binding, __redactable_mapper);
                 })
             }
         }
@@ -88,6 +99,12 @@ pub(crate) fn generate_field_transform(
         Strategy::Policy(policy_path) => {
             if is_nonzero_type(ty) {
                 return Err(nonzero_policy_error(span));
+            }
+            if is_ip_address_policy(policy_path)
+                && !is_ip_address_type(ty)
+                && contains_unwrapped_ip_address_type(ty)
+            {
+                return Err(ip_container_policy_error(span));
             }
             if is_ip_address_type(ty) {
                 if !is_ip_address_policy(policy_path) {
@@ -109,7 +126,7 @@ pub(crate) fn generate_field_transform(
             if is_scalar_type(ty) {
                 if is_secret_policy(policy_path) {
                     Ok(quote_spanned! { span =>
-                        let #binding = mapper.map_scalar(#binding);
+                        let #binding = __redactable_mapper.map_scalar(#binding);
                     })
                 } else {
                     Err(syn::Error::new(
@@ -124,7 +141,7 @@ pub(crate) fn generate_field_transform(
                 let policy = policy_path.clone();
                 let policy_applicable_path = crate_path("PolicyApplicable");
                 Ok(quote_spanned! { span =>
-                    let #binding = #policy_applicable_path::apply_policy::<#policy, _>(#binding, mapper);
+                    let #binding = #policy_applicable_path::apply_policy::<#policy, _>(#binding, __redactable_mapper);
                 })
             }
         }

@@ -18,6 +18,12 @@ mod not_sensitive_display {
     }
 
     #[test]
+    fn rejects_union() {
+        let t = trybuild::TestCases::new();
+        t.compile_fail("tests/ui/not_sensitive_display_union_rejected.rs");
+    }
+
+    #[test]
     fn no_template_behaves_unchanged() {
         let t = trybuild::TestCases::new();
         t.pass("tests/ui/not_sensitive_display_no_template_ok.rs");

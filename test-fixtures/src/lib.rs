@@ -19,6 +19,16 @@ pub struct FixtureUser {
     pub api_key: String,
 }
 
+/// Structural enum fixture: production `Debug` must use compact variant names.
+#[derive(Clone, Sensitive, serde::Serialize)]
+pub enum FixtureEvent {
+    Login {
+        user: String,
+        #[sensitive(Secret)]
+        token: String,
+    },
+}
+
 // Display fixture: `SensitiveDisplay` derive with one annotated leaf. The doc
 // comment is the display template, so the explanation lives in this comment.
 /// login failed for {user} with {password}

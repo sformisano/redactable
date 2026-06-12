@@ -7,7 +7,7 @@
 //! test file could never cover that branch because the whole test crate is
 //! compiled with `cfg(test)`.
 
-use redactable_test_fixtures::{FixtureError, FixtureUser};
+use redactable_test_fixtures::{FixtureError, FixtureEvent, FixtureUser};
 
 /// True when `redactable` itself was built with the `testing` feature, which
 /// flips derived `Debug` to raw output by design.
@@ -67,6 +67,34 @@ fn sensitive_display_debug_redacts_in_production_builds() {
         assert!(
             output.contains("alice"),
             "non-sensitive template fields stay visible, got: {output}"
+        );
+    }
+}
+
+#[test]
+fn sensitive_enum_debug_uses_compact_variant_names_in_production_builds() {
+    let event = FixtureEvent::Login {
+        user: "alice".to_string(),
+        token: "sk-super-secret".to_string(),
+    };
+    let output = format!("{event:?}");
+
+    assert!(
+        output.contains("FixtureEvent::Login"),
+        "enum Debug should use Rust-style variant names, got: {output}"
+    );
+    assert!(
+        !output.contains("FixtureEvent :: Login"),
+        "enum Debug should not include stringify spacing, got: {output}"
+    );
+    if !TESTING_MODE {
+        assert!(
+            !output.contains("sk-super-secret"),
+            "production Debug must not leak the raw value, got: {output}"
+        );
+        assert!(
+            output.contains("[REDACTED]"),
+            "production Debug should redact sensitive enum fields, got: {output}"
         );
     }
 }

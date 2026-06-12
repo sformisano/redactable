@@ -116,6 +116,60 @@ pub(crate) fn is_ip_address_type(ty: &syn::Type) -> bool {
     )
 }
 
+/// Checks if a type contains a std IP address leaf that is not already wrapped
+/// in `SensitiveValue<T, P>`.
+pub(crate) fn contains_unwrapped_ip_address_type(ty: &syn::Type) -> bool {
+    if is_ip_address_type(ty) {
+        return true;
+    }
+
+    match ty {
+        syn::Type::Array(array) => contains_unwrapped_ip_address_type(&array.elem),
+        syn::Type::Group(group) => contains_unwrapped_ip_address_type(&group.elem),
+        syn::Type::Paren(paren) => contains_unwrapped_ip_address_type(&paren.elem),
+        syn::Type::Path(path) => {
+            if path
+                .path
+                .segments
+                .last()
+                .is_some_and(|segment| segment.ident == "SensitiveValue")
+            {
+                return false;
+            }
+            path.path
+                .segments
+                .iter()
+                .any(|segment| path_arguments_contain_unwrapped_ip(&segment.arguments))
+        }
+        syn::Type::Reference(reference) => contains_unwrapped_ip_address_type(&reference.elem),
+        syn::Type::Slice(slice) => contains_unwrapped_ip_address_type(&slice.elem),
+        syn::Type::Tuple(tuple) => tuple.elems.iter().any(contains_unwrapped_ip_address_type),
+        _ => false,
+    }
+}
+
+fn path_arguments_contain_unwrapped_ip(arguments: &syn::PathArguments) -> bool {
+    match arguments {
+        syn::PathArguments::AngleBracketed(arguments) => arguments.args.iter().any(|argument| {
+            matches!(
+                argument,
+                syn::GenericArgument::Type(ty) if contains_unwrapped_ip_address_type(ty)
+            )
+        }),
+        syn::PathArguments::Parenthesized(arguments) => {
+            arguments
+                .inputs
+                .iter()
+                .any(contains_unwrapped_ip_address_type)
+                || match &arguments.output {
+                    syn::ReturnType::Default => false,
+                    syn::ReturnType::Type(_, ty) => contains_unwrapped_ip_address_type(ty),
+                }
+        }
+        syn::PathArguments::None => false,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use quote::quote;
@@ -232,5 +286,29 @@ mod tests {
     fn ip_address_type_detected() {
         let ty = parse_type(quote! { std::net::IpAddr });
         assert!(is_ip_address_type(&ty));
+    }
+
+    #[test]
+    fn option_ip_address_leaf_detected() {
+        let ty = parse_type(quote! { Option<std::net::IpAddr> });
+        assert!(contains_unwrapped_ip_address_type(&ty));
+    }
+
+    #[test]
+    fn nested_ip_address_leaf_detected() {
+        let ty = parse_type(quote! { Vec<Option<std::net::SocketAddr>> });
+        assert!(contains_unwrapped_ip_address_type(&ty));
+    }
+
+    #[test]
+    fn sensitive_value_ip_address_leaf_is_skipped() {
+        let ty = parse_type(quote! { Option<SensitiveValue<std::net::IpAddr, IpAddress>> });
+        assert!(!contains_unwrapped_ip_address_type(&ty));
+    }
+
+    #[test]
+    fn bare_sensitive_value_ip_address_leaf_is_skipped() {
+        let ty = parse_type(quote! { redactable::SensitiveValue<std::net::IpAddr, IpAddress> });
+        assert!(!contains_unwrapped_ip_address_type(&ty));
     }
 }

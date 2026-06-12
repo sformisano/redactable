@@ -27,10 +27,10 @@ pub(crate) fn derive_struct(
             used_generics: Vec::new(),
             policy_applicable_generics: Vec::new(),
             debug_redacted_body: quote! {
-                f.write_str(stringify!(#name))
+                __redactable_f.write_str(stringify!(#name))
             },
             debug_unredacted_body: quote! {
-                f.write_str(stringify!(#name))
+                __redactable_f.write_str(stringify!(#name))
             },
             debug_unredacted_generics: Vec::new(),
         }),
@@ -75,17 +75,17 @@ fn derive_named_struct(
             // Sensitive: use wildcard pattern to avoid unused binding
             debug_redacted_patterns.push(quote_spanned! { span => #binding: _ });
             quote_spanned! { span =>
-                debug.field(stringify!(#binding), &"[REDACTED]");
+                __redactable_debug.field(stringify!(#binding), &"[REDACTED]");
             }
         } else {
             // Non-sensitive: normal binding, referenced in the field output
             debug_redacted_patterns.push(quote_spanned! { span => #binding });
             quote_spanned! { span =>
-                debug.field(stringify!(#binding), #binding);
+                __redactable_debug.field(stringify!(#binding), #binding);
             }
         };
         let debug_unredacted_field = quote_spanned! { span =>
-            debug.field(stringify!(#binding), #binding);
+            __redactable_debug.field(stringify!(#binding), #binding);
         };
 
         transforms.push(transform);
@@ -104,18 +104,18 @@ fn derive_named_struct(
         debug_redacted_body: quote! {
             match self {
                 Self { #(#debug_redacted_patterns),* } => {
-                    let mut debug = f.debug_struct(stringify!(#name));
+                    let mut __redactable_debug = __redactable_f.debug_struct(stringify!(#name));
                     #(#debug_redacted_fields)*
-                    debug.finish()
+                    __redactable_debug.finish()
                 }
             }
         },
         debug_unredacted_body: quote! {
             match self {
                 Self { #(#bindings),* } => {
-                    let mut debug = f.debug_struct(stringify!(#name));
+                    let mut __redactable_debug = __redactable_f.debug_struct(stringify!(#name));
                     #(#debug_unredacted_fields)*
-                    debug.finish()
+                    __redactable_debug.finish()
                 }
             }
         },
@@ -161,17 +161,17 @@ fn derive_unnamed_struct(
             // Sensitive: use wildcard pattern to avoid unused binding
             debug_redacted_patterns.push(quote_spanned! { span => _ });
             quote_spanned! { span =>
-                debug.field(&"[REDACTED]");
+                __redactable_debug.field(&"[REDACTED]");
             }
         } else {
             // Non-sensitive: normal binding, referenced in the field output
             debug_redacted_patterns.push(quote_spanned! { span => #binding });
             quote_spanned! { span =>
-                debug.field(#binding);
+                __redactable_debug.field(#binding);
             }
         };
         let debug_unredacted_field = quote_spanned! { span =>
-            debug.field(#binding);
+            __redactable_debug.field(#binding);
         };
 
         transforms.push(transform);
@@ -190,18 +190,18 @@ fn derive_unnamed_struct(
         debug_redacted_body: quote! {
             match self {
                 Self ( #(#debug_redacted_patterns),* ) => {
-                    let mut debug = f.debug_tuple(stringify!(#name));
+                    let mut __redactable_debug = __redactable_f.debug_tuple(stringify!(#name));
                     #(#debug_redacted_fields)*
-                    debug.finish()
+                    __redactable_debug.finish()
                 }
             }
         },
         debug_unredacted_body: quote! {
             match self {
                 Self ( #(#bindings),* ) => {
-                    let mut debug = f.debug_tuple(stringify!(#name));
+                    let mut __redactable_debug = __redactable_f.debug_tuple(stringify!(#name));
                     #(#debug_unredacted_fields)*
-                    debug.finish()
+                    __redactable_debug.finish()
                 }
             }
         },

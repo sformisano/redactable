@@ -1,0 +1,5 @@
+error: unknown field `username` in format string
+ --> tests/ui/sensitive_display_unknown_field_rejected.rs:4:9
+  |
+4 | #[error("login failed for {username}")]
+  |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

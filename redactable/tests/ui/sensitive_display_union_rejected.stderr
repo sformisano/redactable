@@ -1,0 +1,5 @@
+error: `SensitiveDisplay` cannot be derived for unions
+ --> tests/ui/sensitive_display_union_rejected.rs:5:1
+  |
+5 | union DisplayUnion {
+  | ^^^^^
