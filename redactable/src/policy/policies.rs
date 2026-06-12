@@ -167,6 +167,10 @@ mod tests {
         let policy = BlockchainAddress::policy();
         assert_eq!(policy.apply_to("0x1234567890abcdef"), "************abcdef");
 
+        let policy = CreditCard::policy();
+        assert_eq!(policy.apply_to("4111111111111111"), "************1111");
+        assert_eq!(policy.apply_to("1234"), "****");
+
         let policy = Email::policy();
         assert_eq!(policy.apply_to("alice@example.com"), "al***@example.com");
 

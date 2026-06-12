@@ -438,6 +438,28 @@ mod tests {
     }
 
     #[test]
+    fn keep_policy_counts_unicode_scalars_for_multibyte_inputs() {
+        let cjk = "\u{6771}\u{4eac}\u{5927}\u{962a}";
+        let policy = TextRedactionPolicy::keep_last(2);
+        assert_eq!(policy.apply_to(cjk), "**\u{5927}\u{962a}");
+        assert_eq!(policy.apply_to("\u{6771}\u{4eac}"), "**");
+
+        let emoji_zwj = "\u{1f469}\u{200d}\u{1f4bb}";
+        let policy = TextRedactionPolicy::keep_last(1);
+        assert_eq!(policy.apply_to(emoji_zwj), "**\u{1f4bb}");
+
+        let policy = TextRedactionPolicy::keep_last(3);
+        assert_eq!(policy.apply_to(emoji_zwj), "***");
+
+        let combining = "e\u{301}clair";
+        let policy = TextRedactionPolicy::keep_first(1);
+        assert_eq!(policy.apply_to(combining), "e******");
+
+        let policy = TextRedactionPolicy::keep_first(2);
+        assert_eq!(policy.apply_to("e\u{301}"), "**");
+    }
+
+    #[test]
     fn keep_policy_respects_mask_char() {
         let policy = TextRedactionPolicy::keep_first(2).with_mask_char('#');
         assert_eq!(policy.apply_to("abcdef"), "ab####");
@@ -465,6 +487,31 @@ mod tests {
     }
 
     #[test]
+    fn mask_policy_counts_unicode_scalars_for_multibyte_inputs() {
+        let cjk = "\u{6771}\u{4eac}\u{5927}\u{962a}";
+        let policy = TextRedactionPolicy::mask_first(2);
+        assert_eq!(policy.apply_to(cjk), "**\u{5927}\u{962a}");
+        assert_eq!(policy.apply_to("\u{6771}\u{4eac}"), "**");
+
+        let policy = TextRedactionPolicy::mask_last(2);
+        assert_eq!(policy.apply_to(cjk), "\u{6771}\u{4eac}**");
+
+        let emoji_zwj = "\u{1f469}\u{200d}\u{1f4bb}";
+        let policy = TextRedactionPolicy::mask_last(1);
+        assert_eq!(policy.apply_to(emoji_zwj), "\u{1f469}\u{200d}*");
+
+        let policy = TextRedactionPolicy::mask_with(MaskConfig::both(1, 2));
+        assert_eq!(policy.apply_to(emoji_zwj), "***");
+
+        let combining = "e\u{301}clair";
+        let policy = TextRedactionPolicy::mask_first(1);
+        assert_eq!(policy.apply_to(combining), "*\u{301}clair");
+
+        let policy = TextRedactionPolicy::mask_with(MaskConfig::both(1, 1));
+        assert_eq!(policy.apply_to("e\u{301}"), "**");
+    }
+
+    #[test]
     fn mask_policy_respects_custom_mask_char() {
         let policy = TextRedactionPolicy::mask_with(MaskConfig::last(2)).with_mask_char('#');
         assert_eq!(policy.apply_to("abcd"), "ab##");
@@ -477,6 +524,39 @@ mod tests {
         assert_eq!(policy.apply_to("bob@company.io"), "bo*@company.io");
         // Fail closed: single char local with prefix=2 masks the local part.
         assert_eq!(policy.apply_to("x@a.com"), "*@a.com");
+    }
+
+    #[test]
+    fn email_policy_counts_unicode_scalars_for_local_parts() {
+        let policy = TextRedactionPolicy::email_local(2);
+        assert_eq!(
+            policy.apply_to("\u{6771}\u{4eac}user@example.com"),
+            "\u{6771}\u{4eac}****@example.com"
+        );
+        assert_eq!(
+            policy.apply_to("\u{6771}\u{4eac}@example.com"),
+            "**@example.com"
+        );
+
+        assert_eq!(
+            policy.apply_to("\u{1f469}\u{200d}\u{1f4bb}dev@example.com"),
+            "\u{1f469}\u{200d}****@example.com"
+        );
+
+        let policy = TextRedactionPolicy::email_local(3);
+        assert_eq!(
+            policy.apply_to("\u{1f469}\u{200d}\u{1f4bb}@example.com"),
+            "***@example.com"
+        );
+
+        let policy = TextRedactionPolicy::email_local(1);
+        assert_eq!(
+            policy.apply_to("e\u{301}clair@example.com"),
+            "e******@example.com"
+        );
+
+        let policy = TextRedactionPolicy::email_local(2);
+        assert_eq!(policy.apply_to("e\u{301}@example.com"), "**@example.com");
     }
 
     #[test]
