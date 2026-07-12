@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### Added
+- `NotSensitiveDebug<T>` and `NotSensitiveDisplay<T>` now support owned-value
+  extraction with `into_inner`, common value traits, and raw `Serialize` /
+  `Deserialize` behind the `json` feature. Their Serde representation is the
+  complete inner value for transport or storage and is not redacted log output.
+
 ## 0.10.0
 
 ### Added

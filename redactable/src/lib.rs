@@ -16,6 +16,13 @@
 //! - perform I/O or logging
 //! - validate your policy choices
 //!
+//! Explicitly non-sensitive output remains an exceptional opt-in. Use
+//! [`NotSensitiveDebug`] or [`struct@NotSensitiveDisplay`] only when the complete
+//! formatted value is safe to log. With the `json` feature, those wrappers
+//! serialize the raw inner value for transport or storage; Serde output is not
+//! redaction. Sensitive values should use [`SensitiveValue`] or a custom
+//! [`ToRedactedOutput`] projection instead.
+//!
 //! The `Sensitive` derive macro lives in `redactable-derive` and is re-exported
 //! from this crate.
 

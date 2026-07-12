@@ -8,6 +8,10 @@
 //! - [`NotSensitiveDebug`]: Wrapper using `Debug` formatting
 //! - [`NotSensitiveJson`]: Wrapper using JSON serialization (requires `json` feature)
 //!
+//! `NotSensitiveDisplay` and `NotSensitiveDebug` can own their values when
+//! constructed directly. Their Serde implementations, available through the
+//! `json` feature, preserve the raw inner wire value and do not redact it.
+//!
 //! And their corresponding extension traits:
 //! - [`NotSensitiveExt`]: Provides `.not_sensitive()`
 //! - [`NotSensitiveDisplayExt`]: Provides `.not_sensitive_display()`
@@ -17,7 +21,7 @@
 use std::ops::{Deref, DerefMut};
 
 #[cfg(feature = "json")]
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use super::output::{RedactedOutput, ToRedactedOutput};
 
@@ -75,9 +79,33 @@ where
 // NotSensitiveDisplay - Wrapper using Display
 // =============================================================================
 
-/// Wrapper for explicitly non-sensitive values using `Display`.
+/// Owns an explicitly non-sensitive value and emits its `Display` representation.
 ///
-/// Use `.not_sensitive_display()` to declare a value safe to log.
+/// Constructing this wrapper declares that the complete formatted value is safe
+/// to log. Use `.not_sensitive_display()` when a borrowed logging view is enough,
+/// or construct `NotSensitiveDisplay(value)` when the wrapper must own the value.
+/// Consume an owned wrapper with [`Self::into_inner`].
+///
+/// # Raw serialization warning
+///
+/// With the `json` feature, `Serialize` and `Deserialize` transparently expose
+/// the complete inner value. This supports ordinary transport and storage; it
+/// is not redaction and must not be treated as sanitized log output.
+/// See [`NotSensitiveDebug`] for Debug-selected output, [`NotSensitiveJson`]
+/// for a borrowed JSON logging view, and
+/// [`crate::NotSensitiveValue`] when no logging format should be selected.
+///
+/// ```
+/// use redactable::{NotSensitiveDisplay, ToRedactedOutput};
+///
+/// let count = NotSensitiveDisplay(42_u64);
+/// assert_eq!(
+///     count.to_redacted_output(),
+///     redactable::RedactedOutput::Text("42".to_owned())
+/// );
+/// assert_eq!(count.into_inner(), 42);
+/// ```
+#[derive(Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct NotSensitiveDisplay<T>(pub T);
 
 impl<T> NotSensitiveDisplay<T> {
@@ -85,6 +113,12 @@ impl<T> NotSensitiveDisplay<T> {
     #[must_use]
     pub fn inner(&self) -> &T {
         &self.0
+    }
+
+    /// Consumes the wrapper and returns the owned inner value.
+    #[must_use]
+    pub fn into_inner(self) -> T {
+        self.0
     }
 }
 
@@ -115,14 +149,57 @@ where
     }
 }
 
+#[cfg(feature = "json")]
+impl<T: Serialize> Serialize for NotSensitiveDisplay<T> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        self.0.serialize(serializer)
+    }
+}
+
+#[cfg(feature = "json")]
+impl<'de, T: Deserialize<'de>> Deserialize<'de> for NotSensitiveDisplay<T> {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        T::deserialize(deserializer).map(Self)
+    }
+}
+
 // =============================================================================
 // NotSensitiveDebug - Wrapper using Debug
 // =============================================================================
 
-/// Wrapper for explicitly non-sensitive values using `Debug`.
+/// Owns an explicitly non-sensitive value and emits its `Debug` representation.
 ///
-/// Use `.not_sensitive_debug()` to declare a value safe to log via `Debug`
-/// formatting.
+/// Constructing this wrapper declares that the complete debug representation is
+/// safe to log. Use `.not_sensitive_debug()` when a borrowed logging view is
+/// enough, or construct `NotSensitiveDebug(value)` when the wrapper must own the
+/// value. Consume an owned wrapper with [`Self::into_inner`].
+///
+/// # Raw serialization warning
+///
+/// With the `json` feature, `Serialize` and `Deserialize` transparently expose
+/// the complete inner value. This supports ordinary transport and storage; it
+/// is not redaction and must not be treated as sanitized log output.
+/// See [`NotSensitiveDisplay`] for Display-selected output,
+/// [`NotSensitiveJson`] for a borrowed JSON logging view, and
+/// [`crate::NotSensitiveValue`] when no logging format should be selected.
+///
+/// ```
+/// use redactable::{NotSensitiveDebug, RedactedOutput, ToRedactedOutput};
+///
+/// let id = NotSensitiveDebug(("public", 7_u64));
+/// assert_eq!(
+///     id.to_redacted_output(),
+///     RedactedOutput::Text("(\"public\", 7)".to_owned())
+/// );
+/// assert_eq!(id.into_inner(), ("public", 7));
+/// ```
+#[derive(Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct NotSensitiveDebug<T>(pub T);
 
 impl<T> NotSensitiveDebug<T> {
@@ -130,6 +207,12 @@ impl<T> NotSensitiveDebug<T> {
     #[must_use]
     pub fn inner(&self) -> &T {
         &self.0
+    }
+
+    /// Consumes the wrapper and returns the owned inner value.
+    #[must_use]
+    pub fn into_inner(self) -> T {
+        self.0
     }
 }
 
@@ -150,6 +233,26 @@ where
         f.debug_tuple("NotSensitiveDebug")
             .field(&self.to_redacted_output())
             .finish()
+    }
+}
+
+#[cfg(feature = "json")]
+impl<T: Serialize> Serialize for NotSensitiveDebug<T> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        self.0.serialize(serializer)
+    }
+}
+
+#[cfg(feature = "json")]
+impl<'de, T: Deserialize<'de>> Deserialize<'de> for NotSensitiveDebug<T> {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        T::deserialize(deserializer).map(Self)
     }
 }
 

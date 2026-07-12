@@ -579,7 +579,7 @@ About `Debug`:
 
 ## Wrapper types
 
-The library provides two wrapper types that give values a direct relationship with the redaction system:
+The library provides format-neutral value wrappers and explicit logging-output wrappers:
 
 - **`SensitiveValue<T, P>`**
   - Wraps a value of type `T` and associates it with a redaction policy `P`
@@ -590,6 +590,90 @@ The library provides two wrapper types that give values a direct relationship wi
 - **`NotSensitiveValue<T>`**
   - Wraps a non-sensitive type to satisfy `RedactableWithMapper` bounds
   - Passes the value through unchanged
+- **`NotSensitiveDebug<T>`**
+  - Owns a value explicitly declared safe to log through `Debug`
+  - Implements `ToRedactedOutput`, common value traits, `inner()`, and `into_inner()`
+  - Serializes and deserializes as the raw inner value with the `json` feature
+- **`NotSensitiveDisplay<T>`**
+  - Owns a value explicitly declared safe to log through `Display`
+  - Implements `ToRedactedOutput`, common value traits, `inner()`, and `into_inner()`
+  - Serializes and deserializes as the raw inner value with the `json` feature
+
+`NotSensitiveJson<'_, T>` is a borrowed JSON logging view available with the
+`json` feature. `NotSensitiveValue<T>` deliberately does not implement
+`ToRedactedOutput`: it owns raw application data but does not choose a logging
+format.
+
+### Choosing a wrapper
+
+Treat explicitly non-sensitive wrappers as exceptional declarations. Most
+application output can contain sensitive data and should use a policy or a
+purpose-built redacted projection.
+
+| Need | Use |
+|---|---|
+| Sensitive leaf with a policy | `SensitiveValue<T, P>` |
+| Sensitive structured output or a restricted public projection | A custom `ToRedactedOutput` implementation |
+| Genuinely public value logged with `Debug` | `NotSensitiveDebug<T>` |
+| Genuinely public value logged with `Display` | `NotSensitiveDisplay<T>` |
+| Borrowed value logged as raw JSON | `NotSensitiveJson<'_, T>` |
+| Owned passthrough value with no logging-format decision | `NotSensitiveValue<T>` |
+
+For example, a public retry count can be owned and logged explicitly:
+
+```rust
+use redactable::{NotSensitiveDisplay, RedactedOutput, ToRedactedOutput};
+
+let attempts = NotSensitiveDisplay(3_u32);
+assert_eq!(
+    attempts.to_redacted_output(),
+    RedactedOutput::Text("3".to_owned())
+);
+assert_eq!(attempts.into_inner(), 3);
+```
+
+A customer record, token, or handler result that may contain private fields is
+not a candidate for these wrappers. Use `SensitiveValue<T, P>` or implement
+`ToRedactedOutput` for a local projection that exposes only approved fields.
+
+⚠️ With the `json` feature, `NotSensitiveDebug<T>` and
+`NotSensitiveDisplay<T>` serialize and deserialize exactly like `T`. That raw
+Serde representation is for normal transport or storage, may expose the entire
+value, and is not sanitized logging output.
+
+The same distinction applies to sensitive wrappers: transport keeps the raw
+value while the logging boundary applies its policy.
+
+```rust
+use redactable::{RedactedOutput, Secret, SensitiveValue, ToRedactedOutput};
+
+let token = SensitiveValue::<String, Secret>::from("secret".to_owned());
+assert_eq!(serde_json::to_value(&token).unwrap(), serde_json::json!("secret"));
+assert_eq!(
+    token.to_redacted_output(),
+    RedactedOutput::Text("[REDACTED]".to_owned())
+);
+```
+
+### Migrating a local compatibility wrapper
+
+If a local wrapper exists only to combine ownership, raw Serde, common traits,
+and an explicit output format, replace it with the matching upstream type:
+
+```rust
+// Before:
+// struct NotSensitiveHandlerOutput<T>(T);
+
+// After, when the complete Debug representation is genuinely safe to log:
+use redactable::NotSensitiveDebug;
+
+let output = NotSensitiveDebug(public_handler_result);
+let raw_result = output.into_inner();
+```
+
+Use `NotSensitiveDisplay` instead when `Display` is the approved representation.
+This migration is incorrect for outputs that may contain sensitive data; keep a
+redaction policy or custom projection for those values.
 
 ### Use cases
 
