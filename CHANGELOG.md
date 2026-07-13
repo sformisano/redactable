@@ -2,11 +2,34 @@
 
 ## Unreleased
 
+## 0.10.1 - 2026-07-13
+
 ### Added
 - `NotSensitiveDebug<T>` and `NotSensitiveDisplay<T>` now support owned-value
   extraction with `into_inner`, common value traits, and raw `Serialize` /
   `Deserialize` behind the `json` feature. Their Serde representation is the
   complete inner value for transport or storage and is not redacted log output.
+
+### Fixed
+- Derives now apply traversal, policy, and formatting bounds to complete field
+  types, preserving the actual requirements of wrappers, maps, and policy
+  outputs.
+- User-defined types named `PhantomData` are traversed normally; only the real
+  standard-library marker type receives marker passthrough behavior.
+- Policy-formatted `RefCell` fields now emit `<borrowed>` instead of panicking
+  when a mutable borrow is active.
+- Qualified and dependency-renamed built-in policy paths, plus primitive type
+  aliases, now behave like their short-name equivalents without misclassifying
+  same-named custom policies.
+- Generated derive bindings no longer collide with user fields, variants, or
+  generic parameters.
+- Generated slog and serialization support now follows the resolved
+  `redactable` dependency, so consumers do not need undeclared direct `slog` or
+  `serde` dependencies under feature unification.
+- `.redacted_json()` now preserves its JSON output contract on serialization
+  failure while keeping serializer details and sensitive input out of output.
+- The tracing example, feature-isolation CI checks, and affected API
+  documentation now match the behavior they exercise.
 
 ## 0.10.0
 
