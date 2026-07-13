@@ -24,7 +24,6 @@ help: the trait `redactable::PolicyApplicable` is not implemented for `IpAddr`
    = note: required for `std::option::Option<IpAddr>` to implement `redactable::PolicyApplicable`
    = note: required for `std::option::Option<IpAddr>` to implement `redactable::__private::RecursivePolicyField<IpAddress>`
    = note: required for `std::option::Option<IpAddr>` to implement `redactable::__private::PolicyField<IpAddress>`
-   = help: see issue #48214
    = note: this error originates in the derive macro `Sensitive` (in Nightly builds, run with -Z macro-backtrace for more info)
 
 error[E0277]: `IpAddr` doesn't implement `Debug`
@@ -36,11 +35,7 @@ error[E0277]: `IpAddr` doesn't implement `Debug`
    = note: add `#[derive(Debug)]` to `IpAddr` or manually `impl Debug for IpAddr`
 help: the trait `Debug` is implemented for `std::option::Option<T>`
   --> $RUST/core/src/option.rs
-   |
-   | #[derive(Copy, Debug, Hash)]
-   |                ^^^^^
    = note: required for `std::option::Option<IpAddr>` to implement `Debug`
-   = help: see issue #48214
 help: consider annotating `IpAddr` with `#[derive(Debug)]`
    |
  4 + #[derive(Debug)]
@@ -62,7 +57,6 @@ help: the trait `Debug` is implemented for `BadPeer`
    = note: required for `std::option::Option<IpAddr>` to implement `Debug`
    = note: 1 redundant requirement hidden
    = note: required for `BadPeer` to implement `Debug`
-   = help: see issue #48214
    = note: this error originates in the derive macro `Sensitive` (in Nightly builds, run with -Z macro-backtrace for more info)
 help: consider annotating `IpAddr` with `#[derive(Debug)]`
    |
@@ -104,5 +98,4 @@ note: required for `BadPeer` to implement `Redactable`
 17 | struct BadPeer {
    |        ^^^^^^^
    = help: consider manually implementing `Redactable` to avoid undesired bounds
-   = help: see issue #48214
    = note: this error originates in the derive macro `Sensitive` (in Nightly builds, run with -Z macro-backtrace for more info)
