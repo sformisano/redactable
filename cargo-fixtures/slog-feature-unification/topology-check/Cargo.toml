@@ -1,0 +1,13 @@
+[package]
+name = "topology-check"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+consumer-normal = { path = "../consumer-normal" }
+consumer-renamed = { path = "../consumer-renamed" }
+enabler = { path = "../enabler" }
+
+[dev-dependencies]
+serde_json = "1"

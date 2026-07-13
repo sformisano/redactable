@@ -10,6 +10,3 @@ description = "Non-test fixture types for asserting production Debug behavior"
 [dependencies]
 redactable = { path = "../redactable" }
 serde = { version = "1", features = ["derive"] }
-# Required when redactable's `slog` feature is unified into this crate's build:
-# the derive-generated slog::Value impls resolve the `slog` crate at the fixture's root.
-slog = { version = "2.8", features = ["nested-values"] }

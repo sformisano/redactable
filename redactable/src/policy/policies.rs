@@ -102,7 +102,7 @@ impl RedactionPolicy for Email {
 
 /// Policy marker for IP addresses.
 ///
-/// Keeps the last 4 characters visible (e.g., `"192.168.1.100"` → `"*********1.100"`).
+/// Keeps the last 4 characters visible (e.g., `"192.168.1.100"` → `"*********.100"`).
 #[derive(Clone, Copy)]
 pub struct IpAddress;
 

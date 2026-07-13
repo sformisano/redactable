@@ -30,6 +30,40 @@ mod sensitive_display {
     }
 
     #[test]
+    fn accepts_complete_field_type_bounds() {
+        let t = trybuild::TestCases::new();
+        if cfg!(feature = "slog") {
+            t.pass("tests/ui/phase01_complete_type_bounds_slog_ok.rs");
+        } else {
+            t.pass("tests/ui/phase01_complete_type_bounds_ok.rs");
+        }
+    }
+
+    #[test]
+    fn accepts_policy_associated_output_complete_type_bound() {
+        let t = trybuild::TestCases::new();
+        t.pass("tests/ui/phase01_policy_output_complete_type_bound_ok.rs");
+    }
+
+    #[test]
+    fn accepts_policy_associated_output_debug_complete_type_bound() {
+        let t = trybuild::TestCases::new();
+        t.pass("tests/ui/phase01_policy_output_debug_complete_type_bound_ok.rs");
+    }
+
+    #[test]
+    fn accepts_policy_associated_output_both_complete_type_bounds() {
+        let t = trybuild::TestCases::new();
+        t.pass("tests/ui/phase01_policy_output_both_complete_type_bounds_ok.rs");
+    }
+
+    #[test]
+    fn accepts_complete_type_bounds_for_all_data_shapes() {
+        let t = trybuild::TestCases::new();
+        t.pass("tests/ui/phase01_sensitive_display_shapes_complete_type_bounds_ok.rs");
+    }
+
+    #[test]
     fn accepts_fill_chars_that_look_dynamic_after_alignment() {
         let t = trybuild::TestCases::new();
         t.pass("tests/ui/sensitive_display_fill_chars_ok.rs");

@@ -6,6 +6,28 @@ mod sensitive {
     }
 
     #[test]
+    fn accepts_complete_field_type_bounds() {
+        let t = trybuild::TestCases::new();
+        if cfg!(feature = "slog") {
+            t.pass("tests/ui/phase01_complete_type_bounds_slog_ok.rs");
+        } else {
+            t.pass("tests/ui/phase01_complete_type_bounds_ok.rs");
+        }
+    }
+
+    #[test]
+    fn accepts_generic_cell_complete_type_bound() {
+        let t = trybuild::TestCases::new();
+        t.pass("tests/ui/phase01_generic_cell_complete_type_bound_ok.rs");
+    }
+
+    #[test]
+    fn rejects_user_phantom_data_without_traversal() {
+        let t = trybuild::TestCases::new();
+        t.compile_fail("tests/ui/phase01_user_phantom_data_no_traversal.rs");
+    }
+
+    #[test]
     fn accepts_empty_enums() {
         let t = trybuild::TestCases::new();
         t.pass("tests/ui/sensitive_empty_enums_ok.rs");
@@ -20,7 +42,11 @@ mod sensitive {
     #[test]
     fn rejects_scalar_non_secret_policy_annotation() {
         let t = trybuild::TestCases::new();
-        t.compile_fail("tests/ui/sensitive_scalar_non_secret_rejected.rs");
+        if cfg!(feature = "slog") {
+            t.compile_fail("tests/ui/sensitive_scalar_non_secret_rejected_slog.rs");
+        } else {
+            t.compile_fail("tests/ui/sensitive_scalar_non_secret_rejected.rs");
+        }
     }
 
     #[test]
@@ -32,7 +58,11 @@ mod sensitive {
     #[test]
     fn rejects_ip_address_containers_with_targeted_message() {
         let t = trybuild::TestCases::new();
-        t.compile_fail("tests/ui/sensitive_ip_container_rejected.rs");
+        if cfg!(feature = "slog") {
+            t.compile_fail("tests/ui/sensitive_ip_container_rejected_slog.rs");
+        } else {
+            t.compile_fail("tests/ui/sensitive_ip_container_rejected.rs");
+        }
     }
 
     #[test]

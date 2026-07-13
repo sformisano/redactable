@@ -84,6 +84,9 @@ pub const __TESTING: bool = cfg!(feature = "testing");
 extern crate self as redactable;
 
 // Module declarations
+#[doc(hidden)]
+#[cfg(feature = "redaction")]
+pub mod __private;
 #[cfg(feature = "policy")]
 pub mod policy;
 #[cfg(feature = "redaction")]

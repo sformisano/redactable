@@ -65,7 +65,8 @@ pub trait RedactableMapper {
 
 /// The default mapper that applies redaction policies.
 #[derive(Clone, Copy, Debug)]
-struct PolicyMapper;
+#[doc(hidden)]
+pub struct PolicyMapper;
 
 impl RedactableMapper for PolicyMapper {
     fn map_sensitive<V, P>(&self, value: V) -> V
@@ -424,14 +425,21 @@ impl<T> PolicyApplicableRef for RefCell<T>
 where
     T: PolicyApplicableRef,
 {
-    type Output = RefCell<T::Output>;
+    type Output = crate::__private::PolicyRefCellOutput<T::Output>;
 
     fn apply_policy_ref<P, M>(&self, mapper: &M) -> Self::Output
     where
         P: RedactionPolicy,
         M: RedactableMapper,
     {
-        RefCell::new(self.borrow().apply_policy_ref::<P, M>(mapper))
+        self.try_borrow().map_or_else(
+            |_| crate::__private::PolicyRefCellOutput::Borrowed,
+            |value| {
+                crate::__private::PolicyRefCellOutput::Value(RefCell::new(
+                    value.apply_policy_ref::<P, M>(mapper),
+                ))
+            },
+        )
     }
 }
 

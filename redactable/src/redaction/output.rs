@@ -19,6 +19,12 @@ use super::{
 };
 use crate::policy::RedactionPolicy;
 
+#[cfg(feature = "json")]
+pub fn serialize_redacted_json<T: Serialize>(value: T) -> JsonValue {
+    serde_json::to_value(value)
+        .unwrap_or_else(|_| JsonValue::String(crate::policy::REDACTED_PLACEHOLDER.into()))
+}
+
 // =============================================================================
 // RedactedOutput - Output produced at logging boundaries
 // =============================================================================
@@ -154,10 +160,7 @@ where
 {
     fn to_redacted_output(&self) -> RedactedOutput {
         let redacted = self.0.clone().redact();
-        match serde_json::to_value(redacted) {
-            Ok(json) => RedactedOutput::Json(json),
-            Err(err) => RedactedOutput::Text(format!("Failed to serialize redacted value: {err}")),
-        }
+        RedactedOutput::Json(serialize_redacted_json(redacted))
     }
 }
 

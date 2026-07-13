@@ -33,13 +33,15 @@ pub use escape_hatches::{
 #[cfg(feature = "json")]
 pub use escape_hatches::{NotSensitiveJson, NotSensitiveJsonExt};
 #[cfg(feature = "json")]
+pub use output::serialize_redacted_json;
+#[cfg(feature = "json")]
 pub use output::{RedactedJson, RedactedJsonExt, RedactedJsonRef};
 // Re-export output types
 pub use output::{RedactedOutput, RedactedOutputExt, RedactedOutputRef, ToRedactedOutput};
 // Re-export redaction machinery
 pub use redact::{
-    PolicyApplicable, PolicyApplicableRef, RedactableMapper, ScalarRedaction, apply_policy,
-    apply_policy_ref, redact,
+    PolicyApplicable, PolicyApplicableRef, PolicyMapper, RedactableMapper, ScalarRedaction,
+    apply_policy, apply_policy_ref, redact,
 };
 pub use traits::{Redactable, RedactableWithMapper, SensitiveWithPolicy};
 // Re-export wrapper types

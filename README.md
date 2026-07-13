@@ -108,7 +108,7 @@ assert_eq!(
 
 - Both generate a conditional `Debug` impl: redacted output by default, actual values in your crate's `cfg(test)` builds or when the `redactable/testing` feature is enabled. This means all field types must implement `Debug`.
 - Both generate `slog::Value` + `SlogRedacted` (requires `slog` feature) and `TracingRedacted` (requires `tracing` feature). `Sensitive` emits structured JSON via slog (requires `Serialize`). `SensitiveDisplay` emits the redacted display string.
-- `Sensitive` requires `Clone` since `.redact()` consumes `self`. `SensitiveDisplay` works by reference, so no `Clone` is needed.
+- Deriving `Sensitive` and calling consuming `.redact(self)` do not require `Clone`. A clone is required only by APIs that redact from a borrowed value while preserving the original, and by container implementations whose ownership requires it. `SensitiveDisplay` works by reference.
 - `SensitiveDisplay` does not generate `RedactableWithMapper`. If a type needs both structural traversal **and** display formatting (e.g., a newtype that lives inside a `Sensitive` container but also needs `.redacted_display()`), derive both on the same type with `#[sensitive(dual)]`:
 
   ```rust
@@ -128,7 +128,7 @@ The library follows three principles:
 2. **Traversal should be automatic.** Nested containers are walked recursively without manual intervention. For `Sensitive`, this happens via `RedactableWithMapper`. For `SensitiveDisplay`, via `RedactableWithFormatter`.
 3. **Both paths should share the same annotation model.** Whether you use `Sensitive` or `SensitiveDisplay`, the workflow is identical: unannotated fields pass through, containers delegate to their trait, and `#[sensitive(Policy)]` applies redaction.
 
-`serde_json::Value` is the main built-in exception: with the `json` feature enabled, unannotated `Value` fields redact to `"[REDACTED]"` because dynamic JSON can carry arbitrary sensitive data.
+`serde_json::Value` is the main built-in traversal exception: with the `json` feature enabled, an unannotated `Value` redacts to `"[REDACTED]"` during `.redact()` traversal and in adapters that invoke that traversal, because dynamic JSON can carry arbitrary sensitive data. Direct derive-generated `Debug` remains annotation-driven, so this exception does not apply to every output path.
 
 ## How Sensitive works
 
@@ -872,8 +872,10 @@ let event = AuthEvent {
 
 // Redacts a clone before the value reaches the tracing subscriber.
 tracing::info!(event = event.tracing_redacted_debug());
-// Logged: {api_key: "***************2345", user_email: "al***@example.com", action: "login"}
+// Production output: AuthEvent { api_key: "[REDACTED]", user_email: "[REDACTED]", action: "login" }
 ```
+
+That exact line is production output. Generated `Debug` intentionally has a different test-mode branch (`cfg(test)` or the `testing` feature); after the tracing adapter redacts the clone, that mode displays `AuthEvent { api_key: "***************2345", user_email: "al***@example.com", action: "login" }`.
 
 For typed structured logging, use the `valuable` integration. Upstream tracing
 requires `RUSTFLAGS="--cfg tracing_unstable"` for `tracing::field::valuable`,
@@ -1001,6 +1003,8 @@ The certification methods follow the same rule through the traits you already kn
 | Non-sensitive (explicit Debug) | `.not_sensitive_debug()` | `NotSensitiveDebug<&T>` |
 | Non-sensitive (explicit JSON) | `.not_sensitive_json()` (requires `json` feature) | `NotSensitiveJson<&T>` |
 
+`.redacted_json()` always produces `RedactedOutput::Json`. If serialization of the redacted value fails, it returns the fixed JSON string `"[REDACTED]"` and never includes serializer error text or user data.
+
 ## Choosing what to use
 
 This section brings together the decisions covered throughout the README into a single reference.
@@ -1057,7 +1061,7 @@ Containers (`Option`, `Vec`, `VecDeque`, arrays, tuples up to four elements, map
 
 IP address types (`IpAddr`, `Ipv4Addr`, `Ipv6Addr`, `SocketAddr`) are available with the `ip-address` feature. Unannotated IP fields pass through unchanged. `#[sensitive(IpAddress)]` applies to bare IP fields only; it does not currently apply through `Option<IpAddr>`, `Vec<IpAddr>`, or other containers. For IP values inside containers, wrap each value with `SensitiveValue<IpAddr, IpAddress>` or the matching concrete IP type. IPv4 addresses keep only the last octet (`0.0.0.77`), IPv6 addresses keep only the last 16-bit segment, and IPv4-mapped IPv6 addresses (`::ffff:a.b.c.d`) are redacted with the IPv4 rule so dual-stack listeners don't leak extra octets.
 
-`serde_json::Value` (requires `json` feature) is treated as an opaque leaf that fully redacts to `Value::String("[REDACTED]")`, even when unannotated, since its dynamic structure could contain anything sensitive.
+`serde_json::Value` (requires `json` feature) is treated as an opaque traversal leaf that fully redacts to `Value::String("[REDACTED]")`, even when unannotated, during `.redact()` and adapters that invoke it. Direct derive-generated `Debug` remains annotation-driven.
 
 For the full list of types with built-in passthrough implementations, see [Why do standard leaves implement RedactableWithMapper?](#why-do-standard-leaves-implement-redactablewithmapper).
 

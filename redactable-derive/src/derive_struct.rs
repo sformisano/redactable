@@ -16,21 +16,22 @@ use crate::{
 pub(crate) fn derive_struct(
     name: &Ident,
     data: DataStruct,
-    generics: &syn::Generics,
+    _generics: &syn::Generics,
 ) -> Result<DeriveOutput> {
     let container_path = crate_path("RedactableWithMapper");
+    let formatter = crate::internal_ident("__redactable_f");
     match data.fields {
-        Fields::Named(fields) => derive_named_struct(name, fields, generics, &container_path),
-        Fields::Unnamed(fields) => derive_unnamed_struct(name, fields, generics, &container_path),
+        Fields::Named(fields) => derive_named_struct(name, fields, &container_path),
+        Fields::Unnamed(fields) => derive_unnamed_struct(name, fields, &container_path),
         Fields::Unit => Ok(DeriveOutput {
             redaction_body: quote! { self },
             used_generics: Vec::new(),
             policy_applicable_generics: Vec::new(),
             debug_redacted_body: quote! {
-                __redactable_f.write_str(stringify!(#name))
+                #formatter.write_str(stringify!(#name))
             },
             debug_unredacted_body: quote! {
-                __redactable_f.write_str(stringify!(#name))
+                #formatter.write_str(stringify!(#name))
             },
             debug_unredacted_generics: Vec::new(),
         }),
@@ -40,9 +41,10 @@ pub(crate) fn derive_struct(
 fn derive_named_struct(
     name: &Ident,
     fields: syn::FieldsNamed,
-    generics: &syn::Generics,
     container_path: &TokenStream,
 ) -> Result<DeriveOutput> {
+    let formatter = crate::internal_ident("__redactable_f");
+    let debug = crate::internal_ident("__redactable_debug");
     let mut bindings = Vec::new();
     let mut transforms = Vec::new();
     let mut used_generics = Vec::new();
@@ -53,11 +55,10 @@ fn derive_named_struct(
     let mut debug_unredacted_generics = Vec::new();
 
     let mut ctx = DeriveContext {
-        generics,
         container_path,
-        used_generics: &mut used_generics,
-        policy_applicable_generics: &mut policy_applicable_generics,
-        debug_unredacted_generics: &mut debug_unredacted_generics,
+        container_predicates: &mut used_generics,
+        policy_predicates: &mut policy_applicable_generics,
+        debug_unredacted_predicates: &mut debug_unredacted_generics,
     };
 
     for field in fields.named {
@@ -75,17 +76,17 @@ fn derive_named_struct(
             // Sensitive: use wildcard pattern to avoid unused binding
             debug_redacted_patterns.push(quote_spanned! { span => #binding: _ });
             quote_spanned! { span =>
-                __redactable_debug.field(stringify!(#binding), &"[REDACTED]");
+                #debug.field(stringify!(#binding), &"[REDACTED]");
             }
         } else {
             // Non-sensitive: normal binding, referenced in the field output
             debug_redacted_patterns.push(quote_spanned! { span => #binding });
             quote_spanned! { span =>
-                __redactable_debug.field(stringify!(#binding), #binding);
+                #debug.field(stringify!(#binding), #binding);
             }
         };
         let debug_unredacted_field = quote_spanned! { span =>
-            __redactable_debug.field(stringify!(#binding), #binding);
+            #debug.field(stringify!(#binding), #binding);
         };
 
         transforms.push(transform);
@@ -104,18 +105,18 @@ fn derive_named_struct(
         debug_redacted_body: quote! {
             match self {
                 Self { #(#debug_redacted_patterns),* } => {
-                    let mut __redactable_debug = __redactable_f.debug_struct(stringify!(#name));
+                    let mut #debug = #formatter.debug_struct(stringify!(#name));
                     #(#debug_redacted_fields)*
-                    __redactable_debug.finish()
+                    #debug.finish()
                 }
             }
         },
         debug_unredacted_body: quote! {
             match self {
                 Self { #(#bindings),* } => {
-                    let mut __redactable_debug = __redactable_f.debug_struct(stringify!(#name));
+                    let mut #debug = #formatter.debug_struct(stringify!(#name));
                     #(#debug_unredacted_fields)*
-                    __redactable_debug.finish()
+                    #debug.finish()
                 }
             }
         },
@@ -126,9 +127,10 @@ fn derive_named_struct(
 fn derive_unnamed_struct(
     name: &Ident,
     fields: syn::FieldsUnnamed,
-    generics: &syn::Generics,
     container_path: &TokenStream,
 ) -> Result<DeriveOutput> {
+    let formatter = crate::internal_ident("__redactable_f");
+    let debug = crate::internal_ident("__redactable_debug");
     let mut bindings = Vec::new();
     let mut transforms = Vec::new();
     let mut used_generics = Vec::new();
@@ -139,15 +141,14 @@ fn derive_unnamed_struct(
     let mut debug_unredacted_generics = Vec::new();
 
     let mut ctx = DeriveContext {
-        generics,
         container_path,
-        used_generics: &mut used_generics,
-        policy_applicable_generics: &mut policy_applicable_generics,
-        debug_unredacted_generics: &mut debug_unredacted_generics,
+        container_predicates: &mut used_generics,
+        policy_predicates: &mut policy_applicable_generics,
+        debug_unredacted_predicates: &mut debug_unredacted_generics,
     };
 
     for (index, field) in fields.unnamed.into_iter().enumerate() {
-        let ident = format_ident!("field_{index}");
+        let ident = format_ident!("field_{index}", span = proc_macro2::Span::mixed_site());
         let binding = ident.clone();
         let span = field.span();
         let ty = &field.ty;
@@ -161,17 +162,17 @@ fn derive_unnamed_struct(
             // Sensitive: use wildcard pattern to avoid unused binding
             debug_redacted_patterns.push(quote_spanned! { span => _ });
             quote_spanned! { span =>
-                __redactable_debug.field(&"[REDACTED]");
+                #debug.field(&"[REDACTED]");
             }
         } else {
             // Non-sensitive: normal binding, referenced in the field output
             debug_redacted_patterns.push(quote_spanned! { span => #binding });
             quote_spanned! { span =>
-                __redactable_debug.field(#binding);
+                #debug.field(#binding);
             }
         };
         let debug_unredacted_field = quote_spanned! { span =>
-            __redactable_debug.field(#binding);
+            #debug.field(#binding);
         };
 
         transforms.push(transform);
@@ -190,18 +191,18 @@ fn derive_unnamed_struct(
         debug_redacted_body: quote! {
             match self {
                 Self ( #(#debug_redacted_patterns),* ) => {
-                    let mut __redactable_debug = __redactable_f.debug_tuple(stringify!(#name));
+                    let mut #debug = #formatter.debug_tuple(stringify!(#name));
                     #(#debug_redacted_fields)*
-                    __redactable_debug.finish()
+                    #debug.finish()
                 }
             }
         },
         debug_unredacted_body: quote! {
             match self {
                 Self ( #(#bindings),* ) => {
-                    let mut __redactable_debug = __redactable_f.debug_tuple(stringify!(#name));
+                    let mut #debug = #formatter.debug_tuple(stringify!(#name));
                     #(#debug_unredacted_fields)*
-                    __redactable_debug.finish()
+                    #debug.finish()
                 }
             }
         },

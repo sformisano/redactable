@@ -1,0 +1,3 @@
+[workspace]
+members = ["consumer-normal", "consumer-renamed", "enabler", "topology-check"]
+resolver = "2"

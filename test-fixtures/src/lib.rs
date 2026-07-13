@@ -9,7 +9,17 @@
 //! or integration tests always see `cfg!(test) == true` and can never exercise
 //! the production branch.
 
-use redactable::{Secret, Sensitive, SensitiveDisplay};
+use redactable::{Email, Secret, Sensitive, SensitiveDisplay, Token};
+
+/// Exact README tracing fixture with production-compiled generated `Debug`.
+#[derive(Clone, Sensitive, serde::Serialize)]
+pub struct AuthEvent {
+    #[sensitive(Token)]
+    pub api_key: String,
+    #[sensitive(Email)]
+    pub user_email: String,
+    pub action: String,
+}
 
 /// Structural fixture: `Sensitive` derive with one annotated leaf.
 #[derive(Clone, Sensitive, serde::Serialize)]

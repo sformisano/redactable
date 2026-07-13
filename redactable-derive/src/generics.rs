@@ -1,210 +1,98 @@
-//! Generic type parameter handling and trait bound management.
+//! Complete-type trait predicate management for generated implementations.
 //!
-//! This module adds bounds only for generics that are used by walked or
-//! classified fields.
-//!
-//! ## PhantomData Handling
-//!
-//! `PhantomData<T>` fields are explicitly skipped when collecting generics.
-//! This is essential for external type support:
-//!
-//! ```ignore
-//! struct TypedId<T> {
-//!     id: String,
-//!     _marker: PhantomData<T>,  // T should NOT require RedactableWithMapper
-//! }
-//! ```
-//!
-//! Without this, `TypedId<DateTime<Utc>>` would fail because `DateTime<Utc>`
-//! doesn't implement `RedactableWithMapper`, even though `_marker` passes through
-//! unchanged (no `#[sensitive]` annotation).
+//! Bounds describe the exact type used by each emitted operation. Container
+//! implementations remain authoritative for their inner `Clone`, `Copy`, key,
+//! hasher, ordering, and traversal requirements.
 
-use syn::{Ident, parse_quote};
+use quote::ToTokens;
+use syn::{Generics, Type, WherePredicate, parse_quote};
 
-use crate::crate_path;
+use crate::{crate_path, crate_root};
 
-fn push_if_generic(ident: &Ident, generics: &syn::Generics, result: &mut Vec<Ident>) {
-    if generics.type_params().any(|param| param.ident == *ident)
-        && !result.iter().any(|g| g == ident)
-    {
-        result.push(ident.clone());
-    }
-}
-
-fn visit_type_param_bound(
-    bound: &syn::TypeParamBound,
-    generics: &syn::Generics,
-    result: &mut Vec<Ident>,
-) {
-    if let syn::TypeParamBound::Trait(trait_bound) = bound {
-        visit_path(&trait_bound.path, generics, result);
-    }
-}
-
-fn visit_path_arguments(
-    args: &syn::PathArguments,
-    generics: &syn::Generics,
-    result: &mut Vec<Ident>,
-) {
-    match args {
-        syn::PathArguments::AngleBracketed(args) => {
-            for arg in &args.args {
-                match arg {
-                    syn::GenericArgument::Type(inner_ty) => {
-                        visit_type(inner_ty, generics, result);
-                    }
-                    syn::GenericArgument::AssocType(assoc) => {
-                        visit_type(&assoc.ty, generics, result);
-                    }
-                    syn::GenericArgument::Constraint(constraint) => {
-                        for bound in &constraint.bounds {
-                            visit_type_param_bound(bound, generics, result);
-                        }
-                    }
-                    _ => {}
-                }
-            }
-        }
-        syn::PathArguments::Parenthesized(args) => {
-            for input in &args.inputs {
-                visit_type(input, generics, result);
-            }
-            if let syn::ReturnType::Type(_, output) = &args.output {
-                visit_type(output, generics, result);
-            }
-        }
-        syn::PathArguments::None => {}
-    }
-}
-
-fn visit_path(path: &syn::Path, generics: &syn::Generics, result: &mut Vec<Ident>) {
-    if let Some(last_segment) = path.segments.last() {
-        // Skip PhantomData - it's a zero-sized marker that doesn't need bounds.
-        // This is critical: PhantomData<T> fields pass through unchanged,
-        // so we shouldn't require T: RedactableWithMapper. This enables
-        // patterns like `struct TypedId<T> { id: String, _marker: PhantomData<T> }`
-        // to work even when T is an external type like DateTime<Utc>.
-        if last_segment.ident == "PhantomData" {
-            return;
-        }
-    }
-
-    for segment in &path.segments {
-        push_if_generic(&segment.ident, generics, result);
-        visit_path_arguments(&segment.arguments, generics, result);
-    }
-}
-
-fn visit_type(ty: &syn::Type, generics: &syn::Generics, result: &mut Vec<Ident>) {
-    match ty {
-        syn::Type::Path(type_path) => {
-            if let Some(qself) = &type_path.qself {
-                visit_type(&qself.ty, generics, result);
-            }
-            visit_path(&type_path.path, generics, result);
-        }
-        syn::Type::Reference(reference) => visit_type(&reference.elem, generics, result),
-        syn::Type::Ptr(pointer) => visit_type(&pointer.elem, generics, result),
-        syn::Type::Slice(slice) => visit_type(&slice.elem, generics, result),
-        syn::Type::Array(array) => visit_type(&array.elem, generics, result),
-        syn::Type::Tuple(tuple) => {
-            for elem in &tuple.elems {
-                visit_type(elem, generics, result);
-            }
-        }
-        syn::Type::Paren(paren) => visit_type(&paren.elem, generics, result),
-        syn::Type::Group(group) => visit_type(&group.elem, generics, result),
-        syn::Type::TraitObject(obj) => {
-            for bound in &obj.bounds {
-                visit_type_param_bound(bound, generics, result);
-            }
-        }
-        syn::Type::ImplTrait(impl_trait) => {
-            for bound in &impl_trait.bounds {
-                visit_type_param_bound(bound, generics, result);
-            }
-        }
-        syn::Type::BareFn(bare_fn) => {
-            for input in &bare_fn.inputs {
-                visit_type(&input.ty, generics, result);
-            }
-            if let syn::ReturnType::Type(_, output) = &bare_fn.output {
-                visit_type(output, generics, result);
-            }
-        }
-        _ => {}
-    }
-}
-
-pub(crate) fn collect_generics_from_type(
-    ty: &syn::Type,
-    generics: &syn::Generics,
-    result: &mut Vec<Ident>,
-) {
-    visit_type(ty, generics, result);
-}
-
-/// Adds a trait bound to generic parameters that appear in `used_generics`.
-///
-/// This is the shared implementation behind all the public `add_*_bounds` helpers.
-fn add_bounds(
-    mut generics: syn::Generics,
-    used_generics: &[Ident],
-    bound: syn::TypeParamBound,
-) -> syn::Generics {
-    for param in generics.type_params_mut() {
-        if used_generics.iter().any(|g| g == &param.ident) {
-            param.bounds.push(bound.clone());
+/// Adds deduplicated where predicates to a generic declaration.
+pub(crate) fn add_predicates(mut generics: Generics, predicates: &[WherePredicate]) -> Generics {
+    let where_clause = generics.make_where_clause();
+    for predicate in predicates {
+        if !where_clause.predicates.iter().any(|existing| {
+            existing.to_token_stream().to_string() == predicate.to_token_stream().to_string()
+        }) {
+            where_clause.predicates.push(predicate.clone());
         }
     }
     generics
 }
 
-/// Adds `RedactableWithMapper` bounds to generic parameters used in walked fields.
-pub(crate) fn add_container_bounds(
-    generics: syn::Generics,
-    used_generics: &[Ident],
-) -> syn::Generics {
-    let container_path = crate_path("RedactableWithMapper");
-    add_bounds(generics, used_generics, parse_quote!(#container_path))
+fn push_unique(predicates: &mut Vec<WherePredicate>, predicate: WherePredicate) {
+    if !predicates.iter().any(|existing| {
+        existing.to_token_stream().to_string() == predicate.to_token_stream().to_string()
+    }) {
+        predicates.push(predicate);
+    }
 }
 
-/// Adds `PolicyApplicable` bounds to generic parameters used in policy-annotated fields.
-///
-/// This enables `#[sensitive(Policy)]` to work on generic types like `T`
-/// where `T` could be `String`, `Option<String>`, `Vec<String>`, etc.
-pub(crate) fn add_policy_applicable_bounds(
-    generics: syn::Generics,
-    used_generics: &[Ident],
-) -> syn::Generics {
-    let path = crate_path("PolicyApplicable");
-    add_bounds(generics, used_generics, parse_quote!(#path))
+pub(crate) fn push_container_predicate(predicates: &mut Vec<WherePredicate>, ty: &Type) {
+    let trait_path = crate_path("RedactableWithMapper");
+    push_unique(predicates, parse_quote!(#ty: #trait_path));
 }
 
-/// Adds `PolicyApplicableRef` bounds to generic parameters used in policy-annotated fields.
-pub(crate) fn add_policy_applicable_ref_bounds(
-    generics: syn::Generics,
-    used_generics: &[Ident],
-) -> syn::Generics {
-    let path = crate_path("PolicyApplicableRef");
-    add_bounds(generics, used_generics, parse_quote!(#path))
+pub(crate) fn push_policy_predicate(
+    predicates: &mut Vec<WherePredicate>,
+    ty: &Type,
+    policy: &syn::Path,
+) {
+    let crate_root = crate_root();
+    push_unique(
+        predicates,
+        parse_quote!(#ty: #crate_root::__private::PolicyField<#policy>),
+    );
 }
 
-pub(crate) fn add_debug_bounds(generics: syn::Generics, used_generics: &[Ident]) -> syn::Generics {
-    add_bounds(generics, used_generics, parse_quote!(::core::fmt::Debug))
+pub(crate) fn push_policy_ref_predicate(
+    predicates: &mut Vec<WherePredicate>,
+    ty: &Type,
+    policy: &syn::Path,
+) {
+    let crate_root = crate_root();
+    push_unique(
+        predicates,
+        parse_quote!(#ty: #crate_root::__private::PolicyFieldRef<#policy>),
+    );
 }
 
-pub(crate) fn add_display_bounds(
-    generics: syn::Generics,
-    used_generics: &[Ident],
-) -> syn::Generics {
-    add_bounds(generics, used_generics, parse_quote!(::core::fmt::Display))
+pub(crate) fn push_policy_output_display_predicate(
+    predicates: &mut Vec<WherePredicate>,
+    ty: &Type,
+    policy: &syn::Path,
+) {
+    let crate_root = crate_root();
+    let formatter_path = crate_path("RedactableWithFormatter");
+    push_unique(
+        predicates,
+        parse_quote!(<#ty as #crate_root::__private::PolicyFieldRef<#policy>>::Output: #formatter_path),
+    );
 }
 
-pub(crate) fn add_redacted_display_bounds(
-    generics: syn::Generics,
-    used_generics: &[Ident],
-) -> syn::Generics {
-    let path = crate_path("RedactableWithFormatter");
-    add_bounds(generics, used_generics, parse_quote!(#path))
+pub(crate) fn push_policy_output_debug_predicate(
+    predicates: &mut Vec<WherePredicate>,
+    ty: &Type,
+    policy: &syn::Path,
+) {
+    let crate_root = crate_root();
+    push_unique(
+        predicates,
+        parse_quote!(<#ty as #crate_root::__private::PolicyFieldRef<#policy>>::Output: ::core::fmt::Debug),
+    );
+}
+
+pub(crate) fn push_debug_predicate(predicates: &mut Vec<WherePredicate>, ty: &Type) {
+    push_unique(predicates, parse_quote!(#ty: ::core::fmt::Debug));
+}
+
+pub(crate) fn push_display_predicate(predicates: &mut Vec<WherePredicate>, ty: &Type) {
+    push_unique(predicates, parse_quote!(#ty: ::core::fmt::Display));
+}
+
+pub(crate) fn push_redacted_display_predicate(predicates: &mut Vec<WherePredicate>, ty: &Type) {
+    let trait_path = crate_path("RedactableWithFormatter");
+    push_unique(predicates, parse_quote!(#ty: #trait_path));
 }

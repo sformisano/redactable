@@ -1,5 +1,48 @@
-error: containers of IP address fields cannot use #[sensitive(IpAddress)] directly; wrap the IP leaf instead, for example `Option<SensitiveValue<IpAddr, IpAddress>>`
-  --> tests/ui/sensitive_ip_container_rejected.rs:18:5
+error[E0277]: `IpAddr` cannot have a policy applied
+  --> tests/ui/sensitive_ip_container_rejected.rs:16:17
    |
-18 |     #[sensitive(IpAddress)]
-   |     ^
+16 | #[derive(Clone, Sensitive, serde::Serialize)]
+   |                 ^^^^^^^^^ this type doesn't support redaction policies
+   |
+help: the trait `redactable::PolicyApplicable` is not implemented for `IpAddr`
+  --> tests/ui/sensitive_ip_container_rejected.rs:4:1
+   |
+ 4 | struct IpAddr(String);
+   | ^^^^^^^^^^^^^
+   = note: policies work on String, Cow<str>, and containers of these types
+   = note: for custom string-like types, implement `SensitiveWithPolicy<YourPolicy>`
+   = help: the following other types implement trait `redactable::PolicyApplicable`:
+             Arc<T>
+             BTreeMap<K, V>
+             BTreeSet<T>
+             Box<T>
+             Cell<T>
+             Cow<'_, str>
+             HashMap<K, V, S>
+             HashSet<T, S>
+           and $N others
+   = note: required for `std::option::Option<IpAddr>` to implement `redactable::PolicyApplicable`
+   = note: required for `std::option::Option<IpAddr>` to implement `redactable::__private::RecursivePolicyField<IpAddress>`
+   = note: required for `std::option::Option<IpAddr>` to implement `redactable::__private::PolicyField<IpAddress>`
+   = help: see issue #48214
+   = note: this error originates in the derive macro `Sensitive` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0277]: `IpAddr` doesn't implement `Debug`
+  --> tests/ui/sensitive_ip_container_rejected.rs:16:17
+   |
+16 | #[derive(Clone, Sensitive, serde::Serialize)]
+   |                 ^^^^^^^^^ the trait `Debug` is not implemented for `IpAddr`
+   |
+   = note: add `#[derive(Debug)]` to `IpAddr` or manually `impl Debug for IpAddr`
+help: the trait `Debug` is implemented for `std::option::Option<T>`
+  --> $RUST/core/src/option.rs
+   |
+   | #[derive(Copy, Debug, Hash)]
+   |                ^^^^^
+   = note: required for `std::option::Option<IpAddr>` to implement `Debug`
+   = help: see issue #48214
+help: consider annotating `IpAddr` with `#[derive(Debug)]`
+   |
+ 4 + #[derive(Debug)]
+ 5 | struct IpAddr(String);
+   |

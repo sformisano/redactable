@@ -13,20 +13,22 @@ use quote::{format_ident, quote, quote_spanned};
 use syn::{Attribute, Data, DataEnum, DataStruct, Fields, LitStr, Result, spanned::Spanned};
 
 use crate::{
-    crate_path,
-    generics::collect_generics_from_type,
-    strategy::{Strategy, parse_field_strategy, reject_variant_sensitivity_attrs},
-    types::{
-        contains_unwrapped_ip_address_type, is_ip_address_type, is_nonzero_type, is_scalar_type,
+    crate_path, crate_root,
+    generics::{
+        push_debug_predicate, push_display_predicate, push_policy_output_debug_predicate,
+        push_policy_output_display_predicate, push_policy_ref_predicate,
+        push_redacted_display_predicate,
     },
+    strategy::{Strategy, parse_field_strategy, reject_variant_sensitivity_attrs},
+    types::is_nonzero_type,
 };
 
 pub(crate) struct RedactedDisplayOutput {
     pub(crate) body: TokenStream,
-    pub(crate) display_generics: Vec<Ident>,
-    pub(crate) debug_generics: Vec<Ident>,
-    pub(crate) policy_ref_generics: Vec<Ident>,
-    pub(crate) nested_generics: Vec<Ident>,
+    pub(crate) display_generics: Vec<syn::WherePredicate>,
+    pub(crate) debug_generics: Vec<syn::WherePredicate>,
+    pub(crate) policy_ref_generics: Vec<syn::WherePredicate>,
+    pub(crate) nested_generics: Vec<syn::WherePredicate>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -58,10 +60,10 @@ struct FieldInfo<'a> {
 
 struct FormatArgsOutput {
     prelude: TokenStream,
-    display_generics: Vec<Ident>,
-    debug_generics: Vec<Ident>,
-    policy_ref_generics: Vec<Ident>,
-    nested_generics: Vec<Ident>,
+    display_generics: Vec<syn::WherePredicate>,
+    debug_generics: Vec<syn::WherePredicate>,
+    policy_ref_generics: Vec<syn::WherePredicate>,
+    nested_generics: Vec<syn::WherePredicate>,
 }
 
 pub(crate) fn derive_redacted_display(
@@ -84,11 +86,11 @@ fn derive_struct_display(
     name: &Ident,
     data: &DataStruct,
     attrs: &[Attribute],
-    generics: &syn::Generics,
+    _generics: &syn::Generics,
 ) -> Result<RedactedDisplayOutput> {
     let template = template_from_attrs(attrs, name.span())?;
     let fields = build_fields_from_syn(&data.fields)?;
-    let format_args = build_format_args(&template, &fields, generics)?;
+    let format_args = build_format_args(&template, &fields)?;
     let format_prelude = format_args.prelude.clone();
     let bindings = fields.iter().map(|field| field.ident.clone());
     let pattern = match data.fields {
@@ -116,7 +118,7 @@ fn derive_struct_display(
 fn derive_enum_display(
     name: &Ident,
     data: &DataEnum,
-    generics: &syn::Generics,
+    _generics: &syn::Generics,
 ) -> Result<RedactedDisplayOutput> {
     let mut arms = Vec::new();
     let mut display_generics = Vec::new();
@@ -128,7 +130,7 @@ fn derive_enum_display(
         reject_variant_sensitivity_attrs(&variant.attrs)?;
         let template = template_from_attrs(&variant.attrs, variant.ident.span())?;
         let fields = build_fields_from_syn(&variant.fields)?;
-        let format_args = build_format_args(&template, &fields, generics)?;
+        let format_args = build_format_args(&template, &fields)?;
         let format_prelude = format_args.prelude.clone();
         let bindings = fields.iter().map(|field| field.ident.clone());
         let variant_ident = &variant.ident;
@@ -200,7 +202,7 @@ fn build_fields_from_syn(fields: &Fields) -> Result<Vec<FieldInfo<'_>>> {
                 let strategy = parse_field_strategy(&field.attrs)?;
                 validate_policy_type(&field.ty, &strategy, field.span())?;
                 Ok(FieldInfo {
-                    ident: format_ident!("field_{index}"),
+                    ident: format_ident!("field_{index}", span = Span::mixed_site()),
                     ty: &field.ty,
                     strategy,
                     span: field.span(),
@@ -211,20 +213,12 @@ fn build_fields_from_syn(fields: &Fields) -> Result<Vec<FieldInfo<'_>>> {
     }
 }
 
-fn is_secret_policy(path: &syn::Path) -> bool {
-    path.is_ident("Secret")
-}
-
-fn is_ip_address_policy(path: &syn::Path) -> bool {
-    path.is_ident("IpAddress")
-}
-
 fn validate_policy_type(
     ty: &syn::Type,
     strategy: &Strategy,
     span: proc_macro2::Span,
 ) -> Result<()> {
-    let Strategy::Policy(policy) = strategy else {
+    let Strategy::Policy(_policy) = strategy else {
         return Ok(());
     };
     if is_nonzero_type(ty) {
@@ -234,31 +228,11 @@ fn validate_policy_type(
              may need to produce zero; use a nullable scalar or a policy-aware wrapper",
         ));
     }
-    if is_ip_address_type(ty) && !is_ip_address_policy(policy) {
-        return Err(syn::Error::new(
-            span,
-            "IP address fields can only use #[sensitive(IpAddress)]",
-        ));
-    }
-    if is_ip_address_policy(policy)
-        && !is_ip_address_type(ty)
-        && contains_unwrapped_ip_address_type(ty)
-    {
-        return Err(syn::Error::new(
-            span,
-            "containers of IP address fields cannot use #[sensitive(IpAddress)] directly; \
-             wrap the IP leaf instead, for example `Option<SensitiveValue<IpAddr, IpAddress>>`",
-        ));
-    }
     Ok(())
 }
 
 #[allow(clippy::too_many_lines)]
-fn build_format_args(
-    template: &LitStr,
-    fields: &[FieldInfo<'_>],
-    generics: &syn::Generics,
-) -> Result<FormatArgsOutput> {
+fn build_format_args(template: &LitStr, fields: &[FieldInfo<'_>]) -> Result<FormatArgsOutput> {
     let placeholders = parse_placeholders(template)?;
     validate_positional_placeholders(&placeholders)?;
     let mut named_args: BTreeMap<String, (Ident, &'_ FieldInfo<'_>, FormatMode)> = BTreeMap::new();
@@ -280,7 +254,7 @@ fn build_format_args(
                             format!("unknown field `{name}` in format string"),
                         )
                     })?;
-                let arg_ident = format_ident!("__redacted_{}", name);
+                let arg_ident = format_ident!("__redacted_{}", name, span = Span::mixed_site());
                 let entry = named_args.entry(name.to_string()).or_insert((
                     arg_ident,
                     field,
@@ -298,7 +272,7 @@ fn build_format_args(
                         format!("unknown positional field index {index} in format string"),
                     )
                 })?;
-                let arg_ident = format_ident!("__redacted_{index}");
+                let arg_ident = format_ident!("__redacted_{index}", span = Span::mixed_site());
                 let entry =
                     positional_args[index].get_or_insert((arg_ident, field, placeholder.mode));
                 entry.2 = merge_mode(entry.2, placeholder.mode);
@@ -317,7 +291,6 @@ fn build_format_args(
         collect_bounds(
             field,
             mode,
-            generics,
             &mut display_generics,
             &mut debug_generics,
             &mut policy_ref_generics,
@@ -342,7 +315,6 @@ fn build_format_args(
         collect_bounds(
             field,
             mode,
-            generics,
             &mut display_generics,
             &mut debug_generics,
             &mut policy_ref_generics,
@@ -368,9 +340,10 @@ fn build_format_args(
         }
     };
 
+    let formatter = crate::internal_ident("__redactable_f");
     let prelude = quote! {
         #(#prelude_bindings)*
-        __redactable_f.write_fmt(#format_args)
+        #formatter.write_fmt(#format_args)
     };
 
     Ok(FormatArgsOutput {
@@ -383,8 +356,8 @@ fn build_format_args(
 }
 
 fn should_wrap_policy_output(field: &FieldInfo<'_>) -> bool {
-    match &field.strategy {
-        Strategy::Policy(policy) => !(is_scalar_type(field.ty) && is_secret_policy(policy)),
+    match field.strategy {
+        Strategy::Policy(_) => true,
         Strategy::WalkDefault | Strategy::NotSensitive => false,
     }
 }
@@ -392,11 +365,8 @@ fn should_wrap_policy_output(field: &FieldInfo<'_>) -> bool {
 fn redacted_expr_for_field(field: &FieldInfo<'_>) -> TokenStream {
     let ident = &field.ident;
     let span = field.span;
-    let scalar_path = crate_path("ScalarRedaction");
-    let apply_policy_ref_path = crate_path("apply_policy_ref");
+    let crate_root = crate_root();
     let redacted_display_path = crate_path("RedactableWithFormatter");
-    let sensitive_with_policy_path = crate_path("SensitiveWithPolicy");
-    let redaction_policy_path = crate_path("RedactionPolicy");
     let field_ty = field.ty;
     match &field.strategy {
         Strategy::WalkDefault => quote_spanned! { span =>
@@ -406,23 +376,12 @@ fn redacted_expr_for_field(field: &FieldInfo<'_>) -> TokenStream {
             #ident
         },
         Strategy::Policy(policy) => {
-            if is_scalar_type(field.ty) && is_secret_policy(policy) {
-                quote_spanned! { span =>
-                    #scalar_path::redact(*#ident)
-                }
-            } else if is_ip_address_type(field.ty) {
-                let policy = policy.clone();
-                quote_spanned! { span =>
-                    <#field_ty as #sensitive_with_policy_path<#policy>>::redacted_string(
-                        #ident,
-                        &<#policy as #redaction_policy_path>::policy(),
-                    )
-                }
-            } else {
-                let policy = policy.clone();
-                quote_spanned! { span =>
-                    #apply_policy_ref_path::<#policy, _>(#ident)
-                }
+            let policy = policy.clone();
+            quote_spanned! { span =>
+                <#field_ty as #crate_root::__private::PolicyFieldRef<#policy>>::apply_field_ref(
+                    #ident,
+                    &#crate_root::__private::PolicyMapper,
+                )
             }
         }
     }
@@ -431,40 +390,35 @@ fn redacted_expr_for_field(field: &FieldInfo<'_>) -> TokenStream {
 fn collect_bounds(
     field: &FieldInfo<'_>,
     mode: FormatMode,
-    generics: &syn::Generics,
-    display_generics: &mut Vec<Ident>,
-    debug_generics: &mut Vec<Ident>,
-    policy_ref_generics: &mut Vec<Ident>,
-    nested_generics: &mut Vec<Ident>,
+    display_generics: &mut Vec<syn::WherePredicate>,
+    debug_generics: &mut Vec<syn::WherePredicate>,
+    policy_ref_generics: &mut Vec<syn::WherePredicate>,
+    nested_generics: &mut Vec<syn::WherePredicate>,
 ) {
     match &field.strategy {
         Strategy::WalkDefault => {
-            collect_generics_from_type(field.ty, generics, nested_generics);
+            push_redacted_display_predicate(nested_generics, field.ty);
         }
         Strategy::NotSensitive => match mode {
-            FormatMode::Display => collect_generics_from_type(field.ty, generics, display_generics),
-            FormatMode::Debug => collect_generics_from_type(field.ty, generics, debug_generics),
+            FormatMode::Display => push_display_predicate(display_generics, field.ty),
+            FormatMode::Debug => push_debug_predicate(debug_generics, field.ty),
             FormatMode::Both => {
-                collect_generics_from_type(field.ty, generics, display_generics);
-                collect_generics_from_type(field.ty, generics, debug_generics);
+                push_display_predicate(display_generics, field.ty);
+                push_debug_predicate(debug_generics, field.ty);
             }
         },
         Strategy::Policy(policy) => {
-            if is_scalar_type(field.ty) && is_secret_policy(policy) {
-                return;
-            }
-            if is_ip_address_type(field.ty) {
-                return;
-            }
-            collect_generics_from_type(field.ty, generics, policy_ref_generics);
+            push_policy_ref_predicate(policy_ref_generics, field.ty, policy);
             match mode {
                 FormatMode::Display => {
-                    collect_generics_from_type(field.ty, generics, display_generics);
+                    push_policy_output_display_predicate(display_generics, field.ty, policy);
                 }
-                FormatMode::Debug => collect_generics_from_type(field.ty, generics, debug_generics),
+                FormatMode::Debug => {
+                    push_policy_output_debug_predicate(debug_generics, field.ty, policy);
+                }
                 FormatMode::Both => {
-                    collect_generics_from_type(field.ty, generics, display_generics);
-                    collect_generics_from_type(field.ty, generics, debug_generics);
+                    push_policy_output_display_predicate(display_generics, field.ty, policy);
+                    push_policy_output_debug_predicate(debug_generics, field.ty, policy);
                 }
             }
         }

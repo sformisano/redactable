@@ -15,7 +15,7 @@ use redactable::{
     RedactableWithFormatter, Secret, SensitiveValue,
     tracing::{TracingRedactedDebugExt, TracingRedactedExt},
 };
-use redactable_test_fixtures::{FixtureError, FixtureUser};
+use redactable_test_fixtures::{AuthEvent, FixtureError, FixtureUser};
 use tracing::{
     Event, Id, Metadata, Subscriber,
     field::{Field, Visit},
@@ -193,6 +193,29 @@ fn structural_debug_helper_records_redacted_debug_field() {
         !output.contains("sk-super-secret"),
         "raw sensitive field must not reach tracing, got: {output}"
     );
+}
+
+#[test]
+fn production_auth_event_tracing_matches_documentation() {
+    const API_KEY: &str = "sk-secret-key-12345";
+    const EMAIL: &str = "alice@example.com";
+    let event = AuthEvent {
+        api_key: API_KEY.to_owned(),
+        user_email: EMAIL.to_owned(),
+        action: "login".to_owned(),
+    };
+
+    let fields = capture_fields(|| tracing::info!(event = event.tracing_redacted_debug()));
+    let output = debug_text(field_named(&fields, "event"), "event");
+    let expected = if cfg!(feature = "testing") {
+        "AuthEvent { api_key: \"***************2345\", user_email: \"al***@example.com\", action: \"login\" }"
+    } else {
+        "AuthEvent { api_key: \"[REDACTED]\", user_email: \"[REDACTED]\", action: \"login\" }"
+    };
+
+    assert_eq!(output, expected);
+    assert!(!output.contains(API_KEY));
+    assert!(!output.contains(EMAIL));
 }
 
 #[test]

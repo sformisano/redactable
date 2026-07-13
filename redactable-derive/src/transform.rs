@@ -8,13 +8,10 @@ use quote::quote_spanned;
 use syn::Result;
 
 use crate::{
-    crate_path,
-    generics::collect_generics_from_type,
+    crate_root,
+    generics::{push_container_predicate, push_debug_predicate, push_policy_predicate},
     strategy::Strategy,
-    types::{
-        contains_unwrapped_ip_address_type, is_ip_address_type, is_nonzero_type, is_phantom_data,
-        is_scalar_type,
-    },
+    types::is_nonzero_type,
 };
 
 /// Accumulated state during field processing.
@@ -22,20 +19,10 @@ use crate::{
 /// This struct groups the mutable vectors that collect generics and output tokens
 /// during traversal of struct fields or enum variants.
 pub(crate) struct DeriveContext<'a> {
-    pub(crate) generics: &'a syn::Generics,
     pub(crate) container_path: &'a TokenStream,
-    pub(crate) used_generics: &'a mut Vec<Ident>,
-    pub(crate) policy_applicable_generics: &'a mut Vec<Ident>,
-    pub(crate) debug_unredacted_generics: &'a mut Vec<Ident>,
-}
-
-/// Checks if a policy path refers to the `Secret` policy.
-fn is_secret_policy(path: &syn::Path) -> bool {
-    path.is_ident("Secret")
-}
-
-fn is_ip_address_policy(path: &syn::Path) -> bool {
-    path.is_ident("IpAddress")
+    pub(crate) container_predicates: &'a mut Vec<syn::WherePredicate>,
+    pub(crate) policy_predicates: &'a mut Vec<syn::WherePredicate>,
+    pub(crate) debug_unredacted_predicates: &'a mut Vec<syn::WherePredicate>,
 }
 
 fn nonzero_policy_error(span: Span) -> syn::Error {
@@ -43,14 +30,6 @@ fn nonzero_policy_error(span: Span) -> syn::Error {
         span,
         "NonZero integer fields cannot use #[sensitive(Policy)] because redaction \
          may need to produce zero; use a nullable scalar or a policy-aware wrapper",
-    )
-}
-
-fn ip_container_policy_error(span: Span) -> syn::Error {
-    syn::Error::new(
-        span,
-        "containers of IP address fields cannot use #[sensitive(IpAddress)] directly; \
-         wrap the IP leaf instead, for example `Option<SensitiveValue<IpAddr, IpAddress>>`",
     )
 }
 
@@ -72,78 +51,38 @@ pub(crate) fn generate_field_transform(
     strategy: &Strategy,
 ) -> Result<TokenStream> {
     let container_path = ctx.container_path;
+    let mapper = crate::internal_ident("__redactable_mapper");
 
     match strategy {
         Strategy::WalkDefault => {
-            // PhantomData<T> is a zero-sized marker that never contains data.
-            // Scalars are primitive types that pass through unchanged.
-            // Both cases: return empty token stream (passthrough) without collecting generics.
-            if is_phantom_data(ty) || is_scalar_type(ty) {
-                Ok(TokenStream::new())
-            } else {
-                collect_generics_from_type(ty, ctx.generics, ctx.used_generics);
-                collect_generics_from_type(ty, ctx.generics, ctx.debug_unredacted_generics);
-                Ok(quote_spanned! { span =>
-                    let #binding = #container_path::redact_with(#binding, __redactable_mapper);
-                })
-            }
+            push_container_predicate(ctx.container_predicates, ty);
+            push_debug_predicate(ctx.debug_unredacted_predicates, ty);
+            Ok(quote_spanned! { span =>
+                let #binding = #container_path::redact_with(#binding, #mapper);
+            })
         }
         Strategy::NotSensitive => {
             // Explicit opt-out: no transformation, passthrough unchanged.
             // This is useful for foreign types that don't implement RedactableWithMapper.
             // Still collect debug generics: the field is printed in generated Debug impls
             // even though it's not transformed, so its type needs a Debug bound.
-            collect_generics_from_type(ty, ctx.generics, ctx.debug_unredacted_generics);
+            push_debug_predicate(ctx.debug_unredacted_predicates, ty);
             Ok(TokenStream::new())
         }
         Strategy::Policy(policy_path) => {
             if is_nonzero_type(ty) {
                 return Err(nonzero_policy_error(span));
             }
-            if is_ip_address_policy(policy_path)
-                && !is_ip_address_type(ty)
-                && contains_unwrapped_ip_address_type(ty)
-            {
-                return Err(ip_container_policy_error(span));
-            }
-            if is_ip_address_type(ty) {
-                if !is_ip_address_policy(policy_path) {
-                    return Err(syn::Error::new(
-                        span,
-                        "IP address fields can only use #[sensitive(IpAddress)]",
-                    ));
-                }
-                let policy = policy_path.clone();
-                let sensitive_with_policy_path = crate_path("SensitiveWithPolicy");
-                let redaction_policy_path = crate_path("RedactionPolicy");
-                return Ok(quote_spanned! { span =>
-                    let #binding = <#ty as #sensitive_with_policy_path<#policy>>::redact_with_policy(
-                        #binding,
-                        &<#policy as #redaction_policy_path>::policy(),
-                    );
-                });
-            }
-            if is_scalar_type(ty) {
-                if is_secret_policy(policy_path) {
-                    Ok(quote_spanned! { span =>
-                        let #binding = __redactable_mapper.map_scalar(#binding);
-                    })
-                } else {
-                    Err(syn::Error::new(
-                        span,
-                        "scalar fields can only use #[sensitive(Secret)]; \
-                         other policies are for string-like types",
-                    ))
-                }
-            } else {
-                collect_generics_from_type(ty, ctx.generics, ctx.policy_applicable_generics);
-                collect_generics_from_type(ty, ctx.generics, ctx.debug_unredacted_generics);
-                let policy = policy_path.clone();
-                let policy_applicable_path = crate_path("PolicyApplicable");
-                Ok(quote_spanned! { span =>
-                    let #binding = #policy_applicable_path::apply_policy::<#policy, _>(#binding, __redactable_mapper);
-                })
-            }
+            push_policy_predicate(ctx.policy_predicates, ty, policy_path);
+            push_debug_predicate(ctx.debug_unredacted_predicates, ty);
+            let policy = policy_path.clone();
+            let crate_root = crate_root();
+            Ok(quote_spanned! { span =>
+                let #binding = <#ty as #crate_root::__private::PolicyField<#policy>>::apply_field(
+                    #binding,
+                    #mapper,
+                );
+            })
         }
     }
 }

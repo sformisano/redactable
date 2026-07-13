@@ -11,8 +11,9 @@
 //! `String`, `str`, `bool`, `char`, integers, floats, `Cow<str>`, `PhantomData`, `()`.
 //!
 //! Container implementations format inner values recursively. `RefCell`,
-//! `Mutex`, and `RwLock` use non-blocking borrow/lock attempts so display
-//! redaction does not panic or wait behind an active writer.
+//! including policy-backed formatting, uses a non-panicking borrow attempt and
+//! emits `<borrowed>` on a conflicting borrow. `Mutex` and `RwLock` use
+//! non-blocking lock attempts so display redaction does not wait behind a writer.
 //!
 //! Feature-gated types: `chrono` date/time types, `time` crate types, `Uuid`.
 

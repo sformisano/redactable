@@ -18,8 +18,10 @@ use crate::policy::{RedactionPolicy, TextRedactionPolicy};
 /// A type that can be redacted using a specific policy.
 ///
 /// Implement this for your types when you need them to work with
-/// `SensitiveValue<T, P>` or `#[sensitive(Policy)]`. The orphan rule is
-/// satisfied because the policy `P` is local to your crate.
+/// [`crate::SensitiveValue<T, P>`]. This trait alone does not make a bare
+/// `#[sensitive(P)]` field work; direct annotated fields use the separate
+/// policy-application traits. The orphan rule is satisfied when the policy
+/// `P` is local to your crate.
 ///
 /// `String` and `Cow<str>` have built-in implementations for all policies.
 /// For your own types, implement this trait for the specific policy you need:
@@ -29,6 +31,8 @@ use crate::policy::{RedactionPolicy, TextRedactionPolicy};
 ///     fn redact_with_policy(self, policy: &TextRedactionPolicy) -> Self { ... }
 ///     fn redacted_string(&self, policy: &TextRedactionPolicy) -> String { ... }
 /// }
+///
+/// let protected = SensitiveValue::<MyType, MyPolicy>::from(MyType::new());
 /// ```
 pub trait SensitiveWithPolicy<P>: Sized {
     /// Returns a redacted version of `self` using the provided policy.

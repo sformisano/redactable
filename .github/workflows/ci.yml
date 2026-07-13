@@ -57,13 +57,22 @@ jobs:
         run: cargo test --doc --all-features
 
       - name: Check (no default features)
-        run: cargo check --no-default-features
+        run: cargo check -p redactable --no-default-features
 
       - name: Check (policy only)
-        run: cargo check --features policy
+        run: cargo check -p redactable --no-default-features --features policy
 
       - name: Check (redaction only)
-        run: cargo check --features redaction
+        run: cargo check -p redactable --no-default-features --features redaction
+
+      - name: Check (JSON only)
+        run: cargo check -p redactable --no-default-features --features json
+
+      - name: Check (slog only)
+        run: cargo check -p redactable --no-default-features --features slog
+
+      - name: Check (tracing only)
+        run: cargo check -p redactable --no-default-features --features tracing
 
   msrv:
     name: MSRV check (1.93)

@@ -25,7 +25,7 @@ use crate::{
     redaction::{
         NotSensitive, NotSensitiveDebug, NotSensitiveDisplay, NotSensitiveJson, Redactable,
         RedactableWithFormatter, RedactedJsonRef, RedactedOutput, RedactedOutputRef,
-        SensitiveValue, SensitiveWithPolicy, ToRedactedOutput,
+        SensitiveValue, SensitiveWithPolicy, ToRedactedOutput, serialize_redacted_json,
     },
 };
 
@@ -148,13 +148,10 @@ pub trait SlogRedactedExt: Redactable + fmt::Debug + Serialize + Sized {
     /// Redacts `self` and returns a `slog::Value` that serializes as structured JSON.
     ///
     /// If converting the redacted output into `serde_json::Value` fails, the
-    /// returned value stores a JSON string with the message
-    /// `"Failed to serialize redacted value"`.
+    /// returned value stores the fixed JSON string `"[REDACTED]"`.
     fn slog_redacted_json(self) -> RedactedJson {
         let redacted = self.redact();
-        let json_value = serde_json::to_value(redacted).unwrap_or_else(|err| {
-            JsonValue::String(format!("Failed to serialize redacted value: {err}"))
-        });
+        let json_value = serialize_redacted_json(redacted);
         RedactedJson::new(json_value)
     }
 }
