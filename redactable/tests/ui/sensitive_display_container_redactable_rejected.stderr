@@ -1,0 +1,5 @@
+error: `#[redactable(...)]` is only supported on fields; annotate the specific recursive or legacy-formatted field
+ --> tests/ui/sensitive_display_container_redactable_rejected.rs:5:1
+  |
+5 | #[redactable(recursive)]
+  | ^^^^^^^^^^^^^^^^^^^^^^^^

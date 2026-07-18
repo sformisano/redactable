@@ -10,3 +10,5 @@
 *.swp
 *~
 Cargo.lock
+!/Cargo.lock
+!/cargo-fixtures/panic-abort-refcell/Cargo.lock

@@ -4,12 +4,16 @@
 //! parameters that require trait bounds.
 
 use proc_macro2::{Ident, TokenStream};
-use quote::{format_ident, quote, quote_spanned};
+use quote::{quote, quote_spanned};
 use syn::{DataEnum, Fields, Result, spanned::Spanned};
 
 use crate::{
     DeriveOutput, crate_path,
-    strategy::{Strategy, parse_field_strategy, reject_variant_sensitivity_attrs},
+    fresh_ident::FreshIdentAllocator,
+    strategy::{
+        Strategy, parse_field_strategy, parse_redactable_field_options,
+        reject_variant_sensitivity_attrs,
+    },
     transform::{DeriveContext, generate_field_transform},
 };
 
@@ -20,12 +24,17 @@ struct VariantContext<'a> {
     arms: &'a mut Vec<TokenStream>,
     debug_redacted_arms: &'a mut Vec<TokenStream>,
     debug_unredacted_arms: &'a mut Vec<TokenStream>,
+    formatter: &'a Ident,
+    fresh: &'a mut FreshIdentAllocator,
 }
 
 pub(crate) fn derive_enum(
     name: &Ident,
     data: DataEnum,
     _generics: &syn::Generics,
+    formatter: &Ident,
+    mapper: &Ident,
+    fresh: &mut FreshIdentAllocator,
 ) -> Result<DeriveOutput> {
     let container_path = crate_path("RedactableWithMapper");
     let mut arms = Vec::new();
@@ -44,12 +53,15 @@ pub(crate) fn derive_enum(
             arms: &mut arms,
             debug_redacted_arms: &mut debug_redacted_arms,
             debug_unredacted_arms: &mut debug_unredacted_arms,
+            formatter,
+            fresh,
         };
         let mut derive_ctx = DeriveContext {
             container_path: &container_path,
             container_predicates: &mut used_generics,
             policy_predicates: &mut policy_applicable_generics,
             debug_unredacted_predicates: &mut debug_unredacted_generics,
+            mapper,
         };
 
         match variant.fields {
@@ -70,7 +82,6 @@ pub(crate) fn derive_enum(
             #(#arms),*
         }
     };
-
     let debug_redacted_body = if debug_redacted_arms.is_empty() {
         quote! { match *self {} }
     } else {
@@ -102,7 +113,7 @@ pub(crate) fn derive_enum(
 }
 
 fn derive_unit_variant(ctx: &mut VariantContext<'_>) {
-    let formatter = crate::internal_ident("__redactable_f");
+    let formatter = ctx.formatter;
     let name = ctx.name;
     let variant_ident = ctx.variant_ident;
     let debug_name = quote! { concat!(stringify!(#name), "::", stringify!(#variant_ident)) };
@@ -122,13 +133,14 @@ fn derive_named_variant(
     derive_ctx: &mut DeriveContext<'_>,
     fields: syn::FieldsNamed,
 ) -> Result<()> {
-    let formatter = crate::internal_ident("__redactable_f");
-    let debug = crate::internal_ident("__redactable_debug");
+    let formatter = variant_ctx.formatter;
+    let debug = variant_ctx.fresh.fresh("__redactable_debug");
     let name = variant_ctx.name;
     let variant_ident = variant_ctx.variant_ident;
     let debug_name = quote! { concat!(stringify!(#name), "::", stringify!(#variant_ident)) };
 
-    let mut bindings = Vec::new();
+    let mut patterns = Vec::new();
+    let mut reconstructions = Vec::new();
     let mut transforms = Vec::new();
     let mut debug_redacted_fields = Vec::new();
     let mut debug_redacted_patterns = Vec::new();
@@ -137,29 +149,39 @@ fn derive_named_variant(
     for field in fields.named {
         let span = field.span();
         let strategy = parse_field_strategy(&field.attrs)?;
+        let recursive_bound_override = parse_redactable_field_options(&field.attrs)?.recursive;
         let ident = field.ident.expect("named field should have an identifier");
-        let binding = ident.clone();
+        let binding = variant_ctx
+            .fresh
+            .fresh_with_ident("__redactable_field_", &ident);
         let ty = &field.ty;
-        bindings.push(ident);
+        patterns.push(quote_spanned! { span => #ident: #binding });
+        reconstructions.push(quote_spanned! { span => #ident: #binding });
 
         let is_sensitive = matches!(&strategy, Strategy::Policy(_));
-        let transform = generate_field_transform(derive_ctx, ty, &binding, span, &strategy)?;
-
+        let transform = generate_field_transform(
+            derive_ctx,
+            ty,
+            &binding,
+            span,
+            &strategy,
+            recursive_bound_override,
+        );
         let debug_redacted_field = if is_sensitive {
             // Sensitive: use wildcard pattern to avoid unused binding
-            debug_redacted_patterns.push(quote_spanned! { span => #binding: _ });
+            debug_redacted_patterns.push(quote_spanned! { span => #ident: _ });
             quote_spanned! { span =>
-                #debug.field(stringify!(#binding), &"[REDACTED]");
+                #debug.field(stringify!(#ident), &"[REDACTED]");
             }
         } else {
             // Non-sensitive: normal binding, referenced in the field output
-            debug_redacted_patterns.push(quote_spanned! { span => #binding });
+            debug_redacted_patterns.push(quote_spanned! { span => #ident: #binding });
             quote_spanned! { span =>
-                #debug.field(stringify!(#binding), #binding);
+                #debug.field(stringify!(#ident), #binding);
             }
         };
         let debug_unredacted_field = quote_spanned! { span =>
-            #debug.field(stringify!(#binding), #binding);
+            #debug.field(stringify!(#ident), #binding);
         };
 
         transforms.push(transform);
@@ -167,12 +189,13 @@ fn derive_named_variant(
         debug_unredacted_fields.push(debug_unredacted_field);
     }
 
-    let pattern = quote! { { #(#bindings),* } };
+    let pattern = quote! { { #(#patterns),* } };
+    let reconstruction = quote! { { #(#reconstructions),* } };
     let debug_redacted_pattern = quote! { { #(#debug_redacted_patterns),* } };
     variant_ctx.arms.push(quote! {
         #name::#variant_ident #pattern => {
             #(#transforms)*
-            #name::#variant_ident { #(#bindings),* }
+            #name::#variant_ident #reconstruction
         }
     });
     variant_ctx.debug_redacted_arms.push(quote! {
@@ -197,8 +220,8 @@ fn derive_unnamed_variant(
     derive_ctx: &mut DeriveContext<'_>,
     fields: syn::FieldsUnnamed,
 ) -> Result<()> {
-    let formatter = crate::internal_ident("__redactable_f");
-    let debug = crate::internal_ident("__redactable_debug");
+    let formatter = variant_ctx.formatter;
+    let debug = variant_ctx.fresh.fresh("__redactable_debug");
     let name = variant_ctx.name;
     let variant_ident = variant_ctx.variant_ident;
     let debug_name = quote! { concat!(stringify!(#name), "::", stringify!(#variant_ident)) };
@@ -210,16 +233,23 @@ fn derive_unnamed_variant(
     let mut debug_unredacted_fields = Vec::new();
 
     for (index, field) in fields.unnamed.into_iter().enumerate() {
-        let ident = format_ident!("field_{index}", span = proc_macro2::Span::mixed_site());
+        let ident = variant_ctx.fresh.fresh(&format!("field_{index}"));
         let binding = ident.clone();
         let span = field.span();
         let ty = &field.ty;
         let strategy = parse_field_strategy(&field.attrs)?;
+        let recursive_bound_override = parse_redactable_field_options(&field.attrs)?.recursive;
         bindings.push(ident);
 
         let is_sensitive = matches!(&strategy, Strategy::Policy(_));
-        let transform = generate_field_transform(derive_ctx, ty, &binding, span, &strategy)?;
-
+        let transform = generate_field_transform(
+            derive_ctx,
+            ty,
+            &binding,
+            span,
+            &strategy,
+            recursive_bound_override,
+        );
         let debug_redacted_field = if is_sensitive {
             // Sensitive: use wildcard pattern to avoid unused binding
             debug_redacted_patterns.push(quote_spanned! { span => _ });

@@ -127,6 +127,7 @@ macro_rules! impl_tuple_redactable_with_mapper {
                 ($($name.redact_with(mapper),)+)
             }
         }
+
     };
 }
 

@@ -10,12 +10,13 @@ use super::{
     redact::{PolicyApplicable, PolicyApplicableRef, RedactableMapper},
     traits::{Redactable, RedactableWithMapper},
 };
-use crate::policy::RedactionPolicy;
+use crate::policy::{RecursivePolicyKind, RedactionPolicy};
 
 impl PolicyApplicable for serde_json::Value {
     fn apply_policy<P, M>(self, _mapper: &M) -> Self
     where
         P: RedactionPolicy,
+        P::Kind: RecursivePolicyKind,
         M: RedactableMapper,
     {
         // Treat as leaf: any policy fully redacts to a JSON string.
@@ -29,6 +30,7 @@ impl PolicyApplicableRef for serde_json::Value {
     fn apply_policy_ref<P, M>(&self, _mapper: &M) -> Self::Output
     where
         P: RedactionPolicy,
+        P::Kind: RecursivePolicyKind,
         M: RedactableMapper,
     {
         serde_json::Value::String("[REDACTED]".to_string())

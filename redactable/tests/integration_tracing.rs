@@ -15,7 +15,7 @@ use redactable::{
     RedactableWithFormatter, Secret, SensitiveValue,
     tracing::{TracingRedactedDebugExt, TracingRedactedExt},
 };
-use redactable_test_fixtures::{AuthEvent, FixtureError, FixtureUser};
+use redactable_test_fixtures::{AuthEvent, FixtureError, FixtureUser, GenericDualFixture};
 use tracing::{
     Event, Id, Metadata, Subscriber,
     field::{Field, Visit},
@@ -219,6 +219,20 @@ fn production_auth_event_tracing_matches_documentation() {
 }
 
 #[test]
+fn genuine_generic_dual_tracing_omits_canary() {
+    const CANARY: &str = "generic-dual-tracing-canary-1e39";
+    let value = GenericDualFixture {
+        label: String::from("event"),
+        secret: String::from(CANARY),
+    };
+
+    let fields = capture_fields(|| tracing::info!(value = value.tracing_redacted()));
+    let output = debug_text(field_named(&fields, "value"), "value");
+    assert!(output.contains("[REDACTED]"));
+    assert!(!output.contains(CANARY));
+}
+
+#[test]
 fn display_helper_records_redacted_display_field() {
     let token = SensitiveValue::<String, Secret>::from("hunter2".to_owned());
     let error = FixtureError {
@@ -298,5 +312,52 @@ fn valuable_structured_output_records_redacted_fields() {
             ("username".to_owned(), "alice".to_owned()),
             ("password".to_owned(), "[REDACTED]".to_owned()),
         ]
+    );
+}
+
+// Closes review issue #6: the consuming Valuable adapter was only ever asserted
+// through `TracingRedactedValue::into_inner()`, which inspects the redacted value without
+// ever driving it through a real visitor. That leaves the actual logging path --
+// what a subscriber records -- untested. This is the consuming counterpart to
+// `valuable_structured_output_records_redacted_fields`, using the same real
+// subscriber harness, with a canary that must never reach the visitor.
+#[cfg(all(feature = "tracing-valuable", tracing_unstable))]
+#[test]
+fn valuable_structured_output_records_redacted_fields_from_consuming_adapter() {
+    use redactable::{Sensitive, tracing::IntoTracingRedactedValuableExt};
+
+    #[derive(Clone, Sensitive, valuable::Valuable)]
+    struct ConsumedValuableUser {
+        username: String,
+        #[sensitive(Secret)]
+        password: String,
+    }
+
+    let user = ConsumedValuableUser {
+        username: "alice".to_owned(),
+        password: "consuming-valuable-canary".to_owned(),
+    };
+
+    let fields = capture_fields(|| {
+        // Consuming adapter: redacts the owned value, no clone of the original.
+        let redacted = user.into_tracing_redacted_valuable();
+        tracing::info!(user = tracing::field::valuable(&redacted));
+    });
+    let user = field_named(&fields, "user");
+    let RecordedValue::Valuable(values) = &user.value else {
+        panic!("user field should be recorded through valuable");
+    };
+
+    assert_eq!(
+        values,
+        &vec![
+            ("username".to_owned(), "alice".to_owned()),
+            ("password".to_owned(), "[REDACTED]".to_owned()),
+        ]
+    );
+    // The canary must not survive anywhere the subscriber can see it.
+    assert!(
+        !format!("{values:?}").contains("consuming-valuable-canary"),
+        "raw secret reached the valuable visitor: {values:?}"
     );
 }

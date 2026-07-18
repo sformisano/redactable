@@ -1,0 +1,5 @@
+error: unknown redactable field option; expected `recursive`, `legacy_formatting`, or `generated_formatting`
+ --> tests/ui/sensitive_display_unknown_redactable_option_rejected.rs:7:18
+  |
+7 |     #[redactable(legacy)]
+  |                  ^^^^^^

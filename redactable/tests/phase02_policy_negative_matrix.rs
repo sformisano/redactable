@@ -12,11 +12,11 @@ mod rustc_json;
 
 use rustc_json::compiler_error_lines;
 
-const EXPECTED_NEGATIVE_CELLS: usize = 696;
-const EXPECTED_GRID_FINGERPRINT: u64 = 0xf7e9_12b5_ee1b_8b73;
-const EXPECTED_POSITIVE_CONTROLS: usize = 12;
-const EXPECTED_POSITIVE_FINGERPRINT: u64 = 0xd9ff_a05e_791a_2fc1;
-const EXPECTED_POSITIVE_SOURCE_FINGERPRINT: u64 = 0x1776_2a6c_ac0d_1003;
+const EXPECTED_NEGATIVE_CELLS: usize = 938;
+const EXPECTED_GRID_FINGERPRINT: u64 = 0x5fc6_befe_c3d9_4865;
+const EXPECTED_POSITIVE_CONTROLS: usize = 8;
+const EXPECTED_POSITIVE_FINGERPRINT: u64 = 0xa393_7d01_0e4c_a5c1;
+const EXPECTED_POSITIVE_SOURCE_FINGERPRINT: u64 = 0xa3fc_8a96_1984_42ed;
 
 const REQUIRED_POSITIVE_CONTROLS: &[(&str, &str, &str)] = &[
     (
@@ -40,16 +40,6 @@ const REQUIRED_POSITIVE_CONTROLS: &[(&str, &str, &str)] = &[
         "let rendered = CustomMapShortDisplay {",
     ),
     (
-        "HashMapGenericSensitive",
-        "struct GenericMap<P:",
-        "let generic = GenericMap::<safe::IpAddress>",
-    ),
-    (
-        "HashMapGenericDisplay",
-        "struct GenericMapDisplay<P:",
-        "let display = GenericMapDisplay::<safe::IpAddress>",
-    ),
-    (
         "BTreeMapCustomQualifiedSensitive",
         "struct CustomBTreeMap {",
         "let custom_btree = CustomBTreeMap {",
@@ -69,16 +59,6 @@ const REQUIRED_POSITIVE_CONTROLS: &[(&str, &str, &str)] = &[
         "struct CustomBTreeMapShortDisplay {",
         "let rendered = CustomBTreeMapShortDisplay {",
     ),
-    (
-        "BTreeMapGenericSensitive",
-        "struct GenericBTreeMap<P:",
-        "let generic_btree = GenericBTreeMap::<safe::IpAddress>",
-    ),
-    (
-        "BTreeMapGenericDisplay",
-        "struct GenericBTreeMapDisplay<P:",
-        "let generic_btree_display = GenericBTreeMapDisplay::<safe::IpAddress>",
-    ),
 ];
 
 const POLICY_FORMS: &[(&str, &str)] = &[
@@ -94,14 +74,14 @@ const DETECTOR_COMPLEMENTS: &[(&str, &str)] = &[
     ("NestedGeneric", "Option<Vec<std::net::IpAddr>>"),
     ("FunctionInput", "fn(std::net::IpAddr)"),
     ("FunctionOutput", "fn() -> std::net::IpAddr"),
-    ("Parenthesized", "(std::net::IpAddr)"),
 ];
 
 #[derive(Debug)]
 struct MatrixCell {
     id: String,
     semantic_descriptor: String,
-    derive_line: usize,
+    first_line: usize,
+    last_line: usize,
 }
 
 const SCALARS: &[(&str, &str)] = &[
@@ -145,11 +125,17 @@ fn recursive_families(leaf: &str, ip: bool) -> Vec<(&'static str, String)> {
         ("ResultErr", format!("Result<String, {leaf}>")),
         (
             "HashMapValue",
-            format!("std::collections::HashMap<String, {leaf}>"),
+            format!(
+                "std::collections::HashMap<{}, {leaf}>",
+                if ip { "u8" } else { "String" }
+            ),
         ),
         (
             "BTreeMapValue",
-            format!("std::collections::BTreeMap<String, {leaf}>"),
+            format!(
+                "std::collections::BTreeMap<{}, {leaf}>",
+                if ip { "bool" } else { "String" }
+            ),
         ),
         ("HashSet", format!("std::collections::HashSet<{leaf}>")),
         ("BTreeSet", format!("std::collections::BTreeSet<{leaf}>")),
@@ -196,7 +182,11 @@ fn push_reject(
                 "Sensitive"
             }
         ),
-        derive_line: line,
+        first_line: line,
+        // A derive diagnostic may point at the derive itself or at the annotated
+        // field whose generated expression fails. Keep attribution within this
+        // generated item so one failing cell cannot satisfy a neighboring cell.
+        last_line: if display { line + 2 } else { line + 1 },
     });
     if display {
         source.push_str(&format!(
@@ -204,13 +194,15 @@ fn push_reject(
         ));
     } else {
         source.push_str(&format!(
-            "#[derive(Clone, Sensitive)]\nstruct {name} {{ #[sensitive({policy})] value: {field_type} }}\n"
+            "#[derive(Clone, Sensitive, serde::Serialize)]\nstruct {name} {{ #[sensitive({policy})] #[serde(skip)] value: {field_type} }}\n"
         ));
     }
 }
 
 fn negative_source() -> (String, Vec<MatrixCell>) {
-    let mut source = r#"use safe::{Secret, IpAddress, Sensitive, SensitiveDisplay};
+    let mut source = r#"use safe::{IpAddress, Redactable, RedactableWithFormatter, Secret, Sensitive, SensitiveDisplay};
+#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)] struct NegativeCustomMapKey(String);
+type NegativeNestedTextKeyMap = Option<std::collections::HashMap<String, String>>;
 macro_rules! grouped_sensitive {
     ($name:ident, $ty:ty, $policy:path) => { #[derive(Clone, Sensitive)] struct $name { #[sensitive($policy)] value: $ty } };
 }
@@ -264,6 +256,58 @@ macro_rules! grouped_display {
                 index += 1;
             }
         }
+
+        source.push_str(&format!("type NegativeIpAlias{identity} = {ip};\n"));
+        let alias = format!("NegativeIpAlias{identity}");
+        let alias_shapes = [
+            ("NestedAlias", format!("Option<Vec<{alias}>>")),
+            (
+                "HashKeyAlias",
+                format!("std::collections::HashMap<{alias}, String>"),
+            ),
+            (
+                "BTreeKeyAlias",
+                format!("std::collections::BTreeMap<{alias}, String>"),
+            ),
+            (
+                "HashValueAlias",
+                format!("std::collections::HashMap<u8, {alias}>"),
+            ),
+            (
+                "BTreeValueAlias",
+                format!("std::collections::BTreeMap<bool, {alias}>"),
+            ),
+            (
+                "HashCompositeKeyAlias",
+                format!("std::collections::HashMap<(u8, {alias}), String>"),
+            ),
+            (
+                "BTreeCompositeKeyAlias",
+                format!("std::collections::BTreeMap<(u8, {alias}), String>"),
+            ),
+            (
+                "NestedHashAlias",
+                format!("Option<std::collections::HashMap<{alias}, String>>"),
+            ),
+            (
+                "NestedBTreeAlias",
+                format!("Option<std::collections::BTreeMap<{alias}, String>>"),
+            ),
+        ];
+        for (shape, field_type) in alias_shapes {
+            for &(path_name, prefix) in POLICY_FORMS {
+                for &(derive, display) in &[("Sensitive", false), ("Display", true)] {
+                    push_reject(
+                        &mut source,
+                        &mut cells,
+                        &format!("Ip{identity}{shape}{path_name}{derive}"),
+                        &field_type,
+                        &format!("{prefix}IpAddress"),
+                        display,
+                    );
+                }
+            }
+        }
     }
 
     // Detector complements that are not distinct recursive runtime families.
@@ -282,31 +326,115 @@ macro_rules! grouped_display {
         }
     }
 
-    for &(path_name, prefix) in POLICY_FORMS {
-        for (macro_name, derive) in [
-            ("grouped_sensitive", "Sensitive"),
-            ("grouped_display", "Display"),
-        ] {
-            let item_name = format!("DetectorGroup{path_name}{derive}");
-            cells.push(MatrixCell {
-                id: item_name.clone(),
-                semantic_descriptor: format!(
-                    "id={item_name}|field=Type::Group(std::net::IpAddr)|policy={prefix}IpAddress|derive={derive}|macro={macro_name}"
-                ),
-                derive_line: source.lines().count() + 1,
-            });
-            source.push_str(&format!(
-                "{macro_name}!({item_name}, std::net::IpAddr, {prefix}IpAddress);\n"
-            ));
+    for (shape, field_type) in [
+        ("HashTextKey", "std::collections::HashMap<String, String>"),
+        ("BTreeTextKey", "std::collections::BTreeMap<String, String>"),
+        (
+            "HashCustomKey",
+            "std::collections::HashMap<NegativeCustomMapKey, String>",
+        ),
+        (
+            "BTreeCustomKey",
+            "std::collections::BTreeMap<NegativeCustomMapKey, String>",
+        ),
+        ("NestedTextKeyAlias", "NegativeNestedTextKeyMap"),
+    ] {
+        for &(path_name, prefix) in POLICY_FORMS {
+            for &(derive, display) in &[("Sensitive", false), ("Display", true)] {
+                push_reject(
+                    &mut source,
+                    &mut cells,
+                    &format!("IpSafeKey{shape}{path_name}{derive}"),
+                    field_type,
+                    &format!("{prefix}IpAddress"),
+                    display,
+                );
+            }
         }
     }
+
+    push_generic_policy_rejections(&mut source, &mut cells);
 
     source.push_str("fn main() {}\n");
     (source, cells)
 }
 
+fn push_generic_policy_rejections(source: &mut String, cells: &mut Vec<MatrixCell>) {
+    source.push_str(
+        "#[derive(Clone, Sensitive, serde::Serialize)] struct GenericHashPolicy<P: safe::RedactionPolicy> { #[sensitive(P)] #[serde(skip)] value: std::collections::HashMap<std::net::IpAddr, String>, marker: std::marker::PhantomData<P> }\n",
+    );
+    source.push_str(
+        "#[derive(SensitiveDisplay)] #[error(\"{value:?}\")] struct GenericHashPolicyDisplay<P: safe::RedactionPolicy> { #[sensitive(P)] value: std::collections::HashMap<std::net::IpAddr, String>, marker: std::marker::PhantomData<P> }\n",
+    );
+    source.push_str(
+        "#[derive(Clone, Sensitive, serde::Serialize)] struct GenericTreePolicy<P: safe::RedactionPolicy> { #[sensitive(P)] #[serde(skip)] value: std::collections::BTreeMap<std::net::IpAddr, String>, marker: std::marker::PhantomData<P> }\n",
+    );
+    source.push_str(
+        "#[derive(SensitiveDisplay)] #[error(\"{value:?}\")] struct GenericTreePolicyDisplay<P: safe::RedactionPolicy> { #[sensitive(P)] value: std::collections::BTreeMap<std::net::IpAddr, String>, marker: std::marker::PhantomData<P> }\n",
+    );
+    source.push_str(
+        "#[derive(Clone, Sensitive, serde::Serialize)] struct GenericHashKey<K> { #[sensitive(safe::IpAddress)] #[serde(skip)] value: std::collections::HashMap<K, String> }\n",
+    );
+    source.push_str(
+        "#[derive(SensitiveDisplay)] #[error(\"{value:?}\")] struct GenericHashKeyDisplay<K> { #[sensitive(safe::IpAddress)] value: std::collections::HashMap<K, String> }\n",
+    );
+    source.push_str(
+        "#[derive(Clone, Sensitive, serde::Serialize)] struct GenericTreeKey<K> { #[sensitive(safe::IpAddress)] #[serde(skip)] value: std::collections::BTreeMap<K, String> }\n",
+    );
+    source.push_str(
+        "#[derive(SensitiveDisplay)] #[error(\"{value:?}\")] struct GenericTreeKeyDisplay<K> { #[sensitive(safe::IpAddress)] value: std::collections::BTreeMap<K, String> }\n",
+    );
+
+    source.push_str("fn generic_rejections() {\n");
+    for (id, exercise) in [
+        (
+            "GenericHashPolicyUse",
+            "let _ = GenericHashPolicy::<safe::IpAddress> { value: std::collections::HashMap::new(), marker: std::marker::PhantomData }.redact();",
+        ),
+        (
+            "GenericHashPolicyDisplayUse",
+            "let _ = GenericHashPolicyDisplay::<safe::IpAddress> { value: std::collections::HashMap::new(), marker: std::marker::PhantomData }.redacted_display();",
+        ),
+        (
+            "GenericTreePolicyUse",
+            "let _ = GenericTreePolicy::<safe::IpAddress> { value: std::collections::BTreeMap::new(), marker: std::marker::PhantomData }.redact();",
+        ),
+        (
+            "GenericTreePolicyDisplayUse",
+            "let _ = GenericTreePolicyDisplay::<safe::IpAddress> { value: std::collections::BTreeMap::new(), marker: std::marker::PhantomData }.redacted_display();",
+        ),
+        (
+            "GenericHashKeyUse",
+            "let _ = GenericHashKey::<std::net::IpAddr> { value: std::collections::HashMap::new() }.redact();",
+        ),
+        (
+            "GenericHashKeyDisplayUse",
+            "let _ = GenericHashKeyDisplay::<std::net::IpAddr> { value: std::collections::HashMap::new() }.redacted_display();",
+        ),
+        (
+            "GenericTreeKeyUse",
+            "let _ = GenericTreeKey::<std::net::IpAddr> { value: std::collections::BTreeMap::new() }.redact();",
+        ),
+        (
+            "GenericTreeKeyDisplayUse",
+            "let _ = GenericTreeKeyDisplay::<std::net::IpAddr> { value: std::collections::BTreeMap::new() }.redacted_display();",
+        ),
+    ] {
+        let line = source.lines().count() + 1;
+        cells.push(MatrixCell {
+            id: id.to_owned(),
+            semantic_descriptor: format!("id={id}|generic-substitution=IpAddress|exercise"),
+            first_line: line,
+            last_line: line,
+        });
+        source.push_str(exercise);
+        source.push('\n');
+    }
+    source.push_str("}\n");
+}
+
 fn positive_source() -> String {
-    let mut source = "use safe::{IpAddress, Redactable, RedactableWithFormatter, RedactionPolicy, Secret, Sensitive, SensitiveDisplay};\n".to_owned();
+    let mut source = "use safe::{IpAddress, Redactable, RedactableWithFormatter, Secret, Sensitive, SensitiveDisplay};\n".to_owned();
     for &(identity, scalar) in SCALARS {
         source.push_str(&format!("type Alias{identity} = {scalar};\n"));
         for (path_name, policy) in [
@@ -319,7 +447,7 @@ fn positive_source() -> String {
                 ("Alias", format!("Alias{identity}")),
             ] {
                 source.push_str(&format!(
-                    "#[derive(Clone, Sensitive)] struct Secret{identity}{suffix}{path_name} {{ #[sensitive({policy})] value: {ty} }}\n"
+                    "#[derive(Clone, Sensitive, serde::Serialize)] struct Secret{identity}{suffix}{path_name} {{ #[sensitive({policy})] #[serde(skip)] value: {ty} }}\n"
                 ));
                 source.push_str(&format!(
                     "#[derive(SensitiveDisplay)] #[error(\"{{value:?}}\")] struct Secret{identity}{suffix}{path_name}Display {{ #[sensitive({policy})] value: {ty} }}\n"
@@ -334,7 +462,7 @@ fn positive_source() -> String {
             ("Absolute", "::safe::IpAddress"),
         ] {
             source.push_str(&format!(
-                "#[derive(Clone, Sensitive)] struct Ip{identity}{path_name} {{ #[sensitive({policy})] value: {ip} }}\n"
+                "#[derive(Clone, Sensitive, serde::Serialize)] struct Ip{identity}{path_name} {{ #[sensitive({policy})] #[serde(skip)] value: {ip} }}\n"
             ));
             source.push_str(&format!(
                 "#[derive(SensitiveDisplay)] #[error(\"{{value:?}}\")] struct Ip{identity}{path_name}Display {{ #[sensitive({policy})] value: {ip} }}\n"
@@ -346,56 +474,39 @@ fn positive_source() -> String {
 mod custom {
     pub struct IpAddress;
     impl safe::RedactionPolicy for IpAddress {
+        type Kind = safe::TextPolicyKind;
         fn policy() -> safe::TextRedactionPolicy { safe::TextRedactionPolicy::keep_last(2) }
     }
 }
-#[derive(Clone, Sensitive)]
-struct CustomMap { #[sensitive(custom::IpAddress)] value: std::collections::HashMap<std::net::IpAddr, String> }
+#[derive(Clone, Sensitive, serde::Serialize)]
+struct CustomMap { #[sensitive(custom::IpAddress)] #[serde(skip)] value: std::collections::HashMap<std::net::IpAddr, String> }
 use custom::IpAddress as CustomIpAddress;
-#[derive(Clone, Sensitive)]
-struct CustomMapShort { #[sensitive(CustomIpAddress)] value: std::collections::HashMap<std::net::IpAddr, String> }
+#[derive(Clone, Sensitive, serde::Serialize)]
+struct CustomMapShort { #[sensitive(CustomIpAddress)] #[serde(skip)] value: std::collections::HashMap<std::net::IpAddr, String> }
 #[derive(SensitiveDisplay)]
 #[error("{value:?}")]
 struct CustomMapDisplay { #[sensitive(custom::IpAddress)] value: std::collections::HashMap<std::net::IpAddr, String> }
 #[derive(SensitiveDisplay)]
 #[error("{value:?}")]
 struct CustomMapShortDisplay { #[sensitive(CustomIpAddress)] value: std::collections::HashMap<std::net::IpAddr, String> }
-#[derive(Clone, Sensitive)]
-struct CustomBTreeMap { #[sensitive(custom::IpAddress)] value: std::collections::BTreeMap<std::net::IpAddr, String> }
-#[derive(Clone, Sensitive)]
-struct CustomBTreeMapShort { #[sensitive(CustomIpAddress)] value: std::collections::BTreeMap<std::net::IpAddr, String> }
+#[derive(Clone, Sensitive, serde::Serialize)]
+struct CustomBTreeMap { #[sensitive(custom::IpAddress)] #[serde(skip)] value: std::collections::BTreeMap<std::net::IpAddr, String> }
+#[derive(Clone, Sensitive, serde::Serialize)]
+struct CustomBTreeMapShort { #[sensitive(CustomIpAddress)] #[serde(skip)] value: std::collections::BTreeMap<std::net::IpAddr, String> }
 #[derive(SensitiveDisplay)]
 #[error("{value:?}")]
 struct CustomBTreeMapDisplay { #[sensitive(custom::IpAddress)] value: std::collections::BTreeMap<std::net::IpAddr, String> }
 #[derive(SensitiveDisplay)]
 #[error("{value:?}")]
 struct CustomBTreeMapShortDisplay { #[sensitive(CustomIpAddress)] value: std::collections::BTreeMap<std::net::IpAddr, String> }
-#[derive(Clone, Sensitive)]
-struct GenericMap<P: RedactionPolicy> { #[sensitive(P)] value: std::collections::HashMap<std::net::IpAddr, String>, marker: std::marker::PhantomData<P> }
-#[derive(SensitiveDisplay)]
-#[error("{value:?}")]
-struct GenericMapDisplay<P: RedactionPolicy> { #[sensitive(P)] value: std::collections::HashMap<std::net::IpAddr, String>, marker: std::marker::PhantomData<P> }
-#[derive(Clone, Sensitive)]
-struct GenericBTreeMap<P: RedactionPolicy> { #[sensitive(P)] value: std::collections::BTreeMap<std::net::IpAddr, String>, marker: std::marker::PhantomData<P> }
-#[derive(SensitiveDisplay)]
-#[error("{value:?}")]
-struct GenericBTreeMapDisplay<P: RedactionPolicy> { #[sensitive(P)] value: std::collections::BTreeMap<std::net::IpAddr, String>, marker: std::marker::PhantomData<P> }
-#[derive(Clone, Sensitive)]
-struct WrappedIp { value: Option<safe::SensitiveValue<std::net::IpAddr, safe::IpAddress>> }
-#[derive(Clone, Sensitive)]
-struct WrappedNestedIp { value: std::collections::HashMap<String, Result<safe::SensitiveValue<std::net::IpAddr, safe::IpAddress>, String>> }
+#[derive(Clone, Sensitive, serde::Serialize)]
+struct WrappedIp { #[serde(skip)] value: Option<safe::SensitiveValue<std::net::IpAddr, safe::IpAddress>> }
+#[derive(Clone, Sensitive, serde::Serialize)]
+struct WrappedNestedIp { #[serde(skip)] value: std::collections::HashMap<String, Result<safe::SensitiveValue<std::net::IpAddr, safe::IpAddress>, String>> }
 fn main() {
     const CANARY: &str = "sensitive";
     let hash_key: std::net::IpAddr = "192.0.2.7".parse().unwrap();
     let values = std::collections::HashMap::from([(hash_key, CANARY.to_owned())]);
-    let generic = GenericMap::<safe::IpAddress> { value: values.clone(), marker: std::marker::PhantomData }.redact();
-    assert!(generic.value.contains_key(&hash_key));
-    assert_eq!(generic.value[&hash_key], "*****tive");
-    assert!(!generic.value[&hash_key].contains(CANARY));
-    let display = GenericMapDisplay::<safe::IpAddress> { value: values.clone(), marker: std::marker::PhantomData };
-    let rendered = display.redacted_display().to_string();
-    assert_eq!(rendered, "{192.0.2.7: \"*****tive\"}");
-    assert!(!rendered.contains(CANARY));
     let custom = CustomMap { value: values.clone() }.redact();
     assert!(custom.value.contains_key(&hash_key));
     assert_eq!(custom.value[&hash_key], "*******ve");
@@ -411,14 +522,6 @@ fn main() {
 
     let btree_key: std::net::IpAddr = "192.0.2.8".parse().unwrap();
     let btree_values = std::collections::BTreeMap::from([(btree_key, CANARY.to_owned())]);
-    let generic_btree = GenericBTreeMap::<safe::IpAddress> { value: btree_values.clone(), marker: std::marker::PhantomData }.redact();
-    assert!(generic_btree.value.contains_key(&btree_key));
-    assert_eq!(generic_btree.value[&btree_key], "*****tive");
-    assert!(!generic_btree.value[&btree_key].contains(CANARY));
-    let generic_btree_display = GenericBTreeMapDisplay::<safe::IpAddress> { value: btree_values.clone(), marker: std::marker::PhantomData };
-    let rendered = generic_btree_display.redacted_display().to_string();
-    assert_eq!(rendered, "{192.0.2.8: \"*****tive\"}");
-    assert!(!rendered.contains(CANARY));
     let custom_btree = CustomBTreeMap { value: btree_values.clone() }.redact();
     assert!(custom_btree.value.contains_key(&btree_key));
     assert_eq!(custom_btree.value[&btree_key], "*******ve");
@@ -450,8 +553,13 @@ fn write_fixture(directory: &Path, source: &str) {
     fs::write(
         directory.join("Cargo.toml"),
         format!(
-            "[package]\nname='phase02-policy-matrix'\nversion='0.0.0'\nedition='2024'\npublish=false\n[workspace]\n[dependencies]\nsafe={{package='redactable',path='{}',features=['ip-address']}}\n",
-            dependency.display()
+            "[package]\nname='phase02-policy-matrix'\nversion='0.0.0'\nedition='2024'\npublish=false\n[workspace]\n[dependencies]\nserde={{version='1',features=['derive']}}\nsafe={{package='redactable',path='{}',features={}}}\n",
+            dependency.display(),
+            if cfg!(feature = "slog") {
+                "['ip-address','slog']"
+            } else {
+                "['ip-address']"
+            }
         ),
     )
     .unwrap();
@@ -573,11 +681,14 @@ fn direct_only_policy_leaf_matrix_rejects_every_recursive_cell() {
         .flatten()
         .collect();
     for cell in cells {
+        let attributable_line =
+            (cell.first_line..=cell.last_line).find(|line| error_lines.contains(line));
         assert!(
-            error_lines.contains(&cell.derive_line),
-            "negative matrix cell {} on generated line {} has no attributable error-level diagnostic",
+            attributable_line.is_some(),
+            "negative matrix cell {} on generated lines {}..={} has no attributable error-level diagnostic",
             cell.id,
-            cell.derive_line
+            cell.first_line,
+            cell.last_line
         );
     }
 }
@@ -594,25 +705,15 @@ fn matrix_integrity_fingerprints_detect_semantic_mutation_and_control_deletion()
     assert_ne!(original, fingerprint(mutated));
 
     let complete = positive_control_fingerprint();
-    let shortened = fingerprint(REQUIRED_POSITIVE_CONTROLS[..11].iter().map(
+    let shortened = fingerprint(REQUIRED_POSITIVE_CONTROLS[..7].iter().map(
         |(id, definition, exercise)| format!("id={id}|definition={definition}|exercise={exercise}"),
     ));
     assert_ne!(complete, shortened);
 
     let positive = positive_source();
-    let btree_field = "struct GenericBTreeMap<P: RedactionPolicy> { #[sensitive(P)] value: std::collections::BTreeMap<std::net::IpAddr, String>";
-    let hash_field = "struct GenericBTreeMap<P: RedactionPolicy> { #[sensitive(P)] value: std::collections::HashMap<std::net::IpAddr, String>";
-    let btree_initializer = "GenericBTreeMap::<safe::IpAddress> { value: btree_values.clone()";
-    let hash_initializer = "GenericBTreeMap::<safe::IpAddress> { value: values.clone()";
-    assert!(positive.contains(btree_field));
-    assert!(positive.contains(btree_initializer));
-    let mutant = positive.replacen(btree_field, hash_field, 1).replacen(
-        btree_initializer,
-        hash_initializer,
-        1,
-    );
+    let mutant = positive.replacen("struct CustomBTreeMap {", "struct CustomMap {", 1);
     assert!(
         validate_positive_source(&mutant).is_err(),
-        "GenericBTreeMap-to-HashMap semantic mutant must fail the real positive gate"
+        "control mutation must fail the real positive gate"
     );
 }

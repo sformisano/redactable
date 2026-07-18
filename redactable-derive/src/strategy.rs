@@ -6,6 +6,72 @@
 use proc_macro2::Span;
 use syn::{Attribute, Meta, Result, spanned::Spanned};
 
+/// Additive code-generation overrides for one derived field.
+#[derive(Clone, Copy, Debug, Default)]
+pub(crate) struct RedactableFieldOptions {
+    /// Suppress inferred complete-type bounds for a semantically recursive field.
+    pub(crate) recursive: bool,
+    /// Use the normal borrowed policy projection instead of the built-in safe formatter route.
+    pub(crate) legacy_formatting: bool,
+    /// Select the library-owned recursive formatting projection.
+    pub(crate) generated_formatting: bool,
+}
+
+/// Parses explicit code-generation overrides for one field.
+///
+/// Stable procedural macros cannot resolve aliases or arbitrary qualified paths
+/// back to the type currently being derived. `#[redactable(recursive)]` is the
+/// explicit contract for those recursive fields; it suppresses only the inferred
+/// bounds for that field and leaves every unannotated field on the precise default
+/// route. `#[redactable(legacy_formatting)]` explicitly selects the ordinary
+/// `PolicyApplicableRef` projection for opaque downstream container compositions.
+pub(crate) fn parse_redactable_field_options(
+    attrs: &[Attribute],
+) -> Result<RedactableFieldOptions> {
+    let mut options = RedactableFieldOptions::default();
+    for attr in attrs {
+        if !attr.path().is_ident("redactable") {
+            continue;
+        }
+        match &attr.meta {
+            Meta::List(list) => {
+                list.parse_nested_meta(|meta| {
+                    if meta.path.is_ident("recursive") {
+                        if options.recursive {
+                            return Err(meta.error("duplicate `recursive` bound override"));
+                        }
+                        options.recursive = true;
+                        Ok(())
+                    } else if meta.path.is_ident("legacy_formatting") {
+                        if options.legacy_formatting {
+                            return Err(meta.error("duplicate `legacy_formatting` override"));
+                        }
+                        options.legacy_formatting = true;
+                        Ok(())
+                    } else if meta.path.is_ident("generated_formatting") {
+                        if options.generated_formatting {
+                            return Err(meta.error("duplicate `generated_formatting` override"));
+                        }
+                        options.generated_formatting = true;
+                        Ok(())
+                    } else {
+                        Err(meta.error(
+                            "unknown redactable field option; expected `recursive`, `legacy_formatting`, or `generated_formatting`",
+                        ))
+                    }
+                })?;
+            }
+            Meta::Path(_) | Meta::NameValue(_) => {
+                return Err(syn::Error::new(
+                    attr.span(),
+                    "expected `#[redactable(recursive)]`, `#[redactable(legacy_formatting)]`, or `#[redactable(generated_formatting)]`",
+                ));
+            }
+        }
+    }
+    Ok(options)
+}
+
 /// Field transformation strategy based on `#[sensitive(...)]` attributes.
 ///
 /// ## Strategy Mapping
@@ -39,7 +105,7 @@ fn set_strategy(target: &mut Option<Strategy>, next: Strategy, span: Span) -> Re
     Ok(())
 }
 
-/// Rejects `#[sensitive(...)]` and `#[not_sensitive]` attributes on enum variants.
+/// Rejects field-only sensitivity and code-generation attributes on enum variants.
 ///
 /// Sensitivity is a per-field property. A variant-level annotation used to be
 /// silently ignored, which read as "this variant is protected" while redacting
@@ -58,6 +124,12 @@ pub(crate) fn reject_variant_sensitivity_attrs(attrs: &[Attribute]) -> Result<()
                 attr.span(),
                 "`#[not_sensitive]` is not supported on enum variants; \
                  annotate the variant's fields instead",
+            ));
+        }
+        if attr.path().is_ident("redactable") {
+            return Err(syn::Error::new(
+                attr.span(),
+                "`#[redactable(...)]` is only supported on fields; annotate the specific recursive or legacy-formatted field",
             ));
         }
     }

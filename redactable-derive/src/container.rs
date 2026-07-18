@@ -4,6 +4,25 @@
 
 use syn::{Attribute, Meta, Result};
 
+/// Rejects field-only helpers when they are attached to a derived container.
+pub(crate) fn reject_field_only_container_attrs(attrs: &[Attribute]) -> Result<()> {
+    for attr in attrs {
+        if attr.path().is_ident("not_sensitive") {
+            return Err(syn::Error::new_spanned(
+                attr,
+                "`#[not_sensitive]` is only supported on fields; derive `NotSensitive` or `NotSensitiveDisplay` to classify the complete type",
+            ));
+        }
+        if attr.path().is_ident("redactable") {
+            return Err(syn::Error::new_spanned(
+                attr,
+                "`#[redactable(...)]` is only supported on fields; annotate the specific recursive or legacy-formatted field",
+            ));
+        }
+    }
+    Ok(())
+}
+
 /// Options parsed from container-level `#[sensitive(...)]` attributes.
 ///
 /// Both `Sensitive` and `SensitiveDisplay` read these options.
@@ -31,7 +50,7 @@ pub(crate) fn parse_container_options(attrs: &[Attribute]) -> Result<ContainerOp
                 return Err(syn::Error::new_spanned(
                     attr,
                     "bare `#[sensitive]` on the container has no effect; \
-                     use `#[sensitive(dual)]` when deriving both `Sensitive` and `SensitiveDisplay`",
+                     use `#[derive(SensitiveDual)]` when structural and display redaction are both needed",
                 ));
             }
             Meta::List(list) => {
@@ -82,6 +101,15 @@ mod tests {
         let attrs = parse_attrs(quote! {});
         let options = parse_container_options(&attrs).unwrap();
         assert!(!options.dual);
+    }
+
+    #[test]
+    fn field_only_helpers_are_rejected_on_containers() {
+        let attrs = parse_attrs(quote! { #[not_sensitive] });
+        assert!(reject_field_only_container_attrs(&attrs).is_err());
+
+        let attrs = parse_attrs(quote! { #[redactable(recursive)] });
+        assert!(reject_field_only_container_attrs(&attrs).is_err());
     }
 
     #[test]

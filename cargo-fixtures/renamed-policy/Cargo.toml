@@ -3,9 +3,12 @@ name = "redactable-renamed-policy-fixture"
 version = "0.0.0"
 edition = "2024"
 publish = false
+default-run = "redactable-renamed-policy-fixture"
 
 [workspace]
 resolver = "2"
+members = ["alias-provider"]
 
 [dependencies]
+alias-provider = { path = "alias-provider" }
 safe = { package = "redactable", path = "../../redactable", features = ["ip-address"] }

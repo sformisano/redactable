@@ -1,0 +1,5 @@
+error: `#[not_sensitive]` is only supported on fields; derive `NotSensitive` or `NotSensitiveDisplay` to classify the complete type
+ --> tests/ui/sensitive_container_not_sensitive_rejected.rs:4:1
+  |
+4 | #[not_sensitive]
+  | ^^^^^^^^^^^^^^^^

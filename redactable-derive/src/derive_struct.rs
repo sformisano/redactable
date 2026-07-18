@@ -4,12 +4,13 @@
 //! parameters that require trait bounds.
 
 use proc_macro2::{Ident, TokenStream};
-use quote::{format_ident, quote, quote_spanned};
+use quote::{quote, quote_spanned};
 use syn::{DataStruct, Fields, Result, spanned::Spanned};
 
 use crate::{
     DeriveOutput, crate_path,
-    strategy::{Strategy, parse_field_strategy},
+    fresh_ident::FreshIdentAllocator,
+    strategy::{Strategy, parse_field_strategy, parse_redactable_field_options},
     transform::{DeriveContext, generate_field_transform},
 };
 
@@ -17,12 +18,18 @@ pub(crate) fn derive_struct(
     name: &Ident,
     data: DataStruct,
     _generics: &syn::Generics,
+    formatter: &Ident,
+    mapper: &Ident,
+    fresh: &mut FreshIdentAllocator,
 ) -> Result<DeriveOutput> {
     let container_path = crate_path("RedactableWithMapper");
-    let formatter = crate::internal_ident("__redactable_f");
     match data.fields {
-        Fields::Named(fields) => derive_named_struct(name, fields, &container_path),
-        Fields::Unnamed(fields) => derive_unnamed_struct(name, fields, &container_path),
+        Fields::Named(fields) => {
+            derive_named_struct(name, fields, &container_path, formatter, mapper, fresh)
+        }
+        Fields::Unnamed(fields) => {
+            derive_unnamed_struct(name, fields, &container_path, formatter, mapper, fresh)
+        }
         Fields::Unit => Ok(DeriveOutput {
             redaction_body: quote! { self },
             used_generics: Vec::new(),
@@ -38,14 +45,18 @@ pub(crate) fn derive_struct(
     }
 }
 
+#[allow(clippy::too_many_lines)]
 fn derive_named_struct(
     name: &Ident,
     fields: syn::FieldsNamed,
     container_path: &TokenStream,
+    formatter: &Ident,
+    mapper: &Ident,
+    fresh: &mut FreshIdentAllocator,
 ) -> Result<DeriveOutput> {
-    let formatter = crate::internal_ident("__redactable_f");
-    let debug = crate::internal_ident("__redactable_debug");
-    let mut bindings = Vec::new();
+    let debug = fresh.fresh("__redactable_debug");
+    let mut patterns = Vec::new();
+    let mut reconstructions = Vec::new();
     let mut transforms = Vec::new();
     let mut used_generics = Vec::new();
     let mut policy_applicable_generics = Vec::new();
@@ -59,34 +70,43 @@ fn derive_named_struct(
         container_predicates: &mut used_generics,
         policy_predicates: &mut policy_applicable_generics,
         debug_unredacted_predicates: &mut debug_unredacted_generics,
+        mapper,
     };
 
     for field in fields.named {
         let span = field.span();
         let strategy = parse_field_strategy(&field.attrs)?;
+        let recursive_bound_override = parse_redactable_field_options(&field.attrs)?.recursive;
         let ident = field.ident.expect("named field should have an identifier");
-        let binding = ident.clone();
+        let binding = fresh.fresh_with_ident("__redactable_field_", &ident);
         let ty = &field.ty;
-        bindings.push(ident);
+        patterns.push(quote_spanned! { span => #ident: #binding });
+        reconstructions.push(quote_spanned! { span => #ident: #binding });
 
         let is_sensitive = matches!(&strategy, Strategy::Policy(_));
-        let transform = generate_field_transform(&mut ctx, ty, &binding, span, &strategy)?;
-
+        let transform = generate_field_transform(
+            &mut ctx,
+            ty,
+            &binding,
+            span,
+            &strategy,
+            recursive_bound_override,
+        );
         let debug_redacted_field = if is_sensitive {
             // Sensitive: use wildcard pattern to avoid unused binding
-            debug_redacted_patterns.push(quote_spanned! { span => #binding: _ });
+            debug_redacted_patterns.push(quote_spanned! { span => #ident: _ });
             quote_spanned! { span =>
-                #debug.field(stringify!(#binding), &"[REDACTED]");
+                #debug.field(stringify!(#ident), &"[REDACTED]");
             }
         } else {
             // Non-sensitive: normal binding, referenced in the field output
-            debug_redacted_patterns.push(quote_spanned! { span => #binding });
+            debug_redacted_patterns.push(quote_spanned! { span => #ident: #binding });
             quote_spanned! { span =>
-                #debug.field(stringify!(#binding), #binding);
+                #debug.field(stringify!(#ident), #binding);
             }
         };
         let debug_unredacted_field = quote_spanned! { span =>
-            #debug.field(stringify!(#binding), #binding);
+            #debug.field(stringify!(#ident), #binding);
         };
 
         transforms.push(transform);
@@ -96,9 +116,9 @@ fn derive_named_struct(
 
     Ok(DeriveOutput {
         redaction_body: quote! {
-            let Self { #(#bindings),* } = self;
+            let Self { #(#patterns),* } = self;
             #(#transforms)*
-            Self { #(#bindings),* }
+            Self { #(#reconstructions),* }
         },
         used_generics,
         policy_applicable_generics,
@@ -113,7 +133,7 @@ fn derive_named_struct(
         },
         debug_unredacted_body: quote! {
             match self {
-                Self { #(#bindings),* } => {
+                Self { #(#patterns),* } => {
                     let mut #debug = #formatter.debug_struct(stringify!(#name));
                     #(#debug_unredacted_fields)*
                     #debug.finish()
@@ -124,13 +144,16 @@ fn derive_named_struct(
     })
 }
 
+#[allow(clippy::too_many_lines)]
 fn derive_unnamed_struct(
     name: &Ident,
     fields: syn::FieldsUnnamed,
     container_path: &TokenStream,
+    formatter: &Ident,
+    mapper: &Ident,
+    fresh: &mut FreshIdentAllocator,
 ) -> Result<DeriveOutput> {
-    let formatter = crate::internal_ident("__redactable_f");
-    let debug = crate::internal_ident("__redactable_debug");
+    let debug = fresh.fresh("__redactable_debug");
     let mut bindings = Vec::new();
     let mut transforms = Vec::new();
     let mut used_generics = Vec::new();
@@ -145,19 +168,27 @@ fn derive_unnamed_struct(
         container_predicates: &mut used_generics,
         policy_predicates: &mut policy_applicable_generics,
         debug_unredacted_predicates: &mut debug_unredacted_generics,
+        mapper,
     };
 
     for (index, field) in fields.unnamed.into_iter().enumerate() {
-        let ident = format_ident!("field_{index}", span = proc_macro2::Span::mixed_site());
+        let ident = fresh.fresh(&format!("field_{index}"));
         let binding = ident.clone();
         let span = field.span();
         let ty = &field.ty;
         let strategy = parse_field_strategy(&field.attrs)?;
+        let recursive_bound_override = parse_redactable_field_options(&field.attrs)?.recursive;
         bindings.push(ident);
 
         let is_sensitive = matches!(&strategy, Strategy::Policy(_));
-        let transform = generate_field_transform(&mut ctx, ty, &binding, span, &strategy)?;
-
+        let transform = generate_field_transform(
+            &mut ctx,
+            ty,
+            &binding,
+            span,
+            &strategy,
+            recursive_bound_override,
+        );
         let debug_redacted_field = if is_sensitive {
             // Sensitive: use wildcard pattern to avoid unused binding
             debug_redacted_patterns.push(quote_spanned! { span => _ });

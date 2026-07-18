@@ -7,22 +7,137 @@
 
 #![cfg(feature = "slog")]
 
-use std::{collections::HashMap, fmt};
+use std::{
+    cell::RefCell,
+    collections::{BTreeMap, HashMap},
+    fmt,
+    panic::{AssertUnwindSafe, catch_unwind},
+    sync::{Arc, Mutex},
+};
 
 use redactable::{
-    Email, NotSensitiveJsonExt, PhoneNumber, Pii, Redactable, RedactableMapper,
-    RedactableWithFormatter, RedactableWithMapper, RedactedJsonExt, RedactedOutput,
-    RedactionPolicy, Secret, Sensitive, SensitiveDisplay, SensitiveValue, TextRedactionPolicy,
-    ToRedactedOutput, Token,
+    Email, IntoRedactedOutputExt, NotSensitiveJsonExt, PhoneNumber, Pii, Redactable,
+    RedactableMapper, RedactableWithFormatter, RedactableWithMapper, RedactedJsonExt,
+    RedactedOutput, RedactedOutputExt, RedactionPolicy, Secret, Sensitive, SensitiveDisplay,
+    SensitiveValue, TextPolicyKind, TextRedactionPolicy, ToRedactedOutput, Token,
     slog::{SlogRedacted, SlogRedactedExt},
 };
+use redactable_test_fixtures::GenericDualFixture;
 use serde::Serialize;
+use slog::{Drain as _, KV as _};
 
 mod support {
     pub(crate) mod slog_capture;
 }
 
 use support::slog_capture::{CapturedValue, CapturingSerializer, serialize_to_capture};
+
+#[derive(Clone)]
+struct CapturingDrain {
+    captured: Arc<Mutex<Vec<CapturedValue>>>,
+}
+
+impl slog::Drain for CapturingDrain {
+    type Ok = ();
+    type Err = slog::Never;
+
+    fn log(
+        &self,
+        record: &slog::Record<'_>,
+        values: &slog::OwnedKVList,
+    ) -> Result<Self::Ok, Self::Err> {
+        let mut serializer = CapturingSerializer::new();
+        record
+            .kv()
+            .serialize(record, &mut serializer)
+            .expect("record values serialize");
+        values
+            .serialize(record, &mut serializer)
+            .expect("logger values serialize");
+        if let Some(value) = serializer.get("event") {
+            self.captured
+                .lock()
+                .expect("capturing drain lock")
+                .push(value);
+        }
+        Ok(())
+    }
+}
+
+fn capturing_logger() -> (slog::Logger, Arc<Mutex<Vec<CapturedValue>>>) {
+    let captured = Arc::new(Mutex::new(Vec::new()));
+    let drain = CapturingDrain {
+        captured: Arc::clone(&captured),
+    }
+    .fuse();
+    (slog::Logger::root(drain, slog::o!()), captured)
+}
+
+#[test]
+fn real_slog_drain_keeps_canary_out_and_documents_borrowed_clone_panic() {
+    #[derive(Clone, Sensitive, Serialize)]
+    struct Event {
+        #[sensitive(Secret)]
+        secret: RefCell<String>,
+    }
+
+    const CANARY: &str = "round3-slog-drain-canary";
+    let (logger, captured) = capturing_logger();
+    let owned = Event {
+        secret: RefCell::new(CANARY.to_owned()),
+    };
+    slog::info!(logger, "owned"; "event" => owned.into_redacted_output());
+    let emitted = format!("{:?}", captured.lock().expect("capture lock").as_slice());
+    assert!(emitted.contains("[REDACTED]"));
+    assert!(!emitted.contains(CANARY));
+
+    let borrowed = Event {
+        secret: RefCell::new(CANARY.to_owned()),
+    };
+    let _borrow = borrowed.secret.borrow_mut();
+    let result = catch_unwind(AssertUnwindSafe(|| {
+        slog::info!(logger, "borrowed"; "event" => borrowed.redacted_output());
+    }));
+    assert!(result.is_err());
+}
+
+#[test]
+fn genuine_generic_dual_generated_slog_omits_canary() {
+    const CANARY: &str = "generic-dual-slog-canary-86d2";
+    let value = GenericDualFixture {
+        label: String::from("event"),
+        secret: String::from(CANARY),
+    };
+    let mut serializer = CapturingSerializer::new();
+    serialize_to_capture(&value, "value", &mut serializer);
+    let captured = format!("{:?}", serializer.get("value"));
+    assert!(captured.contains("[REDACTED]"));
+    assert!(!captured.contains(CANARY));
+}
+
+#[test]
+fn concrete_borrow_sensitive_map_key_slog_emits_placeholder_without_cloning() {
+    #[derive(Clone, Sensitive, Serialize)]
+    struct Event {
+        #[not_sensitive]
+        records: BTreeMap<RefCell<String>, String>,
+    }
+
+    let event = Event {
+        records: BTreeMap::from([(RefCell::new(String::from("key")), String::from("value"))]),
+    };
+    let _borrow = event.records.keys().next().unwrap().borrow_mut();
+    let mut serializer = CapturingSerializer::new();
+
+    serialize_to_capture(&event, "event", &mut serializer);
+
+    assert_eq!(
+        serializer.get("event"),
+        Some(CapturedValue::Serde(serde_json::Value::String(
+            String::from("[REDACTED]")
+        )))
+    );
+}
 
 fn log_redacted<T: ToRedactedOutput>(value: &T) -> RedactedOutput {
     value.to_redacted_output()
@@ -47,6 +162,46 @@ mod marker_trait {
 
 mod slog_redacted_json {
     use super::*;
+
+    #[derive(Clone, Serialize)]
+    struct NoDebugEvent {
+        public: String,
+        secret: String,
+    }
+
+    impl RedactableWithMapper for NoDebugEvent {
+        fn redact_with<M: RedactableMapper>(mut self, mapper: &M) -> Self {
+            self.secret = mapper.map_sensitive::<_, Secret>(self.secret);
+            self
+        }
+    }
+
+    impl Redactable for NoDebugEvent {}
+
+    #[test]
+    fn slog_redacted_json_does_not_require_debug() {
+        const CANARY: &str = "phase02b-no-debug-canary-7391";
+        fn assert_extension<T: SlogRedactedExt>() {}
+        assert_extension::<NoDebugEvent>();
+
+        let redacted = NoDebugEvent {
+            public: "visible".to_owned(),
+            secret: CANARY.to_owned(),
+        }
+        .slog_redacted_json();
+
+        let expected = serde_json::json!({
+            "public": "visible",
+            "secret": "[REDACTED]",
+        });
+        let mut serializer = CapturingSerializer::new();
+        serialize_to_capture(&redacted, "event", &mut serializer);
+        assert_eq!(
+            serializer.get("event"),
+            Some(CapturedValue::Serde(expected))
+        );
+        assert!(!format!("{:?}", serializer.get("event")).contains(CANARY));
+    }
 
     mod basic {
         use super::*;
@@ -399,6 +554,8 @@ mod slog_redacted_json {
             struct CustomCreditCard;
 
             impl RedactionPolicy for CustomCreditCard {
+                type Kind = TextPolicyKind;
+
                 fn policy() -> TextRedactionPolicy {
                     TextRedactionPolicy::keep_last(4).with_mask_char('X')
                 }

@@ -6,14 +6,11 @@ use std::{
     borrow::Cow,
     cell::RefCell,
     collections::HashMap,
-    marker::PhantomData,
     net::IpAddr,
     panic::{AssertUnwindSafe, catch_unwind},
 };
 
-use redactable::{
-    Redactable, RedactableWithFormatter, RedactionPolicy, Secret, Sensitive, SensitiveDisplay,
-};
+use redactable::{Redactable, RedactableWithFormatter, Secret, Sensitive, SensitiveDisplay};
 use serde::Serialize;
 
 const CANARY: &str = "phase02-refcell-canary-3d91";
@@ -170,18 +167,22 @@ fn qualified_absolute_and_aliased_ip_policies_use_type_identity() {
 }
 
 mod custom {
-    use redactable::{RedactionPolicy, TextRedactionPolicy};
+    use redactable::{RedactionPolicy, TextPolicyKind, TextRedactionPolicy};
 
     pub struct IpAddress;
     pub struct Secret;
 
     impl RedactionPolicy for IpAddress {
+        type Kind = TextPolicyKind;
+
         fn policy() -> TextRedactionPolicy {
             TextRedactionPolicy::keep_last(2)
         }
     }
 
     impl RedactionPolicy for Secret {
+        type Kind = TextPolicyKind;
+
         fn policy() -> TextRedactionPolicy {
             TextRedactionPolicy::keep_last(2)
         }
@@ -209,15 +210,8 @@ struct CustomSecretPolicy {
     value: String,
 }
 
-#[derive(Clone, Sensitive, Serialize)]
-struct GenericPolicyMap<P: RedactionPolicy> {
-    #[sensitive(P)]
-    values: HashMap<std::net::IpAddr, String>,
-    marker: PhantomData<P>,
-}
-
 #[test]
-fn custom_same_tail_and_generic_policy_paths_preserve_map_keys() {
+fn custom_same_tail_policy_paths_preserve_map_keys() {
     let key: IpAddr = "192.0.2.7".parse().expect("valid test IP");
     let values = HashMap::from([(key, "sensitive-value".to_owned())]);
     let custom = CustomPolicyMap { values }.redact();
@@ -230,13 +224,6 @@ fn custom_same_tail_and_generic_policy_paths_preserve_map_keys() {
     let rendered = display.redacted_display().to_string();
     assert!(rendered.contains("192.0.2.7"));
     assert!(rendered.contains("*************ue"));
-
-    let generic = GenericPolicyMap::<redactable::IpAddress> {
-        values: HashMap::from([(key, "192.0.2.99".to_owned())]),
-        marker: PhantomData,
-    }
-    .redact();
-    assert!(generic.values.contains_key(&key));
 
     let custom_secret = CustomSecretPolicy {
         value: "sensitive-value".to_owned(),

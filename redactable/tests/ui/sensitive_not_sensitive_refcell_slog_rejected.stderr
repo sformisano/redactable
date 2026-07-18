@@ -1,0 +1,69 @@
+error[E0277]: the type `UnsafeCell<String>` may contain interior mutability and a reference may not be safely transferable across a catch_unwind boundary
+  --> tests/ui/sensitive_not_sensitive_refcell_slog_rejected.rs:22:19
+   |
+22 |     assert_slog::<Generic<RefCell<String>>>();
+   |                   ^^^^^^^^^^^^^^^^^^^^^^^^ `UnsafeCell<String>` may contain interior mutability and a reference may not be safely transferable across a catch_unwind boundary
+   |
+   = help: within `Generic<RefCell<String>>`, the trait `RefUnwindSafe` is not implemented for `UnsafeCell<String>`
+help: the trait `redactable::__private::slog::Value` is implemented for `Generic<T>`
+  --> tests/ui/sensitive_not_sensitive_refcell_slog_rejected.rs:13:17
+   |
+13 | #[derive(Clone, Sensitive, serde::Serialize)]
+   |                 ^^^^^^^^^
+note: required because it appears within the type `RefCell<String>`
+  --> $RUST/core/src/cell.rs
+note: required because it appears within the type `Generic<RefCell<String>>`
+  --> tests/ui/sensitive_not_sensitive_refcell_slog_rejected.rs:14:8
+   |
+14 | struct Generic<T> {
+   |        ^^^^^^^
+note: required for `Generic<RefCell<String>>` to implement `redactable::__private::slog::Value`
+  --> tests/ui/sensitive_not_sensitive_refcell_slog_rejected.rs:14:8
+   |
+13 | #[derive(Clone, Sensitive, serde::Serialize)]
+   |                 --------- type parameter would need to implement `redactable::__private::slog::Value`
+14 | struct Generic<T> {
+   |        ^^^^^^^^^^
+   = help: consider manually implementing `redactable::__private::slog::Value` to avoid undesired bounds
+note: required by a bound in `assert_slog`
+  --> tests/ui/sensitive_not_sensitive_refcell_slog_rejected.rs:19:19
+   |
+19 | fn assert_slog<T: redactable::__private::slog::Value>() {}
+   |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ required by this bound in `assert_slog`
+   = note: this error originates in the derive macro `Sensitive` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0277]: the type `UnsafeCell<isize>` may contain interior mutability and a reference may not be safely transferable across a catch_unwind boundary
+  --> tests/ui/sensitive_not_sensitive_refcell_slog_rejected.rs:22:19
+   |
+22 |     assert_slog::<Generic<RefCell<String>>>();
+   |                   ^^^^^^^^^^^^^^^^^^^^^^^^ `UnsafeCell<isize>` may contain interior mutability and a reference may not be safely transferable across a catch_unwind boundary
+   |
+   = help: within `Generic<RefCell<String>>`, the trait `RefUnwindSafe` is not implemented for `UnsafeCell<isize>`
+help: the trait `redactable::__private::slog::Value` is implemented for `Generic<T>`
+  --> tests/ui/sensitive_not_sensitive_refcell_slog_rejected.rs:13:17
+   |
+13 | #[derive(Clone, Sensitive, serde::Serialize)]
+   |                 ^^^^^^^^^
+note: required because it appears within the type `Cell<isize>`
+  --> $RUST/core/src/cell.rs
+note: required because it appears within the type `RefCell<String>`
+  --> $RUST/core/src/cell.rs
+note: required because it appears within the type `Generic<RefCell<String>>`
+  --> tests/ui/sensitive_not_sensitive_refcell_slog_rejected.rs:14:8
+   |
+14 | struct Generic<T> {
+   |        ^^^^^^^
+note: required for `Generic<RefCell<String>>` to implement `redactable::__private::slog::Value`
+  --> tests/ui/sensitive_not_sensitive_refcell_slog_rejected.rs:14:8
+   |
+13 | #[derive(Clone, Sensitive, serde::Serialize)]
+   |                 --------- type parameter would need to implement `redactable::__private::slog::Value`
+14 | struct Generic<T> {
+   |        ^^^^^^^^^^
+   = help: consider manually implementing `redactable::__private::slog::Value` to avoid undesired bounds
+note: required by a bound in `assert_slog`
+  --> tests/ui/sensitive_not_sensitive_refcell_slog_rejected.rs:19:19
+   |
+19 | fn assert_slog<T: redactable::__private::slog::Value>() {}
+   |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ required by this bound in `assert_slog`
+   = note: this error originates in the derive macro `Sensitive` (in Nightly builds, run with -Z macro-backtrace for more info)

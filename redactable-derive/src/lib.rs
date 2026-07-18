@@ -67,9 +67,8 @@
 extern crate proc_macro;
 
 use proc_macro_crate::{FoundCrate, crate_name};
-use proc_macro2::Span;
-use proc_macro2::{Ident, TokenStream};
-use quote::{format_ident, quote};
+use proc_macro2::{Ident, Span, TokenStream};
+use quote::quote;
 use syn::{
     Data, DataEnum, DataStruct, DeriveInput, Fields, Result, parse_macro_input, parse_quote,
     spanned::Spanned,
@@ -78,17 +77,18 @@ use syn::{
 mod container;
 mod derive_enum;
 mod derive_struct;
+mod fresh_ident;
 mod generics;
-mod policy_guard;
 mod redacted_display;
 mod strategy;
 mod transform;
-mod types;
-use container::{ContainerOptions, parse_container_options};
+use container::{ContainerOptions, parse_container_options, reject_field_only_container_attrs};
 use derive_enum::derive_enum;
 use derive_struct::derive_struct;
+use fresh_ident::FreshIdentAllocator;
 use generics::{add_predicates, push_debug_predicate};
 use redacted_display::derive_redacted_display;
+use strategy::parse_redactable_field_options;
 
 /// Derives `redactable::RedactableWithMapper` (and related impls) for structs and enums.
 ///
@@ -96,12 +96,17 @@ use redacted_display::derive_redacted_display;
 ///
 /// These attributes are placed on the struct/enum itself:
 ///
-/// - `#[sensitive(dual)]` - Use when deriving both `Sensitive` and `SensitiveDisplay` on the same
-///   type. `Sensitive` skips its `Debug` impl (letting `SensitiveDisplay` provide it), and
-///   `SensitiveDisplay` skips its `slog`/`tracing` impls (letting `Sensitive` provide them).
-///   For non-generic types, generated code checks that the counterpart derive is present.
-///   Generic `dual` types cannot be checked at derive time; missing counterparts surface later as
-///   trait-bound errors when the type is used.
+/// `Sensitive` and `SensitiveDisplay` are standalone derives. Use `SensitiveDual` when a type
+/// needs both structural and display redaction.
+///
+/// Use `#[redactable(recursive)]` on a field whose crate-qualified, aliased, or
+/// mutually recursive type would otherwise create a self-referential inferred
+/// bound. Unannotated fields retain their exact complete-type bounds.
+/// `#[redactable(legacy_formatting)]` and `#[redactable(generated_formatting)]`
+/// are display-only formatting options; standalone `Sensitive` rejects **both**.
+/// Apply them on `SensitiveDisplay` or `SensitiveDual` (which is what to use when
+/// a type needs structural and display redaction together); those derives
+/// document what each option selects.
 ///
 /// # Field Attributes
 ///
@@ -127,18 +132,36 @@ use redacted_display::derive_redacted_display;
 /// - `Redactable`: always generated. Provides `.redact()` and certifies the type for the
 ///   redacted-output extension traits (`RedactedOutputExt`, `RedactedJsonExt`, `SlogRedactedExt`).
 /// - `Debug`: redacted by default; actual values in the consumer's `cfg(test)` builds or when
-///   `redactable`'s `testing` feature is enabled. Skipped when `#[sensitive(dual)]` is set.
-/// - `slog::Value` + `SlogRedacted` (requires `slog` feature): implemented by cloning the value
-///   and routing it through `redactable::slog::SlogRedactedExt`. Requires `Clone` and
-///   `serde::Serialize` because it emits structured JSON. Generated dependency paths resolve
-///   through `redactable::__private`, including when the dependency is renamed.
+///   `redactable`'s `testing` feature is enabled.
+/// - `slog::Value` + `SlogRedacted` (requires `slog` feature): borrowed generated output is a
+///   fixed fail-closed placeholder and never clones or serializes the raw reference. Owned values
+///   can use `SlogRedactedExt::slog_redacted_json` for redact-then-serialize structured output.
 /// - `TracingRedacted` (requires `tracing` feature): marker trait.
-#[proc_macro_derive(Sensitive, attributes(sensitive, not_sensitive))]
+#[proc_macro_derive(Sensitive, attributes(sensitive, not_sensitive, redactable))]
 pub fn derive_sensitive_container(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
     match expand(input, DeriveKind::Sensitive) {
         Ok(tokens) => tokens.into(),
         Err(err) => err.into_compile_error().into(),
+    }
+}
+
+/// Derives structural and display redaction as one authenticated expansion.
+///
+/// Use this instead of combining `Sensitive` and `SensitiveDisplay` with the
+/// legacy `#[sensitive(dual)]` coordination attribute.
+#[proc_macro_derive(SensitiveDual, attributes(sensitive, not_sensitive, redactable, error))]
+pub fn derive_sensitive_dual(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    let input = parse_macro_input!(input as DeriveInput);
+    let sensitive = expand_with_mode(input.clone(), DeriveKind::Sensitive, true);
+    let display = expand_with_mode(input, DeriveKind::SensitiveDisplay, true);
+    match (sensitive, display) {
+        (Ok(sensitive), Ok(display)) => quote!(#sensitive #display).into(),
+        (Err(mut first), Err(second)) => {
+            first.combine(second);
+            first.into_compile_error().into()
+        }
+        (Err(err), _) | (_, Err(err)) => err.into_compile_error().into(),
     }
 }
 
@@ -153,10 +176,11 @@ pub fn derive_sensitive_container(input: proc_macro::TokenStream) -> proc_macro:
 ///
 /// - `RedactableWithMapper`: no-op passthrough (the type has no sensitive data)
 /// - `Redactable`: deriving `NotSensitive` is an explicit declaration, so the type is
-///   certified for the redacted-output extension traits
-/// - `slog::Value` and `SlogRedacted` (behind `cfg(feature = "slog")`): serializes the value
-///   directly as structured JSON without redaction (same format as `Sensitive`, but skips
-///   the redaction step). Requires `Serialize` on the type.
+///   certified for consuming and borrowed adapters. Generated slog serialization borrows rather
+///   than clones; serde's `RefCell` implementation
+///   reports an active mutable borrow as an error, which is converted to `"[REDACTED]"`.
+/// - `slog::Value` and `SlogRedacted` (behind `cfg(feature = "slog")`): serializes the explicitly
+///   non-sensitive value directly as structured JSON. Requires `Serialize` on the type.
 /// - `TracingRedacted` (behind `cfg(feature = "tracing")`): marker trait
 ///
 /// `NotSensitive` does **not** generate a `Debug` impl - there's nothing to redact.
@@ -169,7 +193,7 @@ pub fn derive_sensitive_container(input: proc_macro::TokenStream) -> proc_macro:
 /// latter is redundant (the entire type is already non-sensitive).
 ///
 /// Unions are rejected at compile time.
-#[proc_macro_derive(NotSensitive, attributes(not_sensitive))]
+#[proc_macro_derive(NotSensitive, attributes(sensitive, not_sensitive))]
 pub fn derive_not_sensitive(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
     match expand_not_sensitive(input) {
@@ -233,6 +257,7 @@ fn reject_sensitivity_attrs(attrs: &[syn::Attribute], data: &Data, macro_name: &
 }
 
 fn expand_not_sensitive(input: DeriveInput) -> Result<TokenStream> {
+    let mut fresh = FreshIdentAllocator::new(&input);
     let DeriveInput {
         ident,
         generics,
@@ -252,8 +277,8 @@ fn expand_not_sensitive(input: DeriveInput) -> Result<TokenStream> {
     reject_sensitivity_attrs(&attrs, &data, "NotSensitive")?;
 
     let crate_root = crate_root();
-    let mapper_type = internal_ident("__RedactableMapper");
-    let mapper = internal_ident("__redactable_mapper");
+    let mapper_type = fresh.fresh("__RedactableMapper");
+    let mapper = fresh.fresh("__redactable_mapper");
 
     // RedactableWithMapper impl (no-op passthrough). Deriving NotSensitive is
     // an explicit declaration, so the type also gets Redactable.
@@ -271,6 +296,9 @@ fn expand_not_sensitive(input: DeriveInput) -> Result<TokenStream> {
     // slog impl - serialize directly as structured JSON (no redaction needed)
     #[cfg(feature = "slog")]
     let slog_impl = {
+        let record = fresh.fresh("__redactable_record");
+        let key = fresh.fresh("key");
+        let serializer = fresh.fresh("serializer");
         let slog_crate = quote! { #crate_root::__private::slog };
         let mut slog_generics = generics.clone();
         let (_, ty_generics, _) = slog_generics.split_for_impl();
@@ -285,11 +313,11 @@ fn expand_not_sensitive(input: DeriveInput) -> Result<TokenStream> {
             impl #slog_impl_generics #slog_crate::Value for #ident #slog_ty_generics #slog_where_clause {
                 fn serialize(
                     &self,
-                    _record: &#slog_crate::Record<'_>,
-                    key: #slog_crate::Key,
-                    serializer: &mut dyn #slog_crate::Serializer,
+                    #record: &#slog_crate::Record<'_>,
+                    #key: #slog_crate::Key,
+                    #serializer: &mut dyn #slog_crate::Serializer,
                 ) -> #slog_crate::Result {
-                    #crate_root::slog::__slog_serialize_not_sensitive(self, _record, key, serializer)
+                    #crate_root::slog::__slog_serialize_not_sensitive(self, #record, #key, #serializer)
                 }
             }
 
@@ -313,11 +341,12 @@ fn expand_not_sensitive(input: DeriveInput) -> Result<TokenStream> {
     #[cfg(not(feature = "tracing"))]
     let tracing_impl = quote! {};
 
-    Ok(quote! {
+    let generated = quote! {
         #container_impl
         #slog_impl
         #tracing_impl
-    })
+    };
+    Ok(isolate_generated_items(generated, &fresh))
 }
 
 /// Derives `redactable::RedactableWithFormatter` for types with no sensitive data.
@@ -337,7 +366,7 @@ fn expand_not_sensitive(input: DeriveInput) -> Result<TokenStream> {
 ///
 /// - `RedactableWithMapper`: no-op passthrough (allows use inside `Sensitive` containers)
 /// - `Redactable`: deriving `NotSensitiveDisplay` is an explicit declaration, so the type is
-///   certified for the redacted-output extension traits
+///   certified for consuming and borrowed adapters.
 /// - `RedactableWithFormatter`: delegates to `Display::fmt`
 /// - `ToRedactedOutput`: emits the `Display` text; certifies the type for
 ///   `slog_redacted_display()` and `tracing_redacted()`
@@ -359,15 +388,26 @@ fn expand_not_sensitive(input: DeriveInput) -> Result<TokenStream> {
 ///
 /// ```ignore
 /// use redactable::NotSensitiveDisplay;
+/// use std::fmt;
 ///
-/// #[derive(Clone, NotSensitiveDisplay)]
-/// #[display(fmt = "RetryDecision")]  // Or use displaydoc/thiserror for Display impl
+/// #[derive(NotSensitiveDisplay)]
 /// enum RetryDecision {
 ///     Retry,
 ///     Abort,
 /// }
+///
+/// impl fmt::Display for RetryDecision {
+///     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+///         formatter.write_str(match self {
+///             Self::Retry => "Retry",
+///             Self::Abort => "Abort",
+///         })
+///     }
+/// }
+///
+/// assert_eq!(RetryDecision::Retry.to_string(), "Retry");
 /// ```
-#[proc_macro_derive(NotSensitiveDisplay)]
+#[proc_macro_derive(NotSensitiveDisplay, attributes(sensitive, not_sensitive))]
 pub fn derive_not_sensitive_display(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
     match expand_not_sensitive_display(input) {
@@ -377,6 +417,7 @@ pub fn derive_not_sensitive_display(input: proc_macro::TokenStream) -> proc_macr
 }
 
 fn expand_not_sensitive_display(input: DeriveInput) -> Result<TokenStream> {
+    let mut fresh = FreshIdentAllocator::new(&input);
     let DeriveInput {
         ident,
         generics,
@@ -396,89 +437,18 @@ fn expand_not_sensitive_display(input: DeriveInput) -> Result<TokenStream> {
     reject_sensitivity_attrs(&attrs, &data, "NotSensitiveDisplay")?;
 
     let crate_root = crate_root();
-    let mapper_type = internal_ident("__RedactableMapper");
-    let mapper = internal_ident("__redactable_mapper");
+    let mapper_type = fresh.fresh("__RedactableMapper");
+    let mapper = fresh.fresh("__redactable_mapper");
+    let formatter = fresh.fresh("__redactable_f");
 
-    // Generate the RedactableWithMapper no-op passthrough impl
-    // This is always generated, allowing NotSensitiveDisplay to be used inside Sensitive containers.
-    // Deriving NotSensitiveDisplay is an explicit declaration, so the type also
-    // gets Redactable.
-    let (container_impl_generics, container_ty_generics, container_where_clause) =
-        generics.split_for_impl();
-    let container_impl = quote! {
-        impl #container_impl_generics #crate_root::RedactableWithMapper for #ident #container_ty_generics #container_where_clause {
-            fn redact_with<#mapper_type: #crate_root::RedactableMapper>(self, #mapper: &#mapper_type) -> Self {
-                self
-            }
-        }
-
-        impl #container_impl_generics #crate_root::Redactable for #ident #container_ty_generics #container_where_clause {}
-    };
-
-    // Always delegate to Display::fmt (no template parsing for NotSensitiveDisplay)
-    // Constrain the complete derived type rather than every type parameter.
-    let mut display_generics = generics.clone();
-    let (_, display_ty, _) = generics.split_for_impl();
-    let display_self_ty: syn::Type = parse_quote!(#ident #display_ty);
-    let display_where_clause = display_generics.make_where_clause();
-    display_where_clause
-        .predicates
-        .push(parse_quote!(#display_self_ty: ::core::fmt::Display));
-
-    let (display_impl_generics, display_ty_generics, display_where_clause) =
-        display_generics.split_for_impl();
-
-    // RedactableWithFormatter impl - delegates to Display. ToRedactedOutput is
-    // the formatter-side certification (an explicitly non-sensitive type's
-    // display IS its safe output), keeping slog_redacted_display() available.
-    let redacted_display_impl = quote! {
-        impl #display_impl_generics #crate_root::RedactableWithFormatter for #ident #display_ty_generics #display_where_clause {
-            fn fmt_redacted(&self, __redactable_f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
-                ::core::fmt::Display::fmt(self, __redactable_f)
-            }
-        }
-
-        impl #display_impl_generics #crate_root::ToRedactedOutput for #ident #display_ty_generics #display_where_clause {
-            fn to_redacted_output(&self) -> #crate_root::RedactedOutput {
-                #crate_root::RedactedOutput::Text(
-                    #crate_root::RedactableWithFormatter::redacted_display(self).to_string(),
-                )
-            }
-        }
-    };
-
-    // slog impl
-    #[cfg(feature = "slog")]
-    let slog_impl = {
-        let slog_crate = quote! { #crate_root::__private::slog };
-        let mut slog_generics = generics.clone();
-        let (_, ty_generics, _) = slog_generics.split_for_impl();
-        let self_ty: syn::Type = syn::parse_quote!(#ident #ty_generics);
-        slog_generics
-            .make_where_clause()
-            .predicates
-            .push(syn::parse_quote!(#self_ty: #crate_root::RedactableWithFormatter));
-        let (slog_impl_generics, slog_ty_generics, slog_where_clause) =
-            slog_generics.split_for_impl();
-        quote! {
-            impl #slog_impl_generics #slog_crate::Value for #ident #slog_ty_generics #slog_where_clause {
-                fn serialize(
-                    &self,
-                    _record: &#slog_crate::Record<'_>,
-                    key: #slog_crate::Key,
-                    serializer: &mut dyn #slog_crate::Serializer,
-                ) -> #slog_crate::Result {
-                    let redacted = #crate_root::RedactableWithFormatter::redacted_display(self);
-                    serializer.emit_arguments(key, &format_args!("{}", redacted))
-                }
-            }
-
-            impl #slog_impl_generics #crate_root::slog::SlogRedacted for #ident #slog_ty_generics #slog_where_clause {}
-        }
-    };
-
-    #[cfg(not(feature = "slog"))]
-    let slog_impl = quote! {};
+    let (container_impl, redacted_display_impl) = not_sensitive_display_core_impls(
+        &ident,
+        &generics,
+        &crate_root,
+        &mapper_type,
+        &mapper,
+        &formatter,
+    );
 
     // tracing impl - uses the original generics (no extra Display bounds needed for marker trait)
     #[cfg(feature = "tracing")]
@@ -493,12 +463,100 @@ fn expand_not_sensitive_display(input: DeriveInput) -> Result<TokenStream> {
     #[cfg(not(feature = "tracing"))]
     let tracing_impl = quote! {};
 
-    Ok(quote! {
+    // slog impl
+    #[cfg(feature = "slog")]
+    let slog_impl = {
+        let record = fresh.fresh("__redactable_record");
+        let key = fresh.fresh("key");
+        let serializer = fresh.fresh("serializer");
+        let redacted = fresh.fresh("__redactable_value");
+        let slog_crate = quote! { #crate_root::__private::slog };
+        let mut slog_generics = generics;
+        let (_, ty_generics, _) = slog_generics.split_for_impl();
+        let self_ty: syn::Type = syn::parse_quote!(#ident #ty_generics);
+        slog_generics
+            .make_where_clause()
+            .predicates
+            .push(syn::parse_quote!(#self_ty: #crate_root::RedactableWithFormatter));
+        let (slog_impl_generics, slog_ty_generics, slog_where_clause) =
+            slog_generics.split_for_impl();
+        quote! {
+            impl #slog_impl_generics #slog_crate::Value for #ident #slog_ty_generics #slog_where_clause {
+                fn serialize(
+                    &self,
+                    #record: &#slog_crate::Record<'_>,
+                    #key: #slog_crate::Key,
+                    #serializer: &mut dyn #slog_crate::Serializer,
+                ) -> #slog_crate::Result {
+                    let #redacted = #crate_root::RedactableWithFormatter::redacted_display(self);
+                    #serializer.emit_arguments(#key, &format_args!("{}", #redacted))
+                }
+            }
+
+            impl #slog_impl_generics #crate_root::slog::SlogRedacted for #ident #slog_ty_generics #slog_where_clause {}
+        }
+    };
+
+    #[cfg(not(feature = "slog"))]
+    let slog_impl = quote! {};
+
+    let generated = quote! {
         #container_impl
         #redacted_display_impl
         #slog_impl
         #tracing_impl
-    })
+    };
+    Ok(isolate_generated_items(generated, &fresh))
+}
+
+fn not_sensitive_display_core_impls(
+    ident: &Ident,
+    generics: &syn::Generics,
+    crate_root: &TokenStream,
+    mapper_type: &Ident,
+    mapper: &Ident,
+    formatter: &Ident,
+) -> (TokenStream, TokenStream) {
+    let (container_impl_generics, container_ty_generics, container_where_clause) =
+        generics.split_for_impl();
+    let container_impl = quote! {
+        impl #container_impl_generics #crate_root::RedactableWithMapper for #ident #container_ty_generics #container_where_clause {
+            fn redact_with<#mapper_type: #crate_root::RedactableMapper>(self, #mapper: &#mapper_type) -> Self {
+                self
+            }
+        }
+
+        impl #container_impl_generics #crate_root::Redactable for #ident #container_ty_generics #container_where_clause {}
+    };
+
+    let mut display_generics = generics.clone();
+    let (_, display_ty, _) = generics.split_for_impl();
+    let display_self_ty: syn::Type = parse_quote!(#ident #display_ty);
+    display_generics
+        .make_where_clause()
+        .predicates
+        .push(parse_quote!(#display_self_ty: ::core::fmt::Display));
+    let (display_impl_generics, display_ty_generics, display_where_clause) =
+        display_generics.split_for_impl();
+    let redacted_display_impl = quote! {
+        impl #display_impl_generics #crate_root::RedactableWithFormatter for #ident #display_ty_generics #display_where_clause {
+            fn fmt_redacted(&self, #formatter: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+                ::core::fmt::Display::fmt(self, #formatter)
+            }
+        }
+
+        impl #display_impl_generics #crate_root::ToRedactedOutput for #ident #display_ty_generics #display_where_clause {
+            fn to_redacted_output(&self) -> #crate_root::RedactedOutput {
+                #crate_root::RedactedOutput::Text(
+                    ::std::string::ToString::to_string(
+                        &#crate_root::RedactableWithFormatter::redacted_display(self),
+                    ),
+                )
+            }
+        }
+    };
+
+    (container_impl, redacted_display_impl)
 }
 
 /// Derives `redactable::RedactableWithFormatter` using a display template.
@@ -517,10 +575,22 @@ fn expand_not_sensitive_display(input: DeriveInput) -> Result<TokenStream> {
 /// doc comments (displaydoc-style). If neither is present, the derive fails.
 ///
 /// Fields are redacted by reference, so field types do not need `Clone`.
+/// A custom `PolicyApplicableRef` leaf nested inside a container can explicitly
+/// select its ordinary borrowed projection with
+/// `#[redactable(legacy_formatting)]`. The explicit route does not require the
+/// direct-leaf formatting marker; it requires `PolicyApplicableRef` on the whole
+/// field and the selected format capability on its output. It inherits the
+/// projection's `Clone` requirements and borrow behavior; library-owned fields
+/// should stay on the default conflict-safe route. It composes with
+/// `#[redactable(recursive)]`, retaining the projection/output bounds while
+/// suppressing the cyclic inferred field bound.
 ///
-/// When `#[sensitive(dual)]` is used with a non-generic type, generated code checks that the
-/// matching `Sensitive` derive is also present. Generic `dual` types cannot be checked at derive
-/// time; missing counterparts surface later as trait-bound errors when the type is used.
+/// `#[redactable(generated_formatting)]` instead selects the library-owned
+/// recursive formatter for an alias-hidden or otherwise ambiguous container
+/// field. `legacy_formatting` and `generated_formatting` are mutually exclusive,
+/// and standalone `Sensitive` rejects both (they only affect display output).
+///
+/// Use `SensitiveDual` instead when the same type also needs structural redaction.
 ///
 /// # Generated Impls
 ///
@@ -530,10 +600,11 @@ fn expand_not_sensitive_display(input: DeriveInput) -> Result<TokenStream> {
 /// - `Debug`: redacted by default; actual values in the consumer's `cfg(test)` builds or when
 ///   `redactable`'s `testing` feature is enabled.
 /// - `slog::Value` + `SlogRedacted`: emits the redacted display string (requires `slog` feature).
-///   Skipped when `#[sensitive(dual)]` is set (Sensitive provides them instead).
 /// - `TracingRedacted`: marker trait (requires `tracing` feature).
-///   Skipped when `#[sensitive(dual)]` is set.
-#[proc_macro_derive(SensitiveDisplay, attributes(sensitive, not_sensitive, error))]
+#[proc_macro_derive(
+    SensitiveDisplay,
+    attributes(sensitive, not_sensitive, redactable, error)
+)]
 pub fn derive_sensitive_display(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
     match expand(input, DeriveKind::SensitiveDisplay) {
@@ -550,11 +621,21 @@ fn crate_root() -> proc_macro2::TokenStream {
     match crate_name("redactable") {
         Ok(FoundCrate::Itself) => quote! { crate },
         Ok(FoundCrate::Name(name)) => {
-            let ident = format_ident!("{}", name);
+            let ident = dependency_crate_ident(&name);
             quote! { ::#ident }
         }
         Err(_) => quote! { ::redactable },
     }
+}
+
+/// Converts a Cargo dependency key into a Rust path identifier without panicking.
+///
+/// Cargo permits aliases that are Rust keywords. Those aliases must be emitted as
+/// raw identifiers (`r#type`) in generated paths.
+fn dependency_crate_ident(name: &str) -> Ident {
+    syn::parse_str::<Ident>(name)
+        .or_else(|_| syn::parse_str::<Ident>(&format!("r#{name}")))
+        .unwrap_or_else(|_| Ident::new("__redactable_invalid_dependency_alias", Span::call_site()))
 }
 
 fn crate_path(item: &str) -> proc_macro2::TokenStream {
@@ -563,9 +644,20 @@ fn crate_path(item: &str) -> proc_macro2::TokenStream {
     quote! { #root::#item_ident }
 }
 
-/// Creates an expansion-internal value identifier that cannot collide with caller bindings.
-pub(crate) fn internal_ident(name: &str) -> Ident {
-    Ident::new(name, Span::mixed_site())
+/// Isolates generated binders from unrelated caller-scope constants.
+///
+/// Rust treats a same-named constant as a const pattern instead of a new function
+/// parameter binding. Local function items occupy the value namespace without being
+/// const patterns, so generated bindings can safely shadow them. The anonymous const
+/// gives every derive expansion its own item scope and still supports local types.
+fn isolate_generated_items(generated: TokenStream, fresh: &FreshIdentAllocator) -> TokenStream {
+    let value_shadows = fresh.allocated();
+    quote! {
+        const _: () = {
+            #(#[allow(dead_code, non_snake_case)] fn #value_shadows() {})*
+            #generated
+        };
+    }
 }
 
 /// Output produced by struct/enum derive logic for `Sensitive`.
@@ -598,6 +690,16 @@ enum DeriveKind {
 
 #[allow(clippy::too_many_lines)]
 fn expand(input: DeriveInput, kind: DeriveKind) -> Result<TokenStream> {
+    expand_with_mode(input, kind, false)
+}
+
+#[allow(clippy::too_many_lines)]
+fn expand_with_mode(
+    input: DeriveInput,
+    kind: DeriveKind,
+    authenticated_dual: bool,
+) -> Result<TokenStream> {
+    let mut fresh = FreshIdentAllocator::new(&input);
     let DeriveInput {
         ident,
         generics,
@@ -606,59 +708,47 @@ fn expand(input: DeriveInput, kind: DeriveKind) -> Result<TokenStream> {
         ..
     } = input;
 
-    let ContainerOptions { dual } = parse_container_options(&attrs)?;
-
+    reject_field_only_container_attrs(&attrs)?;
+    let ContainerOptions {
+        dual: requested_dual,
+    } = parse_container_options(&attrs)?;
+    if requested_dual && !authenticated_dual {
+        return Err(syn::Error::new(
+            ident.span(),
+            "`#[sensitive(dual)]` is no longer accepted on `Sensitive` or `SensitiveDisplay`; use `#[derive(SensitiveDual)]` instead",
+        ));
+    }
+    if matches!(&kind, DeriveKind::Sensitive) && !authenticated_dual {
+        reject_display_only_field_options(&data)?;
+    }
+    let dual = authenticated_dual;
     let crate_root = crate_root();
-    let policy_guards = policy_guard::generate_policy_guards(&ident, &data, &generics)?;
-    let formatter = internal_ident("__redactable_f");
-    let mapper = internal_ident("__redactable_mapper");
-    let mapper_type = internal_ident("__RedactableMapper");
-
-    // `#[sensitive(dual)]` is honor-system between the two macros: each one
-    // skips impls it expects the other to provide, and a macro cannot see its
-    // sibling derives. Assert at compile time that the counterpart's trait
-    // actually exists so dual with only one derive fails loudly instead of
-    // silently dropping the redacted Debug (or slog/tracing) impls. The
-    // assertion needs a fully concrete type name, so generic types are not
-    // checked.
-    let dual_pairing_assert = if dual && generics.params.is_empty() {
-        match kind {
-            DeriveKind::Sensitive => quote! {
-                const _: fn() = || {
-                    // dual skips Debug here because SensitiveDisplay provides it;
-                    // this fails to compile when SensitiveDisplay is not derived.
-                    fn dual_requires_sensitive_display<T: #crate_root::RedactableWithFormatter>() {}
-                    dual_requires_sensitive_display::<#ident>();
-                };
-            },
-            DeriveKind::SensitiveDisplay => quote! {
-                const _: fn() = || {
-                    // dual skips slog/tracing here because Sensitive provides them;
-                    // this fails to compile when Sensitive is not derived.
-                    fn dual_requires_sensitive<T: #crate_root::RedactableWithMapper>() {}
-                    dual_requires_sensitive::<#ident>();
-                };
-            },
-        }
-    } else {
-        quote! {}
-    };
+    let formatter = fresh.fresh("__redactable_f");
+    let mapper = fresh.fresh("__redactable_mapper");
+    let mapper_type = fresh.fresh("__RedactableMapper");
 
     if matches!(kind, DeriveKind::SensitiveDisplay) {
-        let redacted_display_output = derive_redacted_display(&ident, &data, &attrs, &generics)?;
-        let redacted_display_generics =
-            add_predicates(generics.clone(), &redacted_display_output.display_generics);
+        let redacted_display_output =
+            derive_redacted_display(&ident, &data, &attrs, &generics, &formatter, &mut fresh)?;
+        let redacted_display_generics = add_predicates(
+            generics.clone(),
+            &redacted_display_output.display_generics,
+            &ident,
+        );
         let redacted_display_generics = add_predicates(
             redacted_display_generics,
             &redacted_display_output.debug_generics,
+            &ident,
         );
         let redacted_display_generics = add_predicates(
             redacted_display_generics,
             &redacted_display_output.policy_ref_generics,
+            &ident,
         );
         let redacted_display_generics = add_predicates(
             redacted_display_generics,
             &redacted_display_output.nested_generics,
+            &ident,
         );
         let (display_impl_generics, display_ty_generics, display_where_clause) =
             redacted_display_generics.split_for_impl();
@@ -674,21 +764,27 @@ fn expand(input: DeriveInput, kind: DeriveKind) -> Result<TokenStream> {
             impl #display_impl_generics #crate_root::ToRedactedOutput for #ident #display_ty_generics #display_where_clause {
                 fn to_redacted_output(&self) -> #crate_root::RedactedOutput {
                     #crate_root::RedactedOutput::Text(
-                        #crate_root::RedactableWithFormatter::redacted_display(self).to_string(),
+                        ::std::string::ToString::to_string(
+                            &#crate_root::RedactableWithFormatter::redacted_display(self),
+                        ),
                     )
                 }
             }
         };
 
-        let debug_output = derive_unredacted_debug(&ident, &data, &generics)?;
+        let debug_output =
+            derive_unredacted_debug(&ident, &data, &generics, &formatter, &mut fresh)?;
         // A single impl branches at runtime on `cfg!(test) || redactable::__TESTING`
         // rather than emitting two `#[cfg]`-gated impls. The `feature = "testing"`
         // check must resolve against `redactable`'s own feature, not the consumer's,
         // so it is routed through the `__TESTING` constant. The where-clause is the
         // union of the formatter bounds (redacted body) and the Debug bounds
         // (unredacted body) because both bodies live in the same impl.
-        let debug_generics =
-            add_predicates(redacted_display_generics.clone(), &debug_output.generics);
+        let debug_generics = add_predicates(
+            redacted_display_generics.clone(),
+            &debug_output.generics,
+            &ident,
+        );
         let (debug_impl_generics, debug_ty_generics, debug_where_clause) =
             debug_generics.split_for_impl();
         let debug_unredacted_body = debug_output.body;
@@ -710,6 +806,10 @@ fn expand(input: DeriveInput, kind: DeriveKind) -> Result<TokenStream> {
         } else {
             #[cfg(feature = "slog")]
             {
+                let record = fresh.fresh("__redactable_record");
+                let key = fresh.fresh("key");
+                let serializer = fresh.fresh("serializer");
+                let redacted = fresh.fresh("__redactable_value");
                 let slog_crate = quote! { #crate_root::__private::slog };
                 let mut slog_generics = generics;
                 let (_, ty_generics, _) = slog_generics.split_for_impl();
@@ -724,12 +824,12 @@ fn expand(input: DeriveInput, kind: DeriveKind) -> Result<TokenStream> {
                     impl #slog_impl_generics #slog_crate::Value for #ident #slog_ty_generics #slog_where_clause {
                         fn serialize(
                             &self,
-                            _record: &#slog_crate::Record<'_>,
-                            key: #slog_crate::Key,
-                            serializer: &mut dyn #slog_crate::Serializer,
+                            #record: &#slog_crate::Record<'_>,
+                            #key: #slog_crate::Key,
+                            #serializer: &mut dyn #slog_crate::Serializer,
                         ) -> #slog_crate::Result {
-                            let redacted = #crate_root::RedactableWithFormatter::redacted_display(self);
-                            serializer.emit_arguments(key, &format_args!("{}", redacted))
+                            let #redacted = #crate_root::RedactableWithFormatter::redacted_display(self);
+                            #serializer.emit_arguments(#key, &format_args!("{}", #redacted))
                         }
                     }
 
@@ -761,22 +861,23 @@ fn expand(input: DeriveInput, kind: DeriveKind) -> Result<TokenStream> {
             }
         };
 
-        return Ok(quote! {
-            #policy_guards
+        let generated = quote! {
             #redacted_display_impl
             #to_redacted_output_impl
             #debug_impl
             #slog_impl
             #tracing_impl
-            #dual_pairing_assert
-        });
+        };
+        return Ok(isolate_generated_items(generated, &fresh));
     }
 
     // Only DeriveKind::Sensitive reaches this point (SensitiveDisplay returns early above).
 
     let derive_output = match data {
-        Data::Struct(data) => derive_struct(&ident, data, &generics)?,
-        Data::Enum(data) => derive_enum(&ident, data, &generics)?,
+        Data::Struct(data) => {
+            derive_struct(&ident, data, &generics, &formatter, &mapper, &mut fresh)?
+        }
+        Data::Enum(data) => derive_enum(&ident, data, &generics, &formatter, &mapper, &mut fresh)?,
         Data::Union(u) => {
             return Err(syn::Error::new(
                 u.union_token.span(),
@@ -785,16 +886,19 @@ fn expand(input: DeriveInput, kind: DeriveKind) -> Result<TokenStream> {
         }
     };
 
-    let policy_generics = add_predicates(generics.clone(), &derive_output.used_generics);
-    let policy_generics =
-        add_predicates(policy_generics, &derive_output.policy_applicable_generics);
+    let policy_generics = add_predicates(generics.clone(), &derive_output.used_generics, &ident);
+    let policy_generics = add_predicates(
+        policy_generics,
+        &derive_output.policy_applicable_generics,
+        &ident,
+    );
     let (impl_generics, ty_generics, where_clause) = policy_generics.split_for_impl();
     #[cfg(feature = "slog")]
     let slog_base_generics = generics.clone();
     // The merged Debug impl uses the unredacted bounds (a superset of the
     // redacted bounds) because both bodies share one impl.
     let debug_unredacted_generics =
-        add_predicates(generics, &derive_output.debug_unredacted_generics);
+        add_predicates(generics, &derive_output.debug_unredacted_generics, &ident);
     let (
         debug_unredacted_impl_generics,
         debug_unredacted_ty_generics,
@@ -829,33 +933,35 @@ fn expand(input: DeriveInput, kind: DeriveKind) -> Result<TokenStream> {
 
     #[cfg(feature = "slog")]
     let slog_impl = {
+        let record = fresh.fresh("__redactable_record");
+        let key = fresh.fresh("key");
+        let serializer = fresh.fresh("serializer");
+        let redacted = fresh.fresh("__redactable_value");
         let slog_crate = quote! { #crate_root::__private::slog };
-        let mut slog_generics = slog_base_generics;
-        let slog_where_clause = slog_generics.make_where_clause();
-        let self_ty: syn::Type = parse_quote!(#ident #ty_generics);
-        slog_where_clause
-            .predicates
-            .push(parse_quote!(#self_ty: ::core::clone::Clone));
-        // SlogRedactedExt requires Self: Serialize, so we add this bound to enable
-        // generic types to work with slog when their type parameters implement Serialize.
-        slog_where_clause
-            .predicates
-            .push(parse_quote!(#self_ty: #crate_root::__private::serde::Serialize));
-        slog_where_clause
-            .predicates
-            .push(parse_quote!(#self_ty: #crate_root::slog::SlogRedactedExt));
+        let slog_generics = slog_base_generics;
         let (slog_impl_generics, slog_ty_generics, slog_where_clause) =
             slog_generics.split_for_impl();
         quote! {
             impl #slog_impl_generics #slog_crate::Value for #ident #slog_ty_generics #slog_where_clause {
                 fn serialize(
                     &self,
-                    _record: &#slog_crate::Record<'_>,
-                    key: #slog_crate::Key,
-                    serializer: &mut dyn #slog_crate::Serializer,
+                    #record: &#slog_crate::Record<'_>,
+                    #key: #slog_crate::Key,
+                    #serializer: &mut dyn #slog_crate::Serializer,
                 ) -> #slog_crate::Result {
-                    let redacted = #crate_root::slog::SlogRedactedExt::slog_redacted_json(self.clone());
-                    #slog_crate::Value::serialize(&redacted, _record, key, serializer)
+                    // `slog::Value` receives only `&self`. Stable Rust cannot prove
+                    // that cloning or serializing that reference is observation-free
+                    // for arbitrary fields, so generated borrowed logging fails closed.
+                    // Callers that own the value can opt into structured output with
+                    // `SlogRedactedExt::slog_redacted_json`.
+                    let #redacted = #crate_root::__private::generated_redacted_json(
+                        #crate_root::__private::serde_json::Value::String(
+                            <::std::string::String as ::core::convert::From<&str>>::from(
+                                #crate_root::REDACTED_PLACEHOLDER,
+                            ),
+                        ),
+                    );
+                    #slog_crate::Value::serialize(&#redacted, #record, #key, #serializer)
                 }
             }
 
@@ -875,7 +981,6 @@ fn expand(input: DeriveInput, kind: DeriveKind) -> Result<TokenStream> {
     let tracing_impl = quote! {};
 
     let trait_impl = quote! {
-        #policy_guards
         impl #impl_generics #crate_root::RedactableWithMapper for #ident #ty_generics #where_clause {
             fn redact_with<#mapper_type: #crate_root::RedactableMapper>(self, #mapper: &#mapper_type) -> Self {
                 use #crate_root::RedactableWithMapper as _;
@@ -891,19 +996,62 @@ fn expand(input: DeriveInput, kind: DeriveKind) -> Result<TokenStream> {
 
         #tracing_impl
 
-        #dual_pairing_assert
     };
-    Ok(trait_impl)
+    Ok(isolate_generated_items(trait_impl, &fresh))
+}
+
+/// Rejects formatting-only field options when no display derive consumes them.
+fn reject_display_only_field_options(data: &Data) -> Result<()> {
+    fn check_field(field: &syn::Field) -> Result<()> {
+        let options = parse_redactable_field_options(&field.attrs)?;
+        if options.legacy_formatting || options.generated_formatting {
+            let span = field
+                .attrs
+                .iter()
+                .find(|attr| attr.path().is_ident("redactable"))
+                .map_or_else(|| field.span(), Spanned::span);
+            return Err(syn::Error::new(
+                span,
+                "formatting route overrides are only used by `SensitiveDisplay`; use `SensitiveDual` when structural and display redaction are both needed",
+            ));
+        }
+        Ok(())
+    }
+
+    fn check_fields(fields: &Fields) -> Result<()> {
+        for field in fields {
+            check_field(field)?;
+        }
+        Ok(())
+    }
+
+    match data {
+        Data::Struct(data) => check_fields(&data.fields),
+        Data::Enum(data) => {
+            for variant in &data.variants {
+                check_fields(&variant.fields)?;
+            }
+            Ok(())
+        }
+        Data::Union(data) => {
+            for field in &data.fields.named {
+                check_field(field)?;
+            }
+            Ok(())
+        }
+    }
 }
 
 fn derive_unredacted_debug(
     name: &Ident,
     data: &Data,
     _generics: &syn::Generics,
+    formatter: &Ident,
+    fresh: &mut FreshIdentAllocator,
 ) -> Result<DebugOutput> {
     match data {
-        Data::Struct(data) => Ok(derive_unredacted_debug_struct(name, data)),
-        Data::Enum(data) => Ok(derive_unredacted_debug_enum(name, data)),
+        Data::Struct(data) => derive_unredacted_debug_struct(name, data, formatter, fresh),
+        Data::Enum(data) => derive_unredacted_debug_enum(name, data, formatter, fresh),
         Data::Union(u) => Err(syn::Error::new(
             u.union_token.span(),
             "`SensitiveDisplay` cannot be derived for unions",
@@ -911,29 +1059,37 @@ fn derive_unredacted_debug(
     }
 }
 
-fn derive_unredacted_debug_struct(name: &Ident, data: &DataStruct) -> DebugOutput {
-    let formatter = internal_ident("__redactable_f");
-    let debug = internal_ident("__redactable_debug");
+fn derive_unredacted_debug_struct(
+    name: &Ident,
+    data: &DataStruct,
+    formatter: &Ident,
+    fresh: &mut FreshIdentAllocator,
+) -> Result<DebugOutput> {
+    let debug = fresh.fresh("__redactable_debug");
     let mut debug_generics = Vec::new();
     match &data.fields {
         Fields::Named(fields) => {
-            let mut bindings = Vec::new();
+            let mut patterns = Vec::new();
             let mut debug_fields = Vec::new();
             for field in &fields.named {
                 let ident = field
                     .ident
                     .clone()
                     .expect("named field should have identifier");
-                bindings.push(ident.clone());
-                push_debug_predicate(&mut debug_generics, &field.ty);
+                let binding = fresh.fresh_with_ident("__redactable_field_", &ident);
+                patterns.push(quote! { #ident: #binding });
+                let options = parse_redactable_field_options(&field.attrs)?;
+                if !options.recursive || options.legacy_formatting || options.generated_formatting {
+                    push_debug_predicate(&mut debug_generics, &field.ty);
+                }
                 debug_fields.push(quote! {
-                    #debug.field(stringify!(#ident), #ident);
+                    #debug.field(stringify!(#ident), #binding);
                 });
             }
-            DebugOutput {
+            Ok(DebugOutput {
                 body: quote! {
                     match self {
-                        Self { #(#bindings),* } => {
+                        Self { #(#patterns),* } => {
                             let mut #debug = #formatter.debug_struct(stringify!(#name));
                             #(#debug_fields)*
                             #debug.finish()
@@ -941,20 +1097,23 @@ fn derive_unredacted_debug_struct(name: &Ident, data: &DataStruct) -> DebugOutpu
                     }
                 },
                 generics: debug_generics,
-            }
+            })
         }
         Fields::Unnamed(fields) => {
             let mut bindings = Vec::new();
             let mut debug_fields = Vec::new();
             for (index, field) in fields.unnamed.iter().enumerate() {
-                let ident = format_ident!("field_{index}", span = Span::mixed_site());
+                let ident = fresh.fresh(&format!("field_{index}"));
                 bindings.push(ident.clone());
-                push_debug_predicate(&mut debug_generics, &field.ty);
+                let options = parse_redactable_field_options(&field.attrs)?;
+                if !options.recursive || options.legacy_formatting || options.generated_formatting {
+                    push_debug_predicate(&mut debug_generics, &field.ty);
+                }
                 debug_fields.push(quote! {
                     #debug.field(#ident);
                 });
             }
-            DebugOutput {
+            Ok(DebugOutput {
                 body: quote! {
                     match self {
                         Self ( #(#bindings),* ) => {
@@ -965,20 +1124,24 @@ fn derive_unredacted_debug_struct(name: &Ident, data: &DataStruct) -> DebugOutpu
                     }
                 },
                 generics: debug_generics,
-            }
+            })
         }
-        Fields::Unit => DebugOutput {
+        Fields::Unit => Ok(DebugOutput {
             body: quote! {
                 #formatter.write_str(stringify!(#name))
             },
             generics: debug_generics,
-        },
+        }),
     }
 }
 
-fn derive_unredacted_debug_enum(name: &Ident, data: &DataEnum) -> DebugOutput {
-    let formatter = internal_ident("__redactable_f");
-    let debug = internal_ident("__redactable_debug");
+fn derive_unredacted_debug_enum(
+    name: &Ident,
+    data: &DataEnum,
+    formatter: &Ident,
+    fresh: &mut FreshIdentAllocator,
+) -> Result<DebugOutput> {
+    let debug = fresh.fresh("__redactable_debug");
     let mut debug_generics = Vec::new();
     let mut debug_arms = Vec::new();
     for variant in &data.variants {
@@ -991,21 +1154,28 @@ fn derive_unredacted_debug_enum(name: &Ident, data: &DataEnum) -> DebugOutput {
                 });
             }
             Fields::Named(fields) => {
-                let mut bindings = Vec::new();
+                let mut patterns = Vec::new();
                 let mut debug_fields = Vec::new();
                 for field in &fields.named {
                     let ident = field
                         .ident
                         .clone()
                         .expect("named field should have identifier");
-                    bindings.push(ident.clone());
-                    push_debug_predicate(&mut debug_generics, &field.ty);
+                    let binding = fresh.fresh_with_ident("__redactable_field_", &ident);
+                    patterns.push(quote! { #ident: #binding });
+                    let options = parse_redactable_field_options(&field.attrs)?;
+                    if !options.recursive
+                        || options.legacy_formatting
+                        || options.generated_formatting
+                    {
+                        push_debug_predicate(&mut debug_generics, &field.ty);
+                    }
                     debug_fields.push(quote! {
-                        #debug.field(stringify!(#ident), #ident);
+                        #debug.field(stringify!(#ident), #binding);
                     });
                 }
                 debug_arms.push(quote! {
-                    #name::#variant_ident { #(#bindings),* } => {
+                    #name::#variant_ident { #(#patterns),* } => {
                         let mut #debug = #formatter.debug_struct(#debug_name);
                         #(#debug_fields)*
                         #debug.finish()
@@ -1016,9 +1186,15 @@ fn derive_unredacted_debug_enum(name: &Ident, data: &DataEnum) -> DebugOutput {
                 let mut bindings = Vec::new();
                 let mut debug_fields = Vec::new();
                 for (index, field) in fields.unnamed.iter().enumerate() {
-                    let ident = format_ident!("field_{index}", span = Span::mixed_site());
+                    let ident = fresh.fresh(&format!("field_{index}"));
                     bindings.push(ident.clone());
-                    push_debug_predicate(&mut debug_generics, &field.ty);
+                    let options = parse_redactable_field_options(&field.attrs)?;
+                    if !options.recursive
+                        || options.legacy_formatting
+                        || options.generated_formatting
+                    {
+                        push_debug_predicate(&mut debug_generics, &field.ty);
+                    }
                     debug_fields.push(quote! {
                         #debug.field(#ident);
                     });
@@ -1042,10 +1218,10 @@ fn derive_unredacted_debug_enum(name: &Ident, data: &DataEnum) -> DebugOutput {
             }
         }
     };
-    DebugOutput {
+    Ok(DebugOutput {
         body,
         generics: debug_generics,
-    }
+    })
 }
 
 #[cfg(all(test, feature = "slog"))]
@@ -1055,4 +1231,15 @@ mod generated_dependency_tests;
 #[test]
 fn structural_generated_dependency_roots() {
     generated_dependency_tests::run_structural_generated_dependency_roots();
+}
+
+#[cfg(test)]
+mod crate_alias_tests {
+    use super::dependency_crate_ident;
+
+    #[test]
+    fn keyword_dependency_alias_becomes_raw_identifier() {
+        assert_eq!(dependency_crate_ident("type").to_string(), "r#type");
+        assert_eq!(dependency_crate_ident("renamed").to_string(), "renamed");
+    }
 }

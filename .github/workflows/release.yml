@@ -8,56 +8,34 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
+  verify:
+    uses: ./.github/workflows/verify.yml
+
   publish:
     name: Publish crates
+    needs: verify
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+      - name: Checkout exact verified commit
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
-          components: rustfmt, clippy
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Install Rust 1.97.0
+        uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88 # master
+        with:
+          toolchain: 1.97.0
 
       - name: Cache cargo
-        uses: Swatinem/rust-cache@v2
+        uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
 
-      - name: Install cargo-audit
-        run: cargo install cargo-audit --locked
-
-      - name: Install cargo-deny
-        run: cargo install cargo-deny --locked
-
-      - name: Format
-        run: cargo fmt --all -- --check
-
-      - name: Clippy
-        run: cargo clippy --all --all-targets --all-features -- -D warnings -D rust-2018-idioms -D rust-2021-compatibility -A deprecated -A dead-code
-
-      - name: Audit dependencies
-        run: cargo audit
-
-      - name: Deny policy check
-        run: cargo deny check
-
-      - name: Tests
-        run: cargo test --all-features --all-targets
-
-      - name: Publish redactable-derive
+      - name: Package, inspect, and publish both crates
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
-        run: cargo publish -p redactable-derive
-
-      - name: Wait for crates.io index update
-        run: |
-          echo "Waiting for crates.io index to update (crates.io index typically updates within 1-2 minutes)..."
-          # Wait 90 seconds to allow crates.io index to update
-          sleep 90
-          echo "Proceeding with redactable publish..."
-
-      - name: Publish redactable
-        env:
-          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
-        run: cargo publish -p redactable
+        run: .github/scripts/publish-crates.sh

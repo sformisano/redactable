@@ -58,6 +58,40 @@ mod sensitive_display {
     }
 
     #[test]
+    fn rejects_custom_policy_ref_without_formatting_companion() {
+        let t = trybuild::TestCases::new();
+        if cfg!(feature = "slog") {
+            t.compile_fail(
+                "tests/ui/sensitive_display_custom_policy_ref_missing_formatting_companion_slog.rs",
+            );
+        } else {
+            t.compile_fail(
+                "tests/ui/sensitive_display_custom_policy_ref_missing_formatting_companion_default.rs",
+            );
+        }
+    }
+
+    #[test]
+    fn rejects_legacy_formatting_without_policy() {
+        let t = trybuild::TestCases::new();
+        t.compile_fail("tests/ui/sensitive_display_legacy_formatting_without_policy.rs");
+    }
+
+    #[test]
+    fn accepts_combined_recursive_legacy_formatting() {
+        let t = trybuild::TestCases::new();
+        t.pass("tests/ui/sensitive_display_combined_recursive_legacy_ok.rs");
+        t.pass("tests/ui/sensitive_dual_combined_recursive_legacy_ok.rs");
+    }
+
+    #[test]
+    fn rejects_duplicate_or_unknown_redactable_options() {
+        let t = trybuild::TestCases::new();
+        t.compile_fail("tests/ui/sensitive_display_duplicate_legacy_formatting_rejected.rs");
+        t.compile_fail("tests/ui/sensitive_display_unknown_redactable_option_rejected.rs");
+    }
+
+    #[test]
     fn accepts_complete_type_bounds_for_all_data_shapes() {
         let t = trybuild::TestCases::new();
         t.pass("tests/ui/phase01_sensitive_display_shapes_complete_type_bounds_ok.rs");
@@ -67,6 +101,22 @@ mod sensitive_display {
     fn accepts_fill_chars_that_look_dynamic_after_alignment() {
         let t = trybuild::TestCases::new();
         t.pass("tests/ui/sensitive_display_fill_chars_ok.rs");
+    }
+
+    #[test]
+    fn accepts_unicode_named_fields() {
+        let t = trybuild::TestCases::new();
+        t.pass("tests/ui/sensitive_display_unicode_fields_ok.rs");
+    }
+
+    #[test]
+    fn rejects_real_nonzero_policy_by_trait_resolution() {
+        let t = trybuild::TestCases::new();
+        if cfg!(feature = "slog") {
+            t.compile_fail("tests/ui/sensitive_display_nonzero_secret_rejected_slog.rs");
+        } else {
+            t.compile_fail("tests/ui/sensitive_display_nonzero_secret_rejected.rs");
+        }
     }
 
     #[test]

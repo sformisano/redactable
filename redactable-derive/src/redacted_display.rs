@@ -9,18 +9,27 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use proc_macro2::{Ident, Span, TokenStream};
-use quote::{format_ident, quote, quote_spanned};
+use quote::{quote, quote_spanned};
 use syn::{Attribute, Data, DataEnum, DataStruct, Fields, LitStr, Result, spanned::Spanned};
 
 use crate::{
     crate_path, crate_root,
+    fresh_ident::{FreshIdentAllocator, canonical_name},
     generics::{
-        push_debug_predicate, push_display_predicate, push_policy_output_debug_predicate,
-        push_policy_output_display_predicate, push_policy_ref_predicate,
-        push_redacted_display_predicate,
+        OwnerTypeParameterUsage, owner_type_parameter_usage, policy_is_owner_type_parameter,
+        push_debug_predicate, push_direct_marker_debug_formatting_predicates,
+        push_direct_marker_display_formatting_predicates, push_display_predicate,
+        push_generated_policy_debug_formatting_predicate,
+        push_generated_policy_display_formatting_predicate,
+        push_legacy_policy_debug_formatting_predicates,
+        push_legacy_policy_display_formatting_predicates, push_policy_debug_formatting_predicate,
+        push_policy_display_formatting_predicate, push_redacted_display_predicate,
+        references_explicit_policy_applicable_ref,
     },
-    strategy::{Strategy, parse_field_strategy, reject_variant_sensitivity_attrs},
-    types::is_nonzero_type,
+    strategy::{
+        Strategy, parse_field_strategy, parse_redactable_field_options,
+        reject_variant_sensitivity_attrs,
+    },
 };
 
 pub(crate) struct RedactedDisplayOutput {
@@ -53,8 +62,12 @@ struct Placeholder {
 
 struct FieldInfo<'a> {
     ident: Ident,
+    binding: Ident,
     ty: &'a syn::Type,
     strategy: Strategy,
+    recursive_bound_override: bool,
+    legacy_formatting_override: bool,
+    generated_formatting_override: bool,
     span: Span,
 }
 
@@ -71,10 +84,12 @@ pub(crate) fn derive_redacted_display(
     data: &Data,
     attrs: &[Attribute],
     generics: &syn::Generics,
+    formatter: &Ident,
+    fresh: &mut FreshIdentAllocator,
 ) -> Result<RedactedDisplayOutput> {
     match data {
-        Data::Struct(data) => derive_struct_display(name, data, attrs, generics),
-        Data::Enum(data) => derive_enum_display(name, data, generics),
+        Data::Struct(data) => derive_struct_display(name, data, attrs, generics, formatter, fresh),
+        Data::Enum(data) => derive_enum_display(name, data, generics, formatter, fresh),
         Data::Union(u) => Err(syn::Error::new(
             u.union_token.span(),
             "`SensitiveDisplay` cannot be derived for unions",
@@ -86,16 +101,27 @@ fn derive_struct_display(
     name: &Ident,
     data: &DataStruct,
     attrs: &[Attribute],
-    _generics: &syn::Generics,
+    generics: &syn::Generics,
+    formatter: &Ident,
+    fresh: &mut FreshIdentAllocator,
 ) -> Result<RedactedDisplayOutput> {
     let template = template_from_attrs(attrs, name.span())?;
-    let fields = build_fields_from_syn(&data.fields)?;
-    let format_args = build_format_args(&template, &fields)?;
+    let fields = build_fields_from_syn(&data.fields, fresh)?;
+    let format_args = build_format_args(&template, &fields, generics, formatter, fresh)?;
     let format_prelude = format_args.prelude.clone();
-    let bindings = fields.iter().map(|field| field.ident.clone());
     let pattern = match data.fields {
-        Fields::Named(_) => quote! { Self { #(#bindings),* } },
-        Fields::Unnamed(_) => quote! { Self ( #(#bindings),* ) },
+        Fields::Named(_) => {
+            let patterns = fields.iter().map(|field| {
+                let ident = &field.ident;
+                let binding = &field.binding;
+                quote! { #ident: #binding }
+            });
+            quote! { Self { #(#patterns),* } }
+        }
+        Fields::Unnamed(_) => {
+            let bindings = fields.iter().map(|field| &field.binding);
+            quote! { Self ( #(#bindings),* ) }
+        }
         Fields::Unit => quote! { Self },
     };
     let body = quote! {
@@ -118,7 +144,9 @@ fn derive_struct_display(
 fn derive_enum_display(
     name: &Ident,
     data: &DataEnum,
-    _generics: &syn::Generics,
+    generics: &syn::Generics,
+    formatter: &Ident,
+    fresh: &mut FreshIdentAllocator,
 ) -> Result<RedactedDisplayOutput> {
     let mut arms = Vec::new();
     let mut display_generics = Vec::new();
@@ -129,14 +157,23 @@ fn derive_enum_display(
     for variant in &data.variants {
         reject_variant_sensitivity_attrs(&variant.attrs)?;
         let template = template_from_attrs(&variant.attrs, variant.ident.span())?;
-        let fields = build_fields_from_syn(&variant.fields)?;
-        let format_args = build_format_args(&template, &fields)?;
+        let fields = build_fields_from_syn(&variant.fields, fresh)?;
+        let format_args = build_format_args(&template, &fields, generics, formatter, fresh)?;
         let format_prelude = format_args.prelude.clone();
-        let bindings = fields.iter().map(|field| field.ident.clone());
         let variant_ident = &variant.ident;
         let pattern = match &variant.fields {
-            Fields::Named(_) => quote! { #name::#variant_ident { #(#bindings),* } },
-            Fields::Unnamed(_) => quote! { #name::#variant_ident ( #(#bindings),* ) },
+            Fields::Named(_) => {
+                let patterns = fields.iter().map(|field| {
+                    let ident = &field.ident;
+                    let binding = &field.binding;
+                    quote! { #ident: #binding }
+                });
+                quote! { #name::#variant_ident { #(#patterns),* } }
+            }
+            Fields::Unnamed(_) => {
+                let bindings = fields.iter().map(|field| &field.binding);
+                quote! { #name::#variant_ident ( #(#bindings),* ) }
+            }
             Fields::Unit => quote! { #name::#variant_ident },
         };
         arms.push(quote! {
@@ -174,68 +211,113 @@ fn derive_enum_display(
     })
 }
 
-fn build_fields_from_syn(fields: &Fields) -> Result<Vec<FieldInfo<'_>>> {
+fn build_fields_from_syn<'a>(
+    fields: &'a Fields,
+    fresh: &mut FreshIdentAllocator,
+) -> Result<Vec<FieldInfo<'a>>> {
     match fields {
         Fields::Named(fields) => fields
             .named
             .iter()
             .map(|field| {
                 let strategy = parse_field_strategy(&field.attrs)?;
-                validate_policy_type(&field.ty, &strategy, field.span())?;
+                let redactable_options = parse_redactable_field_options(&field.attrs)?;
+                if redactable_options.legacy_formatting
+                    && !matches!(strategy, Strategy::Policy(_))
+                {
+                    return Err(syn::Error::new(
+                        field.span(),
+                        "`#[redactable(legacy_formatting)]` requires `#[sensitive(Policy)]` on the same field",
+                    ));
+                }
+                if redactable_options.generated_formatting
+                    && !matches!(strategy, Strategy::Policy(_))
+                {
+                    return Err(syn::Error::new(
+                        field.span(),
+                        "`#[redactable(generated_formatting)]` requires `#[sensitive(Policy)]` on the same field",
+                    ));
+                }
+                if redactable_options.legacy_formatting && redactable_options.generated_formatting {
+                    return Err(syn::Error::new(
+                        field.span(),
+                        "`legacy_formatting` and `generated_formatting` are mutually exclusive",
+                    ));
+                }
                 let ident = field
                     .ident
                     .clone()
                     .expect("named field should have identifier");
+                let binding = fresh.fresh_with_ident("__redactable_field_", &ident);
                 Ok(FieldInfo {
                     ident,
+                    binding,
                     ty: &field.ty,
                     strategy,
+                    recursive_bound_override: redactable_options.recursive,
+                    legacy_formatting_override: redactable_options.legacy_formatting,
+                    generated_formatting_override: redactable_options.generated_formatting,
                     span: field.span(),
                 })
             })
             .collect(),
-        Fields::Unnamed(fields) => fields
-            .unnamed
-            .iter()
-            .enumerate()
-            .map(|(index, field)| {
+        Fields::Unnamed(fields) => {
+            let mut output = Vec::with_capacity(fields.unnamed.len());
+            for (index, field) in fields.unnamed.iter().enumerate() {
                 let strategy = parse_field_strategy(&field.attrs)?;
-                validate_policy_type(&field.ty, &strategy, field.span())?;
-                Ok(FieldInfo {
-                    ident: format_ident!("field_{index}", span = Span::mixed_site()),
+                let redactable_options = parse_redactable_field_options(&field.attrs)?;
+                if redactable_options.legacy_formatting
+                    && !matches!(strategy, Strategy::Policy(_))
+                {
+                    return Err(syn::Error::new(
+                        field.span(),
+                        "`#[redactable(legacy_formatting)]` requires `#[sensitive(Policy)]` on the same field",
+                    ));
+                }
+                if redactable_options.generated_formatting
+                    && !matches!(strategy, Strategy::Policy(_))
+                {
+                    return Err(syn::Error::new(
+                        field.span(),
+                        "`#[redactable(generated_formatting)]` requires `#[sensitive(Policy)]` on the same field",
+                    ));
+                }
+                if redactable_options.legacy_formatting && redactable_options.generated_formatting {
+                    return Err(syn::Error::new(
+                        field.span(),
+                        "`legacy_formatting` and `generated_formatting` are mutually exclusive",
+                    ));
+                }
+                let binding = fresh.fresh(&format!("field_{index}"));
+                output.push(FieldInfo {
+                    ident: binding.clone(),
+                    binding,
                     ty: &field.ty,
                     strategy,
+                    recursive_bound_override: redactable_options.recursive,
+                    legacy_formatting_override: redactable_options.legacy_formatting,
+                    generated_formatting_override: redactable_options.generated_formatting,
                     span: field.span(),
-                })
-            })
-            .collect(),
+                });
+            }
+            Ok(output)
+        }
         Fields::Unit => Ok(Vec::new()),
     }
 }
 
-fn validate_policy_type(
-    ty: &syn::Type,
-    strategy: &Strategy,
-    span: proc_macro2::Span,
-) -> Result<()> {
-    let Strategy::Policy(_policy) = strategy else {
-        return Ok(());
-    };
-    if is_nonzero_type(ty) {
-        return Err(syn::Error::new(
-            span,
-            "NonZero integer fields cannot use #[sensitive(Policy)] because redaction \
-             may need to produce zero; use a nullable scalar or a policy-aware wrapper",
-        ));
-    }
-    Ok(())
-}
-
 #[allow(clippy::too_many_lines)]
-fn build_format_args(template: &LitStr, fields: &[FieldInfo<'_>]) -> Result<FormatArgsOutput> {
+fn build_format_args(
+    template: &LitStr,
+    fields: &[FieldInfo<'_>],
+    generics: &syn::Generics,
+    formatter: &Ident,
+    fresh: &mut FreshIdentAllocator,
+) -> Result<FormatArgsOutput> {
     let placeholders = parse_placeholders(template)?;
     validate_positional_placeholders(&placeholders)?;
-    let mut named_args: BTreeMap<String, (Ident, &'_ FieldInfo<'_>, FormatMode)> = BTreeMap::new();
+    let mut named_args: BTreeMap<String, (Ident, Ident, &'_ FieldInfo<'_>, FormatMode)> =
+        BTreeMap::new();
     let mut positional_args: Vec<Option<(Ident, &'_ FieldInfo<'_>, FormatMode)>> = Vec::new();
     let mut display_generics = Vec::new();
     let mut debug_generics = Vec::new();
@@ -247,20 +329,22 @@ fn build_format_args(template: &LitStr, fields: &[FieldInfo<'_>]) -> Result<Form
             PlaceholderKey::Named(name) => {
                 let field = fields
                     .iter()
-                    .find(|field| field.ident == name)
+                    .find(|field| canonical_name(&field.ident) == canonical_name(&name))
                     .ok_or_else(|| {
                         syn::Error::new(
                             placeholder.span,
                             format!("unknown field `{name}` in format string"),
                         )
                     })?;
-                let arg_ident = format_ident!("__redacted_{}", name, span = Span::mixed_site());
-                let entry = named_args.entry(name.to_string()).or_insert((
-                    arg_ident,
-                    field,
-                    placeholder.mode,
-                ));
-                entry.2 = merge_mode(entry.2, placeholder.mode);
+                let entry = named_args.entry(canonical_name(&name)).or_insert_with(|| {
+                    (
+                        fresh.fresh_with_ident("__redacted_", &field.ident),
+                        field.ident.clone(),
+                        field,
+                        placeholder.mode,
+                    )
+                });
+                entry.3 = merge_mode(entry.3, placeholder.mode);
             }
             PlaceholderKey::Index(index) => {
                 if positional_args.len() <= index {
@@ -272,7 +356,7 @@ fn build_format_args(template: &LitStr, fields: &[FieldInfo<'_>]) -> Result<Form
                         format!("unknown positional field index {index} in format string"),
                     )
                 })?;
-                let arg_ident = format_ident!("__redacted_{index}", span = Span::mixed_site());
+                let arg_ident = fresh.fresh(&format!("__redacted_{index}"));
                 let entry =
                     positional_args[index].get_or_insert((arg_ident, field, placeholder.mode));
                 entry.2 = merge_mode(entry.2, placeholder.mode);
@@ -284,13 +368,12 @@ fn build_format_args(template: &LitStr, fields: &[FieldInfo<'_>]) -> Result<Form
     let mut positional_idents = Vec::new();
     let mut named_pairs = Vec::new();
 
-    for (name, (arg_ident, field, mode)) in named_args {
+    for (_, (arg_ident, name_ident, field, mode)) in named_args {
         let expr = redacted_expr_for_field(field);
-        let wrap_policy_output = should_wrap_policy_output(field);
-        let policy_format_path = crate_path("PolicyRedactedFormatterRef");
         collect_bounds(
             field,
             mode,
+            generics,
             &mut display_generics,
             &mut debug_generics,
             &mut policy_ref_generics,
@@ -299,22 +382,15 @@ fn build_format_args(template: &LitStr, fields: &[FieldInfo<'_>]) -> Result<Form
         prelude_bindings.push(quote! {
             let #arg_ident = #expr;
         });
-        if wrap_policy_output {
-            prelude_bindings.push(quote! {
-                let #arg_ident = #policy_format_path::new(&#arg_ident);
-            });
-        }
-        let name_ident = format_ident!("{name}");
         named_pairs.push(quote! { #name_ident = #arg_ident });
     }
 
     for (arg_ident, field, mode) in positional_args.into_iter().flatten() {
         let expr = redacted_expr_for_field(field);
-        let wrap_policy_output = should_wrap_policy_output(field);
-        let policy_format_path = crate_path("PolicyRedactedFormatterRef");
         collect_bounds(
             field,
             mode,
+            generics,
             &mut display_generics,
             &mut debug_generics,
             &mut policy_ref_generics,
@@ -323,11 +399,6 @@ fn build_format_args(template: &LitStr, fields: &[FieldInfo<'_>]) -> Result<Form
         prelude_bindings.push(quote! {
             let #arg_ident = #expr;
         });
-        if wrap_policy_output {
-            prelude_bindings.push(quote! {
-                let #arg_ident = #policy_format_path::new(&#arg_ident);
-            });
-        }
         positional_idents.push(arg_ident);
     }
 
@@ -340,7 +411,6 @@ fn build_format_args(template: &LitStr, fields: &[FieldInfo<'_>]) -> Result<Form
         }
     };
 
-    let formatter = crate::internal_ident("__redactable_f");
     let prelude = quote! {
         #(#prelude_bindings)*
         #formatter.write_fmt(#format_args)
@@ -355,15 +425,8 @@ fn build_format_args(template: &LitStr, fields: &[FieldInfo<'_>]) -> Result<Form
     })
 }
 
-fn should_wrap_policy_output(field: &FieldInfo<'_>) -> bool {
-    match field.strategy {
-        Strategy::Policy(_) => true,
-        Strategy::WalkDefault | Strategy::NotSensitive => false,
-    }
-}
-
 fn redacted_expr_for_field(field: &FieldInfo<'_>) -> TokenStream {
-    let ident = &field.ident;
+    let ident = &field.binding;
     let span = field.span;
     let crate_root = crate_root();
     let redacted_display_path = crate_path("RedactableWithFormatter");
@@ -377,24 +440,71 @@ fn redacted_expr_for_field(field: &FieldInfo<'_>) -> TokenStream {
         },
         Strategy::Policy(policy) => {
             let policy = policy.clone();
-            quote_spanned! { span =>
-                <#field_ty as #crate_root::__private::PolicyFieldRef<#policy>>::apply_field_ref(
-                    #ident,
-                    &#crate_root::__private::PolicyMapper,
-                )
+            if field.legacy_formatting_override {
+                quote_spanned! { span =>
+                    #crate_root::__private::legacy_policy_formatting_ref::<#policy, _>(#ident)
+                }
+            } else {
+                quote_spanned! { span =>
+                    {
+                        use #crate_root::__private::PolicyFormattingDispatch as _;
+                        #crate_root::__private::policy_formatting_probe(#ident)
+                            .redactable_policy_formatting::<#policy>()
+                    }
+                }
             }
         }
     }
 }
 
+#[allow(clippy::too_many_lines)]
 fn collect_bounds(
     field: &FieldInfo<'_>,
     mode: FormatMode,
+    generics: &syn::Generics,
     display_generics: &mut Vec<syn::WherePredicate>,
     debug_generics: &mut Vec<syn::WherePredicate>,
     policy_ref_generics: &mut Vec<syn::WherePredicate>,
     nested_generics: &mut Vec<syn::WherePredicate>,
 ) {
+    if let Strategy::Policy(policy) = &field.strategy
+        && field.legacy_formatting_override
+    {
+        match mode {
+            FormatMode::Display => {
+                push_legacy_policy_display_formatting_predicates(
+                    policy_ref_generics,
+                    field.ty,
+                    policy,
+                );
+            }
+            FormatMode::Debug => {
+                push_legacy_policy_debug_formatting_predicates(
+                    policy_ref_generics,
+                    field.ty,
+                    policy,
+                );
+            }
+            FormatMode::Both => {
+                push_legacy_policy_display_formatting_predicates(
+                    policy_ref_generics,
+                    field.ty,
+                    policy,
+                );
+                push_legacy_policy_debug_formatting_predicates(
+                    policy_ref_generics,
+                    field.ty,
+                    policy,
+                );
+            }
+        }
+        return;
+    }
+
+    if field.recursive_bound_override {
+        return;
+    }
+
     match &field.strategy {
         Strategy::WalkDefault => {
             push_redacted_display_predicate(nested_generics, field.ty);
@@ -407,21 +517,141 @@ fn collect_bounds(
                 push_debug_predicate(debug_generics, field.ty);
             }
         },
-        Strategy::Policy(policy) => {
-            push_policy_ref_predicate(policy_ref_generics, field.ty, policy);
-            match mode {
-                FormatMode::Display => {
-                    push_policy_output_display_predicate(display_generics, field.ty, policy);
-                }
-                FormatMode::Debug => {
-                    push_policy_output_debug_predicate(debug_generics, field.ty, policy);
-                }
-                FormatMode::Both => {
-                    push_policy_output_display_predicate(display_generics, field.ty, policy);
-                    push_policy_output_debug_predicate(debug_generics, field.ty, policy);
+        Strategy::Policy(policy) => match owner_type_parameter_usage(generics, field.ty) {
+            OwnerTypeParameterUsage::Bare | OwnerTypeParameterUsage::Composite
+                if references_explicit_policy_applicable_ref(generics, field.ty) =>
+            {
+                match mode {
+                    FormatMode::Display => {
+                        push_direct_marker_display_formatting_predicates(
+                            policy_ref_generics,
+                            field.ty,
+                        );
+                        push_policy_display_formatting_predicate(
+                            policy_ref_generics,
+                            field.ty,
+                            policy,
+                        );
+                    }
+                    FormatMode::Debug => {
+                        push_direct_marker_debug_formatting_predicates(
+                            policy_ref_generics,
+                            field.ty,
+                        );
+                        push_policy_debug_formatting_predicate(
+                            policy_ref_generics,
+                            field.ty,
+                            policy,
+                        );
+                    }
+                    FormatMode::Both => {
+                        push_direct_marker_display_formatting_predicates(
+                            policy_ref_generics,
+                            field.ty,
+                        );
+                        push_direct_marker_debug_formatting_predicates(
+                            policy_ref_generics,
+                            field.ty,
+                        );
+                        push_policy_display_formatting_predicate(
+                            policy_ref_generics,
+                            field.ty,
+                            policy,
+                        );
+                        push_policy_debug_formatting_predicate(
+                            policy_ref_generics,
+                            field.ty,
+                            policy,
+                        );
+                    }
                 }
             }
-        }
+            OwnerTypeParameterUsage::Bare | OwnerTypeParameterUsage::Composite => match mode {
+                FormatMode::Display => push_generated_policy_display_formatting_predicate(
+                    policy_ref_generics,
+                    field.ty,
+                    policy,
+                ),
+                FormatMode::Debug => push_generated_policy_debug_formatting_predicate(
+                    policy_ref_generics,
+                    field.ty,
+                    policy,
+                ),
+                FormatMode::Both => {
+                    push_generated_policy_display_formatting_predicate(
+                        policy_ref_generics,
+                        field.ty,
+                        policy,
+                    );
+                    push_generated_policy_debug_formatting_predicate(
+                        policy_ref_generics,
+                        field.ty,
+                        policy,
+                    );
+                }
+            },
+            // The nominal probe in the generated expression lets rustc select
+            // the concrete field capability after aliases and renamed imports
+            // are resolved. Constrain that resolved kind-level capability;
+            // classifying a concrete field from its Syn spelling makes aliases
+            // observably different from the type they name.
+            OwnerTypeParameterUsage::None
+                if policy_is_owner_type_parameter(generics, policy)
+                    && field.generated_formatting_override =>
+            {
+                match mode {
+                    FormatMode::Display => push_generated_policy_display_formatting_predicate(
+                        policy_ref_generics,
+                        field.ty,
+                        policy,
+                    ),
+                    FormatMode::Debug => push_generated_policy_debug_formatting_predicate(
+                        policy_ref_generics,
+                        field.ty,
+                        policy,
+                    ),
+                    FormatMode::Both => {
+                        push_generated_policy_display_formatting_predicate(
+                            policy_ref_generics,
+                            field.ty,
+                            policy,
+                        );
+                        push_generated_policy_debug_formatting_predicate(
+                            policy_ref_generics,
+                            field.ty,
+                            policy,
+                        );
+                    }
+                }
+            }
+            OwnerTypeParameterUsage::None if policy_is_owner_type_parameter(generics, policy) => {
+                match mode {
+                    FormatMode::Display => push_policy_display_formatting_predicate(
+                        policy_ref_generics,
+                        field.ty,
+                        policy,
+                    ),
+                    FormatMode::Debug => push_policy_debug_formatting_predicate(
+                        policy_ref_generics,
+                        field.ty,
+                        policy,
+                    ),
+                    FormatMode::Both => {
+                        push_policy_display_formatting_predicate(
+                            policy_ref_generics,
+                            field.ty,
+                            policy,
+                        );
+                        push_policy_debug_formatting_predicate(
+                            policy_ref_generics,
+                            field.ty,
+                            policy,
+                        );
+                    }
+                }
+            }
+            OwnerTypeParameterUsage::None => {}
+        },
     }
 }
 
@@ -563,13 +793,8 @@ fn parse_placeholders(template: &LitStr) -> Result<Vec<Placeholder>> {
                         .parse::<usize>()
                         .map_err(|_| syn::Error::new(template.span(), "invalid index"))?;
                     PlaceholderKey::Index(index)
-                } else if is_ident(arg_part) {
-                    PlaceholderKey::Named(Ident::new(arg_part, template.span()))
                 } else {
-                    return Err(syn::Error::new(
-                        template.span(),
-                        format!("unsupported format placeholder `{arg_part}`"),
-                    ));
+                    PlaceholderKey::Named(parse_placeholder_ident(arg_part, template.span())?)
                 };
                 placeholders.push(Placeholder {
                     key,
@@ -592,6 +817,12 @@ fn parse_placeholders(template: &LitStr) -> Result<Vec<Placeholder>> {
     }
 
     Ok(placeholders)
+}
+
+fn parse_placeholder_ident(value: &str, span: Span) -> Result<Ident> {
+    syn::parse_str::<Ident>(value)
+        .or_else(|_| syn::parse_str::<Ident>(&format!("r#{value}")))
+        .map_err(|_| syn::Error::new(span, format!("unsupported format placeholder `{value}`")))
 }
 
 fn format_mode_from_spec(spec_part: &str, span: Span) -> Result<FormatMode> {
@@ -648,15 +879,6 @@ fn is_unsupported_debug_specifier(spec: &str) -> bool {
     };
     let spec = spec.trim_end();
     spec.ends_with('x') || spec.ends_with('X')
-}
-
-fn is_ident(value: &str) -> bool {
-    let mut chars = value.chars();
-    match chars.next() {
-        Some(ch) if ch == '_' || ch.is_ascii_alphabetic() => {}
-        _ => return false,
-    }
-    chars.all(|ch| ch == '_' || ch.is_ascii_alphanumeric())
 }
 
 #[cfg(test)]

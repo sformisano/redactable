@@ -7,11 +7,33 @@
 //! test file could never cover that branch because the whole test crate is
 //! compiled with `cfg(test)`.
 
-use redactable_test_fixtures::{FixtureError, FixtureEvent, FixtureUser};
+use redactable::{RedactableWithFormatter, ToRedactedOutput};
+use redactable_test_fixtures::{FixtureError, FixtureEvent, FixtureUser, GenericDualFixture};
 
 /// True when `redactable` itself was built with the `testing` feature, which
 /// flips derived `Debug` to raw output by design.
 const TESTING_MODE: bool = cfg!(feature = "testing");
+
+#[test]
+fn genuine_generic_dual_uses_production_redaction_paths() {
+    const CANARY: &str = "generic-dual-production-canary-74b1";
+    let value = GenericDualFixture {
+        label: String::from("event"),
+        secret: String::from(CANARY),
+    };
+
+    let display = value.redacted_display().to_string();
+    let output = format!("{:?}", value.to_redacted_output());
+    assert!(display.contains("[REDACTED]"));
+    assert!(!display.contains(CANARY));
+    assert!(!output.contains(CANARY));
+
+    let debug = format!("{value:?}");
+    if !TESTING_MODE {
+        assert!(debug.contains("[REDACTED]"));
+        assert!(!debug.contains(CANARY));
+    }
+}
 
 #[test]
 fn sensitive_debug_redacts_in_production_builds() {

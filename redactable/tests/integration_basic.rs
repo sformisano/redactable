@@ -12,7 +12,8 @@ use std::collections::{BTreeMap, HashMap};
 use redactable::{
     NotSensitive, NotSensitiveDebugExt, NotSensitiveDisplayExt, NotSensitiveExt, Redactable,
     RedactedOutput, RedactedOutputExt, RedactionPolicy, Secret, Sensitive, SensitiveDisplay,
-    SensitiveValue, SensitiveWithPolicy, TextRedactionPolicy, ToRedactedOutput, Token,
+    SensitiveValue, SensitiveWithPolicy, TextPolicyKind, TextRedactionPolicy, ToRedactedOutput,
+    Token,
 };
 
 fn log_redacted<T: ToRedactedOutput>(value: &T) -> RedactedOutput {
@@ -358,15 +359,15 @@ mod sensitive_display_derive {
 
     // Test that a type can derive both Sensitive and SensitiveDisplay when it needs
     // structural traversal (for use inside Sensitive containers) AND display formatting.
-    // `#[sensitive(dual)]` coordinates both derives: Sensitive skips Debug (SensitiveDisplay
-    // provides it), SensitiveDisplay skips slog/tracing (Sensitive provides them).
+    // `SensitiveDual` authenticates and generates both halves in one expansion.
     mod dual_derive {
-        use redactable::{Redactable, RedactableWithFormatter, Sensitive, SensitiveDisplay, Token};
+        use redactable::{
+            Redactable, RedactableWithFormatter, Sensitive, SensitiveDisplay, SensitiveDual, Token,
+        };
 
         /// {0}
-        #[derive(Clone, Sensitive, SensitiveDisplay)]
+        #[derive(Clone, SensitiveDual)]
         #[cfg_attr(feature = "slog", derive(serde::Serialize))]
-        #[sensitive(dual)]
         struct Email(#[sensitive(Token)] String);
 
         #[test]
@@ -447,6 +448,8 @@ mod custom_policy {
         struct InternalId;
 
         impl RedactionPolicy for InternalId {
+            type Kind = TextPolicyKind;
+
             fn policy() -> TextRedactionPolicy {
                 TextRedactionPolicy::keep_last(2)
             }
@@ -894,6 +897,8 @@ mod external_types {
         struct ExternalTypePolicy;
 
         impl RedactionPolicy for ExternalTypePolicy {
+            type Kind = TextPolicyKind;
+
             fn policy() -> TextRedactionPolicy {
                 TextRedactionPolicy::keep_last(2)
             }

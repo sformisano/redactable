@@ -3,9 +3,9 @@ members = ["redactable", "redactable-derive", "test-fixtures"]
 resolver = "2"
 
 [workspace.package]
-version = "0.10.1"
+version = "0.11.0"
 edition = "2024"
-rust-version = "1.93"
+rust-version = "1.97"
 license = "MIT"
 repository = "https://github.com/sformisano/redactable"
 documentation = "https://docs.rs/redactable"
@@ -15,7 +15,7 @@ authors = ["Salvatore Formisano"]
 [workspace.dependencies]
 proc-macro2 = "1.0"
 quote = "1.0"
-syn = { version = "2.0", features = ["extra-traits"] }
+syn = { version = "2.0", features = ["extra-traits", "visit"] }
 
 [patch.crates-io]
 redactable-derive = { path = "redactable-derive" }

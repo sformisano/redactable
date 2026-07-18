@@ -1,0 +1,9 @@
+error[E0599]: the type `BTreeMap<RefCell<String>, Record>` may contain interior mutability and a reference may not be safely transferable across a catch_unwind boundary
+  --> tests/ui/redacted_output_borrow_sensitive_map_key_rejected.rs:14:21
+   |
+14 |     let _ = records.redacted_output().to_redacted_output();
+   |                     ^^^^^^^^^^^^^^^ `BTreeMap<RefCell<String>, Record>` may contain interior mutability and a reference may not be safely transferable across a catch_unwind boundary
+   |
+   = note: the following trait bounds were not satisfied:
+           `BTreeMap<RefCell<String>, Record>: RefUnwindSafe`
+           which is required by `BTreeMap<RefCell<String>, Record>: RedactedOutputExt`

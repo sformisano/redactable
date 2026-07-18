@@ -15,6 +15,14 @@ use super::{
     traits::{Redactable, RedactableWithMapper, SensitiveWithPolicy},
 };
 use crate::policy::RedactionPolicy;
+use crate::{
+    __private::{
+        PolicyApplicableRefForFormatting, PolicyApplicableRefForGeneratedFormatting,
+        PolicyFormattingOutput, PolicyMapper,
+    },
+    PolicyApplicableRef, RedactableWithFormatter,
+    policy::RecursivePolicyKind,
+};
 
 // =============================================================================
 // SensitiveValue - Wrapper for leaf values with a policy
@@ -69,6 +77,73 @@ where
     T: SensitiveWithPolicy<P>,
     P: RedactionPolicy,
 {
+}
+
+impl<T, P> PolicyApplicableRefForGeneratedFormatting for SensitiveValue<T, P>
+where
+    T: SensitiveWithPolicy<P>,
+    P: RedactionPolicy,
+{
+    type FormattingOutput = String;
+
+    fn apply_policy_ref_for_generated_formatting<Q, M>(
+        &self,
+        _mapper: &M,
+    ) -> PolicyFormattingOutput<Self::FormattingOutput>
+    where
+        Q: RedactionPolicy,
+        Q::Kind: RecursivePolicyKind,
+        M: RedactableMapper,
+    {
+        PolicyFormattingOutput::Value(self.redacted())
+    }
+}
+
+impl<T, P> PolicyApplicableRef for SensitiveValue<T, P>
+where
+    T: SensitiveWithPolicy<P>,
+    P: RedactionPolicy,
+{
+    type Output = String;
+
+    fn apply_policy_ref<Q, M>(&self, _mapper: &M) -> Self::Output
+    where
+        Q: RedactionPolicy,
+        Q::Kind: RecursivePolicyKind,
+        M: RedactableMapper,
+    {
+        self.redacted()
+    }
+}
+
+impl<T, P> PolicyApplicableRefForFormatting for SensitiveValue<T, P>
+where
+    T: SensitiveWithPolicy<P>,
+    P: RedactionPolicy,
+{
+    fn fmt_policy_display<Q>(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result
+    where
+        Q: RedactionPolicy,
+        Q::Kind: RecursivePolicyKind,
+        Self: PolicyApplicableRef,
+        <Self as PolicyApplicableRef>::Output: RedactableWithFormatter,
+    {
+        self.apply_policy_ref_for_generated_formatting::<Q, _>(&PolicyMapper)
+            .fmt_redacted(formatter)
+    }
+
+    fn fmt_policy_debug<Q>(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result
+    where
+        Q: RedactionPolicy,
+        Q::Kind: RecursivePolicyKind,
+        Self: PolicyApplicableRef,
+        <Self as PolicyApplicableRef>::Output: std::fmt::Debug,
+    {
+        std::fmt::Debug::fmt(
+            &self.apply_policy_ref_for_generated_formatting::<Q, _>(&PolicyMapper),
+            formatter,
+        )
+    }
 }
 
 impl<T, P> From<T> for SensitiveValue<T, P> {

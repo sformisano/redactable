@@ -4,12 +4,15 @@ version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 description = "Derive macros for the redactable crate"
-license.workspace = true
+license-file = "../LICENSE.md"
 repository.workspace = true
 documentation = "https://docs.rs/redactable-derive"
 homepage.workspace = true
 keywords = ["redaction", "privacy", "security", "macro", "derive"]
 categories = ["development-tools"]
+# Keep the published surface explicit so package-content verification can prove
+# that the source and license shipped are exactly the files reviewed here.
+include = ["src/**/*.rs", "Cargo.toml", "../LICENSE.md"]
 
 [package.metadata.docs.rs]
 all-features = true

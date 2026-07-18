@@ -1,0 +1,5 @@
+error: `#[redactable(legacy_formatting)]` requires `#[sensitive(Policy)]` on the same field
+ --> tests/ui/sensitive_display_legacy_formatting_without_policy.rs:6:5
+  |
+6 |     #[redactable(legacy_formatting)]
+  |     ^

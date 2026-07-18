@@ -1,0 +1,27 @@
+error[E0599]: the method `redactable_policy_formatting` exists for struct `redactable::__private::PolicyFormattingProbe<'_, CustomLeaf>`, but its trait bounds were not satisfied
+  --> tests/ui/sensitive_display_custom_policy_ref_missing_formatting_companion_default.rs:25:5
+   |
+ 7 | struct CustomLeaf;
+   | ----------------- doesn't satisfy `_: PolicyApplicableRefForFormatting` or `_: PolicyApplicableRefForGeneratedFormatting`
+...
+25 |     #[sensitive(Secret)]
+   |     ^ method cannot be called due to unsatisfied trait bounds
+   |
+  ::: src/__private.rs
+   |
+   | pub struct PolicyFormattingProbe<'a, T: ?Sized> {
+   | ----------------------------------------------- doesn't satisfy `_: PolicyFormattingDispatch`
+   |
+   = note: the following trait bounds were not satisfied:
+           `CustomLeaf: redactable::__private::PolicyApplicableRefForGeneratedFormatting`
+           which is required by `redactable::__private::PolicyFormattingProbe<'_, CustomLeaf>: redactable::__private::PolicyFormattingDispatch`
+           `CustomLeaf: redactable::__private::PolicyApplicableRefForFormatting`
+           which is required by `&redactable::__private::PolicyFormattingProbe<'_, CustomLeaf>: redactable::__private::PolicyFormattingDispatch`
+note: the traits `redactable::__private::PolicyApplicableRefForFormatting` and `redactable::__private::PolicyApplicableRefForGeneratedFormatting` must be implemented
+  --> src/__private.rs
+   |
+   | pub trait PolicyApplicableRefForFormatting {
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+   | pub trait PolicyApplicableRefForGeneratedFormatting {
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

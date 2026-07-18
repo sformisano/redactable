@@ -5,6 +5,7 @@
 //! printed raw secrets in production.
 
 use redactable::Sensitive;
+use std::fmt;
 
 // Debug and Serialize keep the generated slog bounds satisfied under
 // --all-features, so the only error is the dual pairing assertion in every
@@ -13,5 +14,13 @@ use redactable::Sensitive;
 #[derive(Clone, Debug, Sensitive, serde::Serialize)]
 #[sensitive(dual)]
 struct ApiKey(#[sensitive(redactable::Token)] String);
+
+// A public capability impl is not proof that SensitiveDisplay generated the
+// matching half of the dual contract.
+impl redactable::RedactableWithFormatter for ApiKey {
+    fn fmt_redacted(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str("manual formatter")
+    }
+}
 
 fn main() {}

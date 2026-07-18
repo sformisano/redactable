@@ -1,0 +1,5 @@
+error: `#[sensitive(dual)]` is no longer accepted on `Sensitive` or `SensitiveDisplay`; use `#[derive(SensitiveDual)]` instead
+ --> tests/ui/sensitive_dual_hygienic_witness_forgery_rejected.rs:7:8
+  |
+7 | struct ApiKey(#[sensitive(redactable::Token)] String);
+  |        ^^^^^^

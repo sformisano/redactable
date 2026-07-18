@@ -1,0 +1,10 @@
+error[E0599]: no method named `inner` found for struct `TracingRedactedValue<T>` in the current scope
+  --> tests/ui/tracing_redacted_value_no_borrowed_inner.rs:15:29
+   |
+15 |     let _borrowed = wrapper.inner();
+   |                             ^^^^^
+   |
+help: there is a method `into_inner` with a similar name
+   |
+15 |     let _borrowed = wrapper.into_inner();
+   |                             +++++

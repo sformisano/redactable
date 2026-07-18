@@ -4,7 +4,7 @@ version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 description = "Automatic redaction of sensitive data in structs for safe logging and debugging"
-license.workspace = true
+license-file = "../LICENSE.md"
 repository.workspace = true
 documentation = "https://docs.rs/redactable"
 homepage.workspace = true
@@ -12,7 +12,7 @@ readme = "../README.md"
 keywords = ["redaction", "privacy", "security", "logging", "telemetry"]
 categories = ["development-tools", "data-structures"]
 # Explicitly include only what should be published to crates.io
-include = ["src/**/*.rs", "Cargo.toml", "../README.md"]
+include = ["src/**/*.rs", "Cargo.toml", "../README.md", "../LICENSE.md"]
 
 # Build docs.rs with every feature so the slog/tracing/json/extras APIs are
 # visible in the rendered documentation.
@@ -37,7 +37,7 @@ extras = ["chrono", "time", "uuid", "ip-address"]
 [dependencies]
 # Exact pin: the derive generates code against this crate's internal items, so
 # the pair must always ship and resolve together.
-redactable-derive = { version = "=0.10.1", path = "../redactable-derive" }
+redactable-derive = { version = "=0.11.0", path = "../redactable-derive" }
 serde = { version = "1", optional = true, features = ["derive"] }
 serde_json = { version = "1", optional = true }
 slog = { version = "2.8", optional = true, features = ["nested-values"] }

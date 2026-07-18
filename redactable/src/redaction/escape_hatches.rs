@@ -23,6 +23,8 @@ use std::ops::{Deref, DerefMut};
 #[cfg(feature = "json")]
 use serde::{Deserialize, Serialize};
 
+#[cfg(feature = "json")]
+use super::output::serialize_redacted_json;
 use super::output::{RedactedOutput, ToRedactedOutput};
 
 // =============================================================================
@@ -91,7 +93,7 @@ where
 /// With the `json` feature, `Serialize` and `Deserialize` transparently expose
 /// the complete inner value. This supports ordinary transport and storage; it
 /// is not redaction and must not be treated as sanitized log output.
-/// See [`NotSensitiveDebug`] for Debug-selected output, [`NotSensitiveJson`]
+/// See [`NotSensitiveDebug`] for Debug-selected output, `NotSensitiveJson`
 /// for a borrowed JSON logging view, and
 /// [`crate::NotSensitiveValue`] when no logging format should be selected.
 ///
@@ -186,7 +188,7 @@ impl<'de, T: Deserialize<'de>> Deserialize<'de> for NotSensitiveDisplay<T> {
 /// the complete inner value. This supports ordinary transport and storage; it
 /// is not redaction and must not be treated as sanitized log output.
 /// See [`NotSensitiveDisplay`] for Display-selected output,
-/// [`NotSensitiveJson`] for a borrowed JSON logging view, and
+/// `NotSensitiveJson` for a borrowed JSON logging view, and
 /// [`crate::NotSensitiveValue`] when no logging format should be selected.
 ///
 /// ```
@@ -230,9 +232,7 @@ where
     T: std::fmt::Debug,
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_tuple("NotSensitiveDebug")
-            .field(&self.to_redacted_output())
-            .finish()
+        std::fmt::Debug::fmt(&self.0, f)
     }
 }
 
@@ -281,12 +281,7 @@ where
     T: Serialize + ?Sized,
 {
     fn to_redacted_output(&self) -> RedactedOutput {
-        match serde_json::to_value(self.0) {
-            Ok(json) => RedactedOutput::Json(json),
-            Err(err) => {
-                RedactedOutput::Text(format!("Failed to serialize not-sensitive value: {err}"))
-            }
-        }
+        RedactedOutput::Json(serialize_redacted_json(self.0))
     }
 }
 

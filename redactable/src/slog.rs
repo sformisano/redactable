@@ -16,7 +16,6 @@
 use std::fmt;
 
 use serde::Serialize;
-use serde_json::Value as JsonValue;
 use slog::{Key, Record, Result as SlogResult, Serializer, Value as SlogValue};
 
 pub use crate::redaction::RedactedJson;
@@ -29,14 +28,14 @@ use crate::{
     },
 };
 
-/// Marker trait for types whose `slog` integration always emits redacted output.
+/// Marker trait for types whose `slog` integration always emits logging-safe output.
 ///
 /// This trait requires `slog::Value` so the type can be logged with slog.
-/// The marker indicates that the type's `slog::Value` implementation produces
-/// redacted output rather than raw values.
+/// Implementors are safe because their `slog::Value` implementation either
+/// redacts its value or emits a value explicitly declared non-sensitive.
 ///
-/// This trait is implemented only for sink adapters and wrappers that redact
-/// before logging. It is not a blanket impl for raw types.
+/// This trait is implemented only for logging-safe adapters and wrappers. It is
+/// not a blanket impl for raw types.
 ///
 /// ```compile_fail
 /// use redactable::slog::SlogRedacted;
@@ -136,7 +135,18 @@ impl_slog_redacted!(@ [T] RedactedJsonRef<'_, T> where T: Redactable + Clone + S
 ///
 /// Requires [`Redactable`], which only types with declared redaction behavior
 /// implement - raw passthrough leaves like `String` cannot be certified as
-/// redacted slog output.
+/// redacted slog output. Every `Redactable` shape is accepted, including types
+/// using `#[redactable(recursive)]`. `Debug` is not required because this path
+/// only redacts and serializes the resulting value.
+///
+/// # Panics
+///
+/// The adapter does not clone the value before redacting (unlike the borrowed adapters), but a type's own `.redact()` may clone internally: traversal through
+/// [`std::sync::Arc`] or [`std::rc::Rc`] must clone the shared referent because
+/// other owners may still hold it, and rebuilding a `HashMap` or `HashSet` clones its `BuildHasher` (a custom hasher whose `Clone` panics or has side effects surfaces here). A live [`std::cell::RefCell`] mutable borrow
+/// behind an `Arc`/`Rc` therefore still panics. Prefer unique ownership
+/// ([`Box`]) for values you log. (`Arc<RefCell<T>>` is `!Send + !Sync` and an
+/// anti-pattern regardless.)
 ///
 /// ## Example
 /// ```ignore
@@ -144,7 +154,7 @@ impl_slog_redacted!(@ [T] RedactedJsonRef<'_, T> where T: Redactable + Clone + S
 ///
 /// info!(logger, "event"; "data" => event.slog_redacted_json());
 /// ```
-pub trait SlogRedactedExt: Redactable + fmt::Debug + Serialize + Sized {
+pub trait SlogRedactedExt: Redactable + Serialize + Sized {
     /// Redacts `self` and returns a `slog::Value` that serializes as structured JSON.
     ///
     /// If converting the redacted output into `serde_json::Value` fails, the
@@ -156,7 +166,7 @@ pub trait SlogRedactedExt: Redactable + fmt::Debug + Serialize + Sized {
     }
 }
 
-impl<T> SlogRedactedExt for T where T: Redactable + fmt::Debug + Serialize {}
+impl<T> SlogRedactedExt for T where T: Redactable + Serialize {}
 
 // Special cases: these don't use emit_output(&self.to_redacted_output(), ...)
 
@@ -174,7 +184,7 @@ where
     }
 }
 
-impl<T> SlogRedacted for NotSensitive<T> where T: SlogRedacted {}
+impl<T> SlogRedacted for NotSensitive<T> where T: SlogValue {}
 
 /// Helper for `NotSensitive` derive-generated slog impls.
 ///
@@ -187,8 +197,7 @@ pub fn __slog_serialize_not_sensitive<T: Serialize>(
     key: Key,
     serializer: &mut dyn Serializer,
 ) -> SlogResult {
-    let json_value = serde_json::to_value(value)
-        .unwrap_or_else(|err| JsonValue::String(format!("Failed to serialize value: {err}")));
+    let json_value = serialize_redacted_json(value);
     let nested = slog::Serde(json_value);
     SlogValue::serialize(&nested, record, key, serializer)
 }

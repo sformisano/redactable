@@ -1,0 +1,5 @@
+error: `#[not_sensitive]` is not supported on enum variants; annotate the variant's fields instead
+ --> tests/ui/sensitive_variant_not_sensitive_rejected.rs:5:5
+  |
+5 |     #[not_sensitive]
+  |     ^

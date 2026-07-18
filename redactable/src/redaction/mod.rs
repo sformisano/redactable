@@ -15,10 +15,11 @@
 mod containers;
 mod display;
 mod escape_hatches;
+mod ip_policy;
 #[cfg(feature = "json")]
 mod json;
 mod output;
-mod redact;
+pub mod redact;
 mod traits;
 mod wrappers;
 
@@ -35,14 +36,18 @@ pub use escape_hatches::{NotSensitiveJson, NotSensitiveJsonExt};
 #[cfg(feature = "json")]
 pub use output::serialize_redacted_json;
 #[cfg(feature = "json")]
-pub use output::{RedactedJson, RedactedJsonExt, RedactedJsonRef};
+pub use output::{IntoRedactedJsonExt, RedactedJson, RedactedJsonExt, RedactedJsonRef};
 // Re-export output types
-pub use output::{RedactedOutput, RedactedOutputExt, RedactedOutputRef, ToRedactedOutput};
+pub use output::{
+    IntoRedactedOutputExt, RedactedOutput, RedactedOutputExt, RedactedOutputRef, ToRedactedOutput,
+};
 // Re-export redaction machinery
 pub use redact::{
-    PolicyApplicable, PolicyApplicableRef, PolicyMapper, RedactableMapper, ScalarRedaction,
-    apply_policy, apply_policy_ref, redact,
+    PolicyApplicable, PolicyApplicableRef, PolicyFormattingMapper, PolicyMapper, RedactableMapper,
+    ScalarRedaction, apply_policy, apply_policy_ref, redact,
 };
 pub use traits::{Redactable, RedactableWithMapper, SensitiveWithPolicy};
 // Re-export wrapper types
+#[doc(hidden)]
+pub use ip_policy::{IpPolicyApplicable, IpPolicyApplicableRef};
 pub use wrappers::{NotSensitiveValue, SensitiveValue};

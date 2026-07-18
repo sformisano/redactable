@@ -7,7 +7,8 @@
 
 use redactable::{
     NotSensitiveValue, Redactable, RedactedOutput, RedactionPolicy, Secret, Sensitive,
-    SensitiveValue, SensitiveWithPolicy, TextRedactionPolicy, ToRedactedOutput, Token,
+    SensitiveValue, SensitiveWithPolicy, TextPolicyKind, TextRedactionPolicy, ToRedactedOutput,
+    Token,
 };
 #[cfg(feature = "slog")]
 use serde::Serialize;
@@ -312,6 +313,8 @@ mod orphan_rule_workaround {
     struct ForeignIdPolicy;
 
     impl RedactionPolicy for ForeignIdPolicy {
+        type Kind = TextPolicyKind;
+
         fn policy() -> TextRedactionPolicy {
             TextRedactionPolicy::keep_last(4)
         }
@@ -372,6 +375,8 @@ mod orphan_rule_workaround {
     fn reuses_builtin_policy_logic() {
         struct MyTokenPolicy;
         impl RedactionPolicy for MyTokenPolicy {
+            type Kind = TextPolicyKind;
+
             fn policy() -> TextRedactionPolicy {
                 Token::policy()
             }
@@ -485,6 +490,8 @@ mod serde_json_round_trip {
     struct ExternalSecretPolicy;
 
     impl RedactionPolicy for ExternalSecretPolicy {
+        type Kind = TextPolicyKind;
+
         fn policy() -> TextRedactionPolicy {
             TextRedactionPolicy::keep_last(3)
         }

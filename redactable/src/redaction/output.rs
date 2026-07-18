@@ -5,6 +5,7 @@
 //! - [`RedactedOutput`]: The output enum (Text or Json)
 //! - [`ToRedactedOutput`]: Trait for types that can produce redacted output
 //! - [`RedactedOutputRef`]: Wrapper for explicit redacted output
+//! - [`IntoRedactedOutputExt`]: Consuming output adapter that redacts via `.redact()`
 //! - [`RedactedJson`]: Owned redacted JSON output
 //! - [`RedactedJsonRef`]: Wrapper for redacted JSON output
 
@@ -83,6 +84,14 @@ where
 ///
 /// Use `.redacted_output()` to opt into logging-safe output for types that
 /// implement `Redactable + Clone + Debug`.
+///
+/// # Panics
+///
+/// Rendering this wrapper clones the complete value before redacting it and
+/// therefore inherits every panic from `Clone`. In particular, cloning a
+/// traversed [`std::cell::RefCell`] panics while that cell is mutably borrowed.
+/// Use [`IntoRedactedOutputExt::into_redacted_output`] when the original value
+/// does not need to be retained.
 pub struct RedactedOutputRef<'a, T: ?Sized>(&'a T);
 
 impl<T> ToRedactedOutput for RedactedOutputRef<'_, T>
@@ -101,10 +110,46 @@ where
 /// redacted output.
 pub trait RedactedOutputExt {
     /// Wraps the value for explicit logging-safe output.
+    ///
+    /// The wrapper is inert until it is rendered or converted with
+    /// [`ToRedactedOutput::to_redacted_output`].
+    ///
+    /// # Panics
+    ///
+    /// Rendering the returned wrapper inherits panics from cloning `Self`.
+    /// A traversed [`std::cell::RefCell`] with a live mutable borrow is one
+    /// concrete case. Prefer
+    /// [`IntoRedactedOutputExt::into_redacted_output`] when ownership is
+    /// available.
     fn redacted_output(&self) -> RedactedOutputRef<'_, Self>
     where
         Self: Sized;
 }
+
+/// Consuming extension trait for logging structural redacted output.
+///
+/// Unlike [`RedactedOutputExt`], this adapter redacts the owned value by calling `.redact()` on it
+/// instead of cloning it first. It is the preferred structural logging boundary when
+/// the original value does not need to be retained, and it accepts every
+/// [`Redactable`] shape, including types using `#[redactable(recursive)]`.
+///
+/// # Panics
+///
+/// The adapter does not clone the value before redacting (unlike the borrowed adapters), but a type's own `.redact()` may clone internally: traversal through
+/// [`std::sync::Arc`] or [`std::rc::Rc`] must clone the shared referent because
+/// other owners may still hold it, and rebuilding a `HashMap` or `HashSet` clones its `BuildHasher` (a custom hasher whose `Clone` panics or has side effects surfaces here). A live [`std::cell::RefCell`] mutable borrow
+/// behind an `Arc`/`Rc` therefore still panics. Prefer unique ownership
+/// ([`Box`]) for values you log. (`Arc<RefCell<T>>` is `!Send + !Sync` and an
+/// anti-pattern regardless.)
+pub trait IntoRedactedOutputExt: Redactable + std::fmt::Debug + Sized {
+    /// Consumes and redacts the value, then returns its logging-safe Debug text.
+    #[must_use]
+    fn into_redacted_output(self) -> RedactedOutput {
+        RedactedOutput::Text(format!("{:?}", self.redact()))
+    }
+}
+
+impl<T> IntoRedactedOutputExt for T where T: Redactable + std::fmt::Debug {}
 
 impl<T> RedactedOutputExt for T
 where
@@ -150,6 +195,14 @@ impl ToRedactedOutput for RedactedJson {
 // =============================================================================
 
 /// Wrapper for redacted JSON output from structured types.
+///
+/// # Panics
+///
+/// Converting or logging this wrapper clones the complete value before
+/// redacting it and therefore inherits every panic from `Clone`. In
+/// particular, cloning a traversed [`std::cell::RefCell`] panics while that
+/// cell is mutably borrowed. Use
+/// [`IntoRedactedJsonExt::into_redacted_json`] when ownership is available.
 #[cfg(feature = "json")]
 pub struct RedactedJsonRef<'a, T: ?Sized>(&'a T);
 
@@ -172,10 +225,46 @@ where
 #[cfg(feature = "json")]
 pub trait RedactedJsonExt {
     /// Wraps the value for explicit redacted JSON output.
+    ///
+    /// The wrapper is inert until it is converted or logged.
+    ///
+    /// # Panics
+    ///
+    /// Converting or logging the returned wrapper inherits panics from
+    /// cloning `Self`, including a traversed [`std::cell::RefCell`] with a live
+    /// mutable borrow. Prefer [`IntoRedactedJsonExt::into_redacted_json`] when
+    /// ownership is available.
     fn redacted_json(&self) -> RedactedJsonRef<'_, Self>
     where
         Self: Sized;
 }
+
+/// Consuming extension trait for logging structural redacted JSON.
+///
+/// This adapter redacts the owned value by calling `.redact()` on it instead of cloning it first. It accepts
+/// every [`Redactable`] shape, including types using `#[redactable(recursive)]`.
+///
+/// # Panics
+///
+/// The adapter does not clone the value before redacting (unlike the borrowed adapters), but a type's own `.redact()` may clone internally: traversal through
+/// [`std::sync::Arc`] or [`std::rc::Rc`] must clone the shared referent because
+/// other owners may still hold it, and rebuilding a `HashMap` or `HashSet` clones its `BuildHasher` (a custom hasher whose `Clone` panics or has side effects surfaces here). A live [`std::cell::RefCell`] mutable borrow
+/// behind an `Arc`/`Rc` therefore still panics. Prefer unique ownership
+/// ([`Box`]) for values you log. (`Arc<RefCell<T>>` is `!Send + !Sync` and an
+/// anti-pattern regardless.)
+#[cfg(feature = "json")]
+pub trait IntoRedactedJsonExt: Redactable + Serialize + Sized {
+    /// Consumes and redacts the value, then serializes only the redacted result.
+    #[must_use]
+    fn into_redacted_json(self) -> RedactedJson {
+        RedactedJson {
+            value: serialize_redacted_json(self.redact()),
+        }
+    }
+}
+
+#[cfg(feature = "json")]
+impl<T> IntoRedactedJsonExt for T where T: Redactable + Serialize {}
 
 #[cfg(feature = "json")]
 impl<T> RedactedJsonExt for T
