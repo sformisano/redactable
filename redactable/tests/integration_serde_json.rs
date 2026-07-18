@@ -47,12 +47,14 @@ mod policy_application {
 
     #[test]
     fn redacts_with_custom_policy() {
-        use redactable::{RedactionPolicy, TextRedactionPolicy};
+        use redactable::{RedactionPolicy, TextPolicyKind, TextRedactionPolicy};
 
         #[derive(Clone, Copy)]
         struct CustomPolicy;
 
         impl RedactionPolicy for CustomPolicy {
+            type Kind = TextPolicyKind;
+
             fn policy() -> TextRedactionPolicy {
                 TextRedactionPolicy::keep_last(4)
             }

@@ -2,6 +2,169 @@
 
 ## Unreleased
 
+## 0.11.0 - 2026-07-19
+
+### Breaking
+
+- Replace `#[derive(Sensitive, SensitiveDisplay)]` with
+  `#[derive(SensitiveDual)]` and remove `#[sensitive(dual)]`. The legacy form
+  now fails with a migration diagnostic; the single derive generates both
+  behaviors through one authenticated entry point that downstream code cannot
+  imitate to suppress redacted `Debug`.
+- Custom `RedactionPolicy` implementations must now declare their structural
+  kind. Existing text policies should add `type Kind = TextPolicyKind;` and
+  import `TextPolicyKind` from `redactable`.
+- Redactable 0.11 requires Rust 1.97. CI follows the latest stable compiler and
+  no longer maintains a separate older-compiler compatibility job.
+- The tracing Valuable wrapper `RedactedValuable` is renamed to
+  `TracingRedactedValue`, its redacted contents are read through the consuming
+  `into_inner(self)` instead of a borrowing `inner(&self)`, and it is no longer
+  `Clone`. A clone would hand out a second handle to shared interior-mutable
+  inner state, letting a caller insert a fresh secret after redaction and have
+  the original wrapper log it.
+- `PolicyApplicableRef` for `RefCell<T>` again uses
+  `Output = RefCell<T::Output>`, restoring the public contract from 0.10.0.
+  Code that depended specifically on the 0.10.1 `PolicyRefCellOutput`
+  association must update; generated formatting still emits `<borrowed>` on a
+  conflicting mutable borrow through a separate internal route.
+- Custom `PolicyApplicableRef` types used by `SensitiveDisplay` must now also
+  implement the formatting companion trait. For a leaf that should retain the
+  legacy behavior, add
+  `impl redactable::__private::PolicyApplicableRefForFormatting for MyType {}`.
+  The companion is an empty marker; library-owned recursive formatting uses a
+  separate internal capability to propagate nested borrow conflicts.
+- Direct generic calls to the legacy `PolicyApplicable::apply_policy` and
+  `PolicyApplicableRef::apply_policy_ref` methods must prove
+  `P::Kind: RecursivePolicyKind`. Generic code that may receive an IP policy
+  should use the kind-aware `apply_policy` or `apply_policy_ref` free function.
+  `PolicyApplicableRef::apply_policy_ref` and the `apply_policy_ref` free
+  function use ordinary `RefCell` borrowing and panic if a traversed `RefCell`
+  is mutably borrowed. Generated `SensitiveDisplay` formatting renders
+  `<borrowed>` instead.
+- `SlogRedactedExt` no longer has a `Debug` supertrait. Generic code that used
+  `T: SlogRedactedExt` as proof of `T: Debug` must add an explicit `Debug`
+  bound. Types implementing `Redactable + Serialize` can call
+  `.slog_redacted_json()` without implementing `Debug`.
+
+### Documentation
+
+- Corrected the README's clone-based output and tracing adapter bounds by
+  removing the proposed `RefUnwindSafe` compatibility gate.
+- Made the exact `PaymentEvent` slog example part of the standalone README
+  consumer doctest suite.
+- Documented the existing E0509 limitation when a `Sensitive` container itself
+  implements `Drop`, and clarified that every such container is unsupported,
+  including Copy-only shapes and `SensitiveDual`. Fields with their own drop
+  behavior remain supported inside containers that do not implement `Drop`.
+- Clarified that clone-free map formatting applies to the generated text/secret
+  recursive route; IP-policy maps rebuild an owned projection and clone allowed
+  keys and `HashMap` hashers. Corrected container traversal wording and
+  documented `SensitiveValue` policy precedence and the testing-feature risk.
+- Corrected the ambiguous `SensitiveValue::from("...".into())` example and
+  documented the `nested-values` feature required by downstream slog drains.
+
+### Fixed
+
+- Release publication now verifies identity, not just a version number. An
+  existing crates.io version is only accepted as "already published" when its
+  checksum matches the archive this release just packaged and inspected, and a
+  yanked version is refused outright. Previously a retry could skip publishing
+  `redactable-derive` because the version number existed, then publish
+  `redactable` against a derive built from different source - permanently, since
+  crates.io is immutable and the runtime pins the derive with `=`.
+- The immutable-action guard now catches every YAML form a `uses:` key can take,
+  including the inline list item (`- uses: x@tag`) and flow style
+  (`- { uses: x@tag }`), and scans composite actions under `.github/actions`.
+  It previously matched only line-start `uses:`, so the other forms passed
+  silently. The guard now has mutant tests of its own, run in CI.
+- `cargo-audit` and `cargo-deny` are pinned to reviewed versions in CI, so a
+  supply-chain gate cannot change underneath a release without review.
+- The consuming tracing Valuable adapter is now exercised end-to-end through a
+  real subscriber and visitor with a canary, rather than only inspecting the
+  redacted value through `inner()`.
+- The panic-abort fixture now carries a locked dependency graph and can fetch
+  it before exercising its subprocesses, so the standard workspace test
+  command works with an empty Cargo cache. CI verifies that clean-cache path.
+- Compile-fail coverage now protects both halves of the tracing Valuable
+  wrapper invariant: the wrapper is neither cloneable nor borrowable through
+  an `inner()` method.
+
+- Added consuming output, JSON, tracing Debug, and tracing Valuable adapters.
+  Each redacts the owned value through `.redact()` rather than cloning it first,
+  so a live `RefCell` mutable borrow no longer panics on these routes. (`.redact()`
+  itself may still clone internally — an `Arc`/`Rc` referent, or a `HashMap`/
+  `HashSet` hasher.) They
+  accept every `Redactable` shape, including types using
+  `#[redactable(recursive)]`. Traversal through `Arc` or `Rc` still clones the
+  shared referent because another owner may hold it, so a live `RefCell` mutable
+  borrow behind an `Arc`/`Rc` can still panic. Prefer unique ownership (`Box`)
+  for values you log; `Arc<RefCell<T>>` is `!Send + !Sync` and an anti-pattern
+  regardless. Retained borrowed clone-based adapters now document their panic
+  behavior for live `RefCell` mutable borrows.
+- Removed the owned-capability trait hierarchy that briefly backed those
+  adapters (`CloneFreeRedactable` and its supporting traits). It duplicated the
+  traversal `.redact()` already performed, and its only real effect was to
+  reject `Arc`/`Rc` statically. That guarantee was not worth its cost: the
+  generated capability leaked the derived type's field types into a public
+  associated type, so a `pub` type holding a private field type failed to
+  compile with `error[E0446]: private type ... in public interface`. Deleting
+  the hierarchy fixes that regression and makes recursive types work through the
+  consuming adapters. Code naming `CloneFreeRedactable` in a bound should drop
+  it; no other source change is needed.
+- Pinned every third-party verification/release action to an immutable commit,
+  disabled persisted checkout credentials, added Dependabot updates and an
+  immutable-reference check, and extended CI to strict-rustdoc every isolated
+  feature.
+- Generic policy parameters on concrete scalar and typed-IP
+  `SensitiveDisplay` fields now use the selected policy-kind capability instead
+  of requiring the field to be a generated recursive container. The Syn
+  spelling classifier was removed: alias-hidden or otherwise ambiguous
+  library-owned containers select their route explicitly with
+  `#[redactable(generated_formatting)]`, preserving legal downstream empty-marker
+  specialization on stable Rust.
+- Misplaced field-only helper attributes now fail with direct diagnostics, and
+  stable rustfmt no longer loads ignored nightly-only settings.
+- Generated borrowed slog output no longer serializes raw values as a safety
+  preflight. It fails closed without invoking user serializers; owned
+  `.slog_redacted_json()` redacts through `.redact()` like the JSON,
+  redacted-output, and tracing consuming adapters.
+- Recursive derives no longer repeat recognized direct self-referential field
+  predicates. `#[redactable(recursive)]` provides an explicit bound override for
+  crate-qualified, alias-hidden, and mutually recursive generic fields without
+  weakening complete-type bounds on unrelated fields. It composes with
+  `legacy_formatting`: cyclic field bounds remain suppressed while the required
+  reference projection and output-format bounds remain present.
+- Text/secret recursive policy formatting is compositionally closed for sets of maps, borrows map keys
+  and hashers without `Clone`, invokes exactly the requested compact or alternate
+  Debug mode once per key, and resolves `&str` aliases through trait behavior
+  rather than syntax.
+- Restored empty downstream `PolicyApplicableRefForFormatting` implementations.
+  Custom leaves nested in containers can opt into their ordinary
+  `PolicyApplicableRef` projection with `#[redactable(legacy_formatting)]`, while
+  the default library-owned route remains clone-free and borrow-conflict safe.
+  The empty marker is required only for automatic direct custom-leaf dispatch;
+  the explicit route instead requires `PolicyApplicableRef` and the selected
+  output-format bound. Standalone `Sensitive` rejects the display-only option;
+  `SensitiveDual` supports it.
+- Made `NotSensitiveDebug<T>` transparently delegate to the inner `Debug` output.
+- `IpAddress` policy dispatch is now type-directed after generic substitution,
+  so aliases and generic policy parameters cannot bypass IP container checks.
+  Raw typed IP values remain bare-field-only; recursive containers accept text
+  leaves and `SensitiveValue<_, IpAddress>`, and maps preserve keys only when
+  the key type is on the sealed safe-key allowlist.
+- Explicitly non-sensitive JSON and generated slog serialization now use a
+  fixed `"[REDACTED]"` JSON string on serialization failure without exposing
+  serializer errors or input data.
+- `NotSensitive<T>` now provides slog and tracing certification while leaving
+  the unwrapped raw type uncertified.
+- Derive-generated identifiers are allocated without colliding with user
+  fields, variants, type parameters, const parameters, or lifetimes.
+- Generated policy formatting preserves the public `RefCell` output type and,
+  for library-owned recursive formatting implementations, propagates borrow
+  conflicts as `<borrowed>` without panicking, including with `panic = "abort"`.
+- Documentation, CI coverage, and compiler-diagnostic snapshots now match the
+  supported APIs and Rust 1.97 output.
+
 ## 0.10.1 - 2026-07-13
 
 ### Added

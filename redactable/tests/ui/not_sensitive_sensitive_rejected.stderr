@@ -1,0 +1,5 @@
+error: `#[sensitive]` attributes are not allowed on `NotSensitive` types
+ --> tests/ui/not_sensitive_sensitive_rejected.rs:5:5
+  |
+5 |     #[sensitive(redactable::Secret)]
+  |     ^

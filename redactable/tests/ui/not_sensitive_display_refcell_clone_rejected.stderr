@@ -1,0 +1,35 @@
+error[E0599]: the type `Direct` may contain interior mutability and a reference may not be safely transferable across a catch_unwind boundary
+  --> tests/ui/not_sensitive_display_refcell_clone_rejected.rs:27:20
+   |
+ 8 | struct Direct(CellAlias<String>);
+   | ------------- method `redacted_json` not found for this struct because it doesn't satisfy `Direct: RedactedJsonExt` or `Direct: RefUnwindSafe`
+...
+27 |     let _ = direct.redacted_json().to_redacted_output();
+   |                    ^^^^^^^^^^^^^ `Direct` may contain interior mutability and a reference may not be safely transferable across a catch_unwind boundary
+   |
+   = note: the following trait bounds were not satisfied:
+           `Direct: RefUnwindSafe`
+           which is required by `Direct: RedactedJsonExt`
+note: the trait `RefUnwindSafe` must be implemented
+  --> $RUST/core/src/panic/unwind_safe.rs
+   = help: items from traits can only be used if the trait is implemented and in scope
+   = note: the following trait defines an item `redacted_json`, perhaps you need to implement it:
+           candidate #1: `RedactedJsonExt`
+
+error[E0599]: the type `Generic<RefCell<String>>` may contain interior mutability and a reference may not be safely transferable across a catch_unwind boundary
+  --> tests/ui/not_sensitive_display_refcell_clone_rejected.rs:30:21
+   |
+17 | struct Generic<T>(T);
+   | ----------------- method `redacted_json` not found for this struct because it doesn't satisfy `Generic<RefCell<String>>: RedactedJsonExt` or `Generic<RefCell<String>>: RefUnwindSafe`
+...
+30 |     let _ = generic.redacted_json().to_redacted_output();
+   |                     ^^^^^^^^^^^^^ `Generic<RefCell<String>>` may contain interior mutability and a reference may not be safely transferable across a catch_unwind boundary
+   |
+   = note: the following trait bounds were not satisfied:
+           `Generic<RefCell<String>>: RefUnwindSafe`
+           which is required by `Generic<RefCell<String>>: RedactedJsonExt`
+note: the trait `RefUnwindSafe` must be implemented
+  --> $RUST/core/src/panic/unwind_safe.rs
+   = help: items from traits can only be used if the trait is implemented and in scope
+   = note: the following trait defines an item `redacted_json`, perhaps you need to implement it:
+           candidate #1: `RedactedJsonExt`

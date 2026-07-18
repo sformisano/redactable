@@ -23,9 +23,16 @@ mod to_redacted_output {
     }
 
     #[test]
-    fn rejects_redacted_output_on_raw_string() {
+    fn redacted_output_availability_matches_clone_and_debug_bounds() {
         let t = trybuild::TestCases::new();
         t.compile_fail("tests/ui/redacted_output_raw_string_rejected.rs");
+        t.pass("tests/ui/redacted_output_borrow_sensitive_map_key_rejected.rs");
+    }
+
+    #[test]
+    fn accepts_ordinary_custom_map_keys() {
+        let t = trybuild::TestCases::new();
+        t.pass("tests/ui/redacted_output_custom_map_key_ok.rs");
     }
 
     #[cfg(not(feature = "json"))]

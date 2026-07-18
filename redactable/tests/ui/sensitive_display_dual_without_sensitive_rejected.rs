@@ -10,4 +10,12 @@ use redactable::SensitiveDisplay;
 #[sensitive(dual)]
 struct ApiKey(#[sensitive(redactable::Token)] String);
 
+// A public capability impl is not proof that Sensitive generated the matching
+// half of the dual contract.
+impl redactable::RedactableWithMapper for ApiKey {
+    fn redact_with<M: redactable::RedactableMapper>(self, _mapper: &M) -> Self {
+        self
+    }
+}
+
 fn main() {}

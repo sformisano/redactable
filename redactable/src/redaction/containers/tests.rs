@@ -15,7 +15,10 @@ use crate::{Secret, Sensitive, redaction::traits::Redactable};
 /// redaction behavior), but their machinery-level passthrough is still a
 /// contract worth asserting.
 fn machine_redact<T: crate::redaction::traits::RedactableWithMapper>(value: T) -> T {
-    crate::redaction::redact::redact(value)
+    crate::redaction::traits::RedactableWithMapper::redact_with(
+        value,
+        &crate::redaction::redact::PolicyMapper,
+    )
 }
 
 #[derive(Clone, Sensitive)]

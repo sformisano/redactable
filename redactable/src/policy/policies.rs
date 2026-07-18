@@ -16,12 +16,14 @@
 //! You can define your own policy markers:
 //!
 //! ```rust
-//! use redactable::{RedactionPolicy, TextRedactionPolicy};
+//! use redactable::{RedactionPolicy, TextPolicyKind, TextRedactionPolicy};
 //!
 //! #[derive(Clone, Copy)]
 //! struct MyCustomPolicy;
 //!
 //! impl RedactionPolicy for MyCustomPolicy {
+//!     type Kind = TextPolicyKind;
+//!
 //!     fn policy() -> TextRedactionPolicy {
 //!         TextRedactionPolicy::keep_last(2)
 //!     }
@@ -34,10 +36,73 @@ use super::text::TextRedactionPolicy;
 // RedactionPolicy trait
 // =============================================================================
 
+mod kind_sealed {
+    pub trait Sealed {}
+}
+
+mod recursive_kind_sealed {
+    pub trait Sealed {}
+}
+
+/// Structural behavior selected by a [`RedactionPolicy`] implementation.
+///
+/// This trait is sealed. Policy authors choose one of the exported kind marker
+/// types instead of defining new structural traversal behavior.
+pub trait PolicyKind: kind_sealed::Sealed {}
+
+/// Standard text-policy behavior.
+///
+/// This kind applies the policy recursively to supported string leaves and is
+/// the correct choice for custom text policies.
+#[derive(Clone, Copy, Debug)]
+pub struct TextPolicyKind;
+
+impl kind_sealed::Sealed for TextPolicyKind {}
+impl PolicyKind for TextPolicyKind {}
+impl recursive_kind_sealed::Sealed for TextPolicyKind {}
+
+/// Full-secret behavior, including bare scalar redaction.
+#[derive(Clone, Copy, Debug)]
+pub struct SecretPolicyKind;
+
+impl kind_sealed::Sealed for SecretPolicyKind {}
+impl PolicyKind for SecretPolicyKind {}
+impl recursive_kind_sealed::Sealed for SecretPolicyKind {}
+
+/// Policy kinds permitted to use the legacy recursive traversal traits.
+///
+/// This internal capability is sealed and intentionally excludes
+/// [`IpAddressPolicyKind`], whose fail-closed traversal is structurally distinct.
+#[diagnostic::on_unimplemented(
+    message = "`{Self}` cannot use the legacy recursive policy traversal",
+    note = "use `apply_policy` or `apply_policy_ref` for kind-aware dispatch; inside IP containers wrap typed values in `SensitiveValue<T, IpAddress>`"
+)]
+#[doc(hidden)]
+pub trait RecursivePolicyKind: PolicyKind + recursive_kind_sealed::Sealed {}
+
+impl RecursivePolicyKind for TextPolicyKind {}
+impl RecursivePolicyKind for SecretPolicyKind {}
+
+/// IP-aware structural behavior.
+///
+/// The built-in policy accepts typed IP values only as bare annotated fields.
+/// Recursive containers support text leaves and `SensitiveValue` wrappers;
+/// raw typed IP leaves inside containers fail closed.
+#[derive(Clone, Copy, Debug)]
+pub struct IpAddressPolicyKind;
+
+impl kind_sealed::Sealed for IpAddressPolicyKind {}
+impl PolicyKind for IpAddressPolicyKind {}
+
 /// Associates a policy marker type with a concrete string redaction policy.
 ///
 /// The policy is defined per marker type and is independent of runtime context.
 pub trait RedactionPolicy {
+    /// Selects the structural field behavior for this policy.
+    ///
+    /// Custom string policies should use [`TextPolicyKind`].
+    type Kind: PolicyKind;
+
     /// Returns the policy for this marker type.
     fn policy() -> TextRedactionPolicy;
 }
@@ -58,6 +123,8 @@ pub trait RedactionPolicy {
 pub struct Secret;
 
 impl RedactionPolicy for Secret {
+    type Kind = SecretPolicyKind;
+
     fn policy() -> TextRedactionPolicy {
         TextRedactionPolicy::default_full()
     }
@@ -65,11 +132,20 @@ impl RedactionPolicy for Secret {
 
 /// Policy marker for blockchain addresses (e.g., Ethereum, Bitcoin).
 ///
-/// Keeps the last 6 characters visible (e.g., `"0x1234...abcd"` → `"******...abcd"`).
+/// Keeps exactly the last 6 characters visible.
+///
+/// ```
+/// use redactable::{BlockchainAddress, RedactionPolicy};
+///
+/// let policy = BlockchainAddress::policy();
+/// assert_eq!(policy.apply_to("0x1234567890abcdef"), "************abcdef");
+/// ```
 #[derive(Clone, Copy)]
 pub struct BlockchainAddress;
 
 impl RedactionPolicy for BlockchainAddress {
+    type Kind = TextPolicyKind;
+
     fn policy() -> TextRedactionPolicy {
         TextRedactionPolicy::keep_last(6)
     }
@@ -82,6 +158,8 @@ impl RedactionPolicy for BlockchainAddress {
 pub struct CreditCard;
 
 impl RedactionPolicy for CreditCard {
+    type Kind = TextPolicyKind;
+
     fn policy() -> TextRedactionPolicy {
         TextRedactionPolicy::keep_last(4)
     }
@@ -95,6 +173,8 @@ impl RedactionPolicy for CreditCard {
 pub struct Email;
 
 impl RedactionPolicy for Email {
+    type Kind = TextPolicyKind;
+
     fn policy() -> TextRedactionPolicy {
         TextRedactionPolicy::email_local(2)
     }
@@ -102,11 +182,15 @@ impl RedactionPolicy for Email {
 
 /// Policy marker for IP addresses.
 ///
-/// Keeps the last 4 characters visible (e.g., `"192.168.1.100"` → `"*********.100"`).
-#[derive(Clone, Copy)]
+/// Typed IPv4 values keep the last octet (e.g., `"192.168.1.100"` →
+/// `"0.0.0.100"`); typed IPv6 values keep the last 16-bit segment. Text fields
+/// use the policy's separate keep-last-4 masking behavior.
+#[derive(Clone, Copy, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct IpAddress;
 
 impl RedactionPolicy for IpAddress {
+    type Kind = IpAddressPolicyKind;
+
     fn policy() -> TextRedactionPolicy {
         TextRedactionPolicy::keep_last(4)
     }
@@ -119,6 +203,8 @@ impl RedactionPolicy for IpAddress {
 pub struct PhoneNumber;
 
 impl RedactionPolicy for PhoneNumber {
+    type Kind = TextPolicyKind;
+
     fn policy() -> TextRedactionPolicy {
         TextRedactionPolicy::keep_last(4)
     }
@@ -133,6 +219,8 @@ impl RedactionPolicy for PhoneNumber {
 pub struct Pii;
 
 impl RedactionPolicy for Pii {
+    type Kind = TextPolicyKind;
+
     fn policy() -> TextRedactionPolicy {
         TextRedactionPolicy::keep_last(2)
     }
@@ -145,6 +233,8 @@ impl RedactionPolicy for Pii {
 pub struct Token;
 
 impl RedactionPolicy for Token {
+    type Kind = TextPolicyKind;
+
     fn policy() -> TextRedactionPolicy {
         TextRedactionPolicy::keep_last(4)
     }

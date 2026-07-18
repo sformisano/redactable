@@ -8,7 +8,7 @@
 //! - **[`TracingRedactedExt`]**: logs `ToRedactedOutput` values as display
 //!   strings. Works with any tracing subscriber but loses structure.
 //!
-//! - **[`TracingValuableExt`]** (requires the `tracing-valuable` feature and
+//! - **`TracingValuableExt`** (requires the `tracing-valuable` feature and
 //!   `RUSTFLAGS="--cfg tracing_unstable"`): logs redacted values as structured
 //!   data via the `valuable` crate.
 //!
@@ -56,14 +56,22 @@ use crate::{
     },
 };
 
-/// Marker trait for types whose `tracing` integration always emits redacted output.
+/// Marker trait for types whose `tracing` integration always emits logging-safe output.
 ///
-/// This marker indicates that the type will produce redacted output when used
-/// with tracing (via `TracingRedactedDebugExt`, `TracingRedactedExt`, or
-/// `TracingValuableExt`).
+/// Implementors are safe because they either redact their value or represent a
+/// value explicitly declared non-sensitive before it reaches tracing (via
+/// `TracingRedactedDebugExt`, `TracingRedactedExt`, or `TracingValuableExt`).
 ///
-/// This trait is implemented only for sink adapters and wrappers that redact
-/// before logging. It is not a blanket impl for raw types.
+/// This trait is implemented only for logging-safe adapters and wrappers. It is
+/// not a blanket impl for raw types.
+///
+/// ```compile_fail
+/// use redactable::tracing::TracingRedacted;
+///
+/// fn assert_tracing_redacted<T: TracingRedacted>() {}
+///
+/// assert_tracing_redacted::<String>();
+/// ```
 pub trait TracingRedacted {}
 
 /// Extension trait for logging structural redacted values as `Debug` fields.
@@ -75,8 +83,38 @@ pub trait TracingRedacted {}
 pub trait TracingRedactedDebugExt: Redactable + Clone + fmt::Debug {
     /// Redacts the value and wraps the redacted clone for `tracing` debug
     /// recording.
+    ///
+    /// # Panics
+    ///
+    /// This method inherits every panic from cloning `Self`. In particular, a
+    /// traversed [`std::cell::RefCell`] with a live mutable borrow panics. Use
+    /// [`IntoTracingRedactedDebugExt::into_tracing_redacted_debug`] when the
+    /// original value does not need to be retained.
     fn tracing_redacted_debug(&self) -> DebugValue<Self>;
 }
+
+/// Consuming extension trait for structural Debug fields in `tracing`.
+///
+/// This adapter redacts the owned value by calling `.redact()` on it instead of cloning it first. It accepts
+/// every [`Redactable`] shape, including types using `#[redactable(recursive)]`.
+///
+/// # Panics
+///
+/// The adapter does not clone the value before redacting (unlike the borrowed adapters), but a type's own `.redact()` may clone internally: traversal through
+/// [`std::sync::Arc`] or [`std::rc::Rc`] must clone the shared referent because
+/// other owners may still hold it, and rebuilding a `HashMap` or `HashSet` clones its `BuildHasher` (a custom hasher whose `Clone` panics or has side effects surfaces here). A live [`std::cell::RefCell`] mutable borrow
+/// behind an `Arc`/`Rc` therefore still panics. Prefer unique ownership
+/// ([`Box`]) for values you log. (`Arc<RefCell<T>>` is `!Send + !Sync` and an
+/// anti-pattern regardless.)
+pub trait IntoTracingRedactedDebugExt: Redactable + fmt::Debug + Sized {
+    /// Consumes and redacts the value before handing it to `tracing`.
+    #[must_use]
+    fn into_tracing_redacted_debug(self) -> DebugValue<Self> {
+        debug(self.redact())
+    }
+}
+
+impl<T> IntoTracingRedactedDebugExt for T where T: Redactable + fmt::Debug {}
 
 impl<T> TracingRedactedDebugExt for T
 where
@@ -92,11 +130,18 @@ where
 /// This works with any tracing subscriber but the output is a flat string,
 /// not structured data. For structural `Debug` output, use
 /// [`TracingRedactedDebugExt`]. For structured `valuable` output, see
-/// [`TracingValuableExt`].
+/// `TracingValuableExt`.
 pub trait TracingRedactedExt {
     /// Wraps the value for `tracing` logging as a display value.
     ///
     /// The value is redacted and converted to a string representation.
+    ///
+    /// # Panics
+    ///
+    /// This method inherits panics from [`ToRedactedOutput`]. Clone-backed
+    /// wrappers such as [`RedactedOutputRef`] and [`RedactedJsonRef`] panic if
+    /// cloning their complete value panics, including a traversed
+    /// [`std::cell::RefCell`] with a live mutable borrow.
     fn tracing_redacted(&self) -> DisplayValue<String>;
 }
 
@@ -131,7 +176,7 @@ impl<T> TracingRedacted for NotSensitiveDisplay<T> where T: fmt::Display {}
 
 impl<T> TracingRedacted for NotSensitiveDebug<T> where T: fmt::Debug {}
 
-impl<T> TracingRedacted for NotSensitive<T> where T: TracingRedacted {}
+impl<T> TracingRedacted for NotSensitive<T> {}
 
 impl<T> TracingRedacted for RedactedOutputRef<'_, T> where T: Redactable + Clone + fmt::Debug {}
 
@@ -147,27 +192,41 @@ impl<T> TracingRedacted for RedactedJsonRef<'_, T> where T: Redactable + Clone +
 /// so callers cannot build structured tracing payloads without first applying
 /// redaction. Pass a reference to the wrapper through `tracing::field::valuable`
 /// when compiling with `RUSTFLAGS="--cfg tracing_unstable"`.
+/// Deliberately NOT `Clone`. Cloning the wrapper would hand out a second handle
+/// to the same redacted value; if that value has shared interior mutability
+/// (e.g. an `Arc`/`Rc` over a `Cell`/`Mutex`), a caller could clone the wrapper,
+/// mutate the shared inner through the clone to insert a *fresh* secret, and
+/// have the original wrapper log it. Without `Clone`, the only way to reach the
+/// inner value is the consuming [`Self::into_inner`], which leaves no original
+/// wrapper behind to log.
 #[cfg(feature = "tracing-valuable")]
-#[derive(Clone, Debug)]
-pub struct RedactedValuable<T> {
+#[derive(Debug)]
+pub struct TracingRedactedValue<T> {
     redacted: T,
 }
 
 #[cfg(feature = "tracing-valuable")]
-impl<T> RedactedValuable<T> {
-    /// Creates a new `RedactedValuable` from an already-redacted value.
+impl<T> TracingRedactedValue<T> {
+    /// Creates a new `TracingRedactedValue` from an already-redacted value.
     pub(crate) fn new(redacted: T) -> Self {
         Self { redacted }
     }
 
-    /// Returns a reference to the redacted inner value.
-    pub fn inner(&self) -> &T {
-        &self.redacted
+    /// Consumes the wrapper and returns the redacted inner value.
+    ///
+    /// This is deliberately consuming rather than a borrowing `inner(&self)`.
+    /// The original secret is already gone by the time a `TracingRedactedValue`
+    /// exists, but a shared reference to an interior-mutable inner value would
+    /// let a caller write a *fresh* secret into the wrapper after redaction and
+    /// before it is logged. Taking `self` closes that window.
+    #[must_use]
+    pub fn into_inner(self) -> T {
+        self.redacted
     }
 }
 
 #[cfg(feature = "tracing-valuable")]
-impl<T: valuable::Valuable> valuable::Valuable for RedactedValuable<T> {
+impl<T: valuable::Valuable> valuable::Valuable for TracingRedactedValue<T> {
     fn as_value(&self) -> valuable::Value<'_> {
         self.redacted.as_value()
     }
@@ -178,7 +237,7 @@ impl<T: valuable::Valuable> valuable::Valuable for RedactedValuable<T> {
 }
 
 #[cfg(feature = "tracing-valuable")]
-impl<T> TracingRedacted for RedactedValuable<T> {}
+impl<T> TracingRedacted for TracingRedactedValue<T> {}
 
 /// Extension trait for logging redacted values as structured `valuable` data.
 ///
@@ -211,16 +270,48 @@ impl<T> TracingRedacted for RedactedValuable<T> {}
 /// ```
 #[cfg(feature = "tracing-valuable")]
 pub trait TracingValuableExt {
-    /// The redacted type that will be wrapped in `RedactedValuable`.
+    /// The redacted type that will be wrapped in `TracingRedactedValue`.
     type Redacted: valuable::Valuable;
 
     /// Redacts the value and wraps it for structured tracing output.
     ///
-    /// The returned `RedactedValuable` implements `valuable::Valuable`, allowing
+    /// The returned `TracingRedactedValue` implements `valuable::Valuable`, allowing
     /// tracing subscribers to inspect the redacted structure when passed through
     /// `tracing::field::valuable(&binding)` under `tracing_unstable`.
-    fn tracing_redacted_valuable(&self) -> RedactedValuable<Self::Redacted>;
+    ///
+    /// # Panics
+    ///
+    /// This method inherits every panic from cloning `Self`. In particular, a
+    /// traversed [`std::cell::RefCell`] with a live mutable borrow panics. Use
+    /// [`IntoTracingRedactedValuableExt::into_tracing_redacted_valuable`] when
+    /// the original value does not need to be retained.
+    fn tracing_redacted_valuable(&self) -> TracingRedactedValue<Self::Redacted>;
 }
+
+/// Consuming extension trait for structured `valuable` tracing output.
+///
+/// This adapter redacts the owned value by calling `.redact()` on it instead of cloning it first. It accepts
+/// every [`Redactable`] shape, including types using `#[redactable(recursive)]`.
+///
+/// # Panics
+///
+/// The adapter does not clone the value before redacting (unlike the borrowed adapters), but a type's own `.redact()` may clone internally: traversal through
+/// [`std::sync::Arc`] or [`std::rc::Rc`] must clone the shared referent because
+/// other owners may still hold it, and rebuilding a `HashMap` or `HashSet` clones its `BuildHasher` (a custom hasher whose `Clone` panics or has side effects surfaces here). A live [`std::cell::RefCell`] mutable borrow
+/// behind an `Arc`/`Rc` therefore still panics. Prefer unique ownership
+/// ([`Box`]) for values you log. (`Arc<RefCell<T>>` is `!Send + !Sync` and an
+/// anti-pattern regardless.)
+#[cfg(feature = "tracing-valuable")]
+pub trait IntoTracingRedactedValuableExt: Redactable + valuable::Valuable + Sized {
+    /// Consumes and redacts the value before wrapping it for `valuable` output.
+    #[must_use]
+    fn into_tracing_redacted_valuable(self) -> TracingRedactedValue<Self> {
+        TracingRedactedValue::new(self.redact())
+    }
+}
+
+#[cfg(feature = "tracing-valuable")]
+impl<T> IntoTracingRedactedValuableExt for T where T: Redactable + valuable::Valuable {}
 
 #[cfg(feature = "tracing-valuable")]
 impl<T> TracingValuableExt for T
@@ -229,8 +320,8 @@ where
 {
     type Redacted = T;
 
-    fn tracing_redacted_valuable(&self) -> RedactedValuable<Self::Redacted> {
-        RedactedValuable::new(self.clone().redact())
+    fn tracing_redacted_valuable(&self) -> TracingRedactedValue<Self::Redacted> {
+        TracingRedactedValue::new(self.clone().redact())
     }
 }
 
@@ -332,8 +423,9 @@ mod tests {
             let valuable = mock.tracing_redacted_valuable();
 
             // Verify the inner value was redacted
-            assert_eq!(valuable.inner().username, "alice");
-            assert_eq!(valuable.inner().password, "[REDACTED]");
+            let inner = valuable.into_inner();
+            assert_eq!(inner.username, "alice");
+            assert_eq!(inner.password, "[REDACTED]");
         }
 
         #[test]

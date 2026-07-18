@@ -1,0 +1,12 @@
+[package]
+name = "redactable-external-review-contracts"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+redactable = { path = "../../redactable", features = ["slog", "ip-address"] }
+serde = { version = "1", features = ["derive"] }
+slog = { version = "2.8", features = ["nested-values"] }
+
+[workspace]

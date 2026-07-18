@@ -91,7 +91,9 @@ pub(super) fn run_structural_generated_dependency_roots() {
         struct SecretEvent { #[sensitive(redactable::Secret)] value: String }
     })
     .unwrap();
-    assert_private_dependencies(expand(sensitive, DeriveKind::Sensitive).unwrap(), true);
+    // Borrowed sensitive slog output fails closed without requiring or invoking
+    // the consumer's Serialize implementation.
+    assert_private_dependencies(expand(sensitive, DeriveKind::Sensitive).unwrap(), false);
 
     let sensitive_display: DeriveInput = syn::parse2(quote! {
         #[error("{value}")]

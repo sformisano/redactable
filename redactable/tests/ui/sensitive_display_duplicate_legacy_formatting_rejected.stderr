@@ -1,0 +1,5 @@
+error: duplicate `legacy_formatting` override
+ --> tests/ui/sensitive_display_duplicate_legacy_formatting_rejected.rs:7:37
+  |
+7 |     #[redactable(legacy_formatting, legacy_formatting)]
+  |                                     ^^^^^^^^^^^^^^^^^

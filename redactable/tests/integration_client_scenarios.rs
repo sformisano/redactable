@@ -8,13 +8,16 @@
 use std::marker::PhantomData;
 
 use redactable::{
-    Email, PhoneNumber, Pii, Redactable, RedactionPolicy, Secret, Sensitive, TextRedactionPolicy,
+    Email, PhoneNumber, Pii, Redactable, RedactionPolicy, Secret, Sensitive, TextPolicyKind,
+    TextRedactionPolicy,
 };
 
 /// Custom policy that fully redacts (for testing custom policies)
 #[derive(Clone, Copy)]
 struct FullRedact;
 impl RedactionPolicy for FullRedact {
+    type Kind = TextPolicyKind;
+
     fn policy() -> TextRedactionPolicy {
         TextRedactionPolicy::default_full()
     }
@@ -24,6 +27,8 @@ impl RedactionPolicy for FullRedact {
 #[derive(Clone, Copy)]
 struct PartiallyVisible;
 impl RedactionPolicy for PartiallyVisible {
+    type Kind = TextPolicyKind;
+
     fn policy() -> TextRedactionPolicy {
         TextRedactionPolicy::keep_last(4)
     }

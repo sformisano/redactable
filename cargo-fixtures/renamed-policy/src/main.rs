@@ -1,5 +1,6 @@
-use std::net::{IpAddr, Ipv4Addr};
+use std::net::Ipv4Addr;
 
+use alias_provider::ClientIp;
 use safe::{Redactable, Sensitive};
 
 type Amount = u64;
@@ -9,7 +10,7 @@ struct RenamedPolicies {
     #[sensitive(safe::Secret)]
     amount: Amount,
     #[sensitive(safe::IpAddress)]
-    address: IpAddr,
+    address: ClientIp,
     #[sensitive(::safe::IpAddress)]
     v4: Ipv4Addr,
 }
@@ -23,6 +24,6 @@ fn main() {
     .redact();
 
     assert_eq!(redacted.amount, 0);
-    assert_eq!(redacted.address, "0.0.0.7".parse::<IpAddr>().unwrap());
+    assert_eq!(redacted.address, "0.0.0.7".parse::<ClientIp>().unwrap());
     assert_eq!(redacted.v4, Ipv4Addr::new(0, 0, 0, 8));
 }

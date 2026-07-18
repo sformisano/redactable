@@ -17,11 +17,12 @@
 //! - validate your policy choices
 //!
 //! Explicitly non-sensitive output remains an exceptional opt-in. Use
-//! [`NotSensitiveDebug`] or [`struct@NotSensitiveDisplay`] only when the complete
-//! formatted value is safe to log. With the `json` feature, those wrappers
-//! serialize the raw inner value for transport or storage; Serde output is not
-//! redaction. Sensitive values should use [`SensitiveValue`] or a custom
-//! [`ToRedactedOutput`] projection instead.
+//! `NotSensitiveDebug` or `NotSensitiveDisplay` only when the complete formatted
+//! value is safe to log. With the `json` feature, those wrappers serialize the
+//! raw inner value for transport or storage; Serde output is not redaction.
+//! Sensitive values should use `SensitiveValue` or a custom `ToRedactedOutput`
+//! projection instead. These APIs are available when the `redaction` feature is
+//! enabled.
 //!
 //! The `Sensitive` derive macro lives in `redactable-derive` and is re-exported
 //! from this crate.
@@ -66,7 +67,9 @@
 // Allow some lints while testing
 #![cfg_attr(test, allow(clippy::non_ascii_literal, clippy::unwrap_used))]
 
-pub use redactable_derive::{NotSensitive, NotSensitiveDisplay, Sensitive, SensitiveDisplay};
+pub use redactable_derive::{
+    NotSensitive, NotSensitiveDisplay, Sensitive, SensitiveDisplay, SensitiveDual,
+};
 
 /// Whether `redactable` itself was compiled with the `testing` feature.
 ///
@@ -99,21 +102,22 @@ pub mod tracing;
 // Re-exports from policy module
 #[cfg(feature = "policy")]
 pub use policy::{
-    BlockchainAddress, CreditCard, Email, EmailConfig, IpAddress, KeepConfig, MASK_CHAR,
-    MaskConfig, PhoneNumber, Pii, REDACTED_PLACEHOLDER, RedactionPolicy, Secret,
-    TextRedactionPolicy, Token,
+    BlockchainAddress, CreditCard, Email, EmailConfig, IpAddress, IpAddressPolicyKind, KeepConfig,
+    MASK_CHAR, MaskConfig, PhoneNumber, Pii, PolicyKind, REDACTED_PLACEHOLDER, RedactionPolicy,
+    Secret, SecretPolicyKind, TextPolicyKind, TextRedactionPolicy, Token,
 };
 // Re-exports from redaction module: public API
-#[cfg(feature = "redaction")]
-pub use redaction::{
-    NotSensitive, NotSensitiveDebug, NotSensitiveDebugExt, NotSensitiveDisplay,
-    NotSensitiveDisplayExt, NotSensitiveExt, NotSensitiveValue, Redactable,
-    RedactableWithFormatter, RedactedFormatterRef, RedactedOutput, RedactedOutputExt,
-    RedactedOutputRef, SensitiveValue, SensitiveWithPolicy, ToRedactedOutput,
-};
 #[cfg(feature = "json")]
 pub use redaction::{
-    NotSensitiveJson, NotSensitiveJsonExt, RedactedJson, RedactedJsonExt, RedactedJsonRef,
+    IntoRedactedJsonExt, NotSensitiveJson, NotSensitiveJsonExt, RedactedJson, RedactedJsonExt,
+    RedactedJsonRef,
+};
+#[cfg(feature = "redaction")]
+pub use redaction::{
+    IntoRedactedOutputExt, NotSensitive, NotSensitiveDebug, NotSensitiveDebugExt,
+    NotSensitiveDisplay, NotSensitiveDisplayExt, NotSensitiveExt, NotSensitiveValue, Redactable,
+    RedactableWithFormatter, RedactedFormatterRef, RedactedOutput, RedactedOutputExt,
+    RedactedOutputRef, SensitiveValue, SensitiveWithPolicy, ToRedactedOutput,
 };
 // Re-exports from redaction module: internal machinery (used by derive-generated code)
 #[doc(hidden)]

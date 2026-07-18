@@ -4,9 +4,12 @@
 .idea
 .vscode
 /dev-tools
+/rust_out
 /target
 **/*.rs.bk
 *.swo
 *.swp
 *~
 Cargo.lock
+!/Cargo.lock
+!/cargo-fixtures/panic-abort-refcell/Cargo.lock

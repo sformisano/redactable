@@ -40,4 +40,13 @@ mod not_sensitive_display {
         let t = trybuild::TestCases::new();
         t.compile_fail("tests/ui/not_sensitive_display_not_sensitive_rejected.rs");
     }
+
+    #[test]
+    fn direct_display_and_clone_json_keep_refcell_api_available() {
+        let t = trybuild::TestCases::new();
+        t.pass("tests/ui/not_sensitive_display_clone_safe_ok.rs");
+        if cfg!(feature = "json") {
+            t.pass("tests/ui/not_sensitive_display_refcell_clone_rejected.rs");
+        }
+    }
 }

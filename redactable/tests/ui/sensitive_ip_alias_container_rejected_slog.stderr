@@ -1,0 +1,20 @@
+error[E0277]: `IpAddr` is not a supported map key for this IP-address policy
+  --> tests/ui/sensitive_ip_alias_container_rejected_slog.rs:10:12
+   |
+10 |     peers: IpMap,
+   |            ^^^^^ the trait `redactable::redaction::ip_policy::IpMapKeySafe` is not implemented for `IpAddr`
+   |
+   = note: IP-address policy map keys must be known-safe non-text scalars; put typed IP data in values wrapped as `SensitiveValue<T, IpAddress>`
+   = help: the following other types implement trait `redactable::redaction::ip_policy::IpMapKeySafe`:
+             ()
+             NonZero<i128>
+             NonZero<i16>
+             NonZero<i32>
+             NonZero<i64>
+             NonZero<i8>
+             NonZero<isize>
+             NonZero<u128>
+           and $N others
+   = note: required for `HashMap<IpAddr, String>` to implement `redactable::__private::IpPolicyApplicable<IpAddress>`
+   = note: required for `IpAddressPolicyKind` to implement `redactable::__private::PolicyKindField<IpAddress, HashMap<IpAddr, String>>`
+   = note: required for `HashMap<IpAddr, String>` to implement `redactable::__private::PolicyField<IpAddress>`

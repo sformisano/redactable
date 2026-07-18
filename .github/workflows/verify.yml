@@ -1,0 +1,176 @@
+name: Verify
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  # Runs first and gates every other job: any newly unpinned third-party action
+  # must be rejected BEFORE it gets a chance to execute. This job itself uses
+  # only actions/checkout (SHA-pinned), so it introduces no unchecked action.
+  pin-check:
+    name: Immutable-action pin check (gates all jobs)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout exact commit
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Reject mutable third-party action references
+        run: .github/scripts/check-actions-pinned.sh
+
+      - name: Verify the immutable-reference guard itself
+        run: .github/scripts/check-actions-pinned.test.sh
+
+  checks:
+    name: Complete Rust 1.97 verification
+    needs: pin-check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout exact commit
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Install Rust 1.97.0
+        uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88 # master
+        with:
+          toolchain: 1.97.0
+          components: clippy, rustfmt
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+
+      # Pinned to the reviewed versions that produced this repository's green
+      # audit/deny results. Unpinned installs let a supply-chain gate change
+      # underneath the release without review, which is the opposite of what
+      # these two tools are here to provide.
+      - name: Install verification tools
+        run: |
+          cargo install cargo-audit --locked --version 0.22.2
+          cargo install cargo-deny --locked --version 0.20.2
+
+      - name: Verify checkout identity
+        run: test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+
+      - name: Format
+        run: cargo fmt --all -- --check
+
+      - name: Clippy
+        run: cargo clippy --locked --all --all-targets --all-features -- -D warnings -D rust-2018-idioms -D rust-2021-compatibility -A deprecated -A dead-code
+
+      - name: Audit dependencies
+        run: cargo audit
+
+      - name: Deny policy check
+        run: cargo deny check
+
+      # The all-features build enables `testing`, which intentionally changes
+      # generated Debug output. Keep the ordinary production branch explicit.
+      - name: Tests (default production features)
+        run: cargo test --locked --workspace --all-targets
+
+      - name: Panic-abort fixture from a clean Cargo home
+        run: |
+          clean_cargo_home="$(mktemp -d)"
+          CARGO_HOME="$clean_cargo_home" cargo test --locked -p redactable --test followup_refcell_panic_abort --features slog,tracing
+
+      - name: Tests (all features)
+        run: cargo test --locked --workspace --all-targets --all-features
+
+      - name: Doc tests (all features)
+        run: cargo test --locked --doc --workspace --all-features
+
+      - name: README consumer examples
+        run: cargo test --locked --doc --manifest-path cargo-fixtures/readme-examples/Cargo.toml
+
+      - name: Rustdoc warnings
+        run: RUSTDOCFLAGS="-D warnings" cargo doc --locked --workspace --all-features --no-deps
+
+      - name: Release build
+        run: cargo build --locked --workspace --release --all-features
+
+      - name: Renamed-policy fixture
+        run: cargo run --manifest-path cargo-fixtures/renamed-policy/Cargo.toml
+
+      - name: External consumer regression contracts
+        run: cargo run --locked --manifest-path cargo-fixtures/external-review-contracts/Cargo.toml
+
+      - name: Slog feature-unification fixture
+        run: cargo test --manifest-path cargo-fixtures/slog-feature-unification/Cargo.toml --workspace
+
+      - name: Panic-abort RefCell fixture
+        run: cargo test --locked -p redactable --test followup_refcell_panic_abort --features slog,tracing
+
+      - name: Stable tracing and valuable integration
+        run: cargo test --locked -p redactable --features tracing-valuable --test integration_tracing
+
+      - name: Unstable valuable tracing integration
+        run: RUSTFLAGS="--cfg tracing_unstable" cargo test --locked -p redactable --test integration_tracing --features tracing-valuable valuable_structured_output
+
+      - name: Package contents
+        run: .github/scripts/verify-package-contents.sh
+
+  isolated-feature-builds:
+    name: Isolated feature — ${{ matrix.feature }}
+    needs: pin-check
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        feature:
+          - no-default-features
+          - policy
+          - redaction
+          - json
+          - slog
+          - tracing
+          - tracing-valuable
+          - testing
+          - chrono
+          - time
+          - ip-address
+          - uuid
+          - extras
+    steps:
+      - name: Checkout exact commit
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Install Rust 1.97.0
+        uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88 # master
+        with:
+          toolchain: 1.97.0
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+
+      - name: Verify checkout identity
+        run: test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+
+      - name: Build isolated feature
+        env:
+          FEATURE: ${{ matrix.feature }}
+        run: |
+          if [[ "$FEATURE" == "no-default-features" ]]; then
+            cargo check --locked -p redactable --no-default-features
+          else
+            cargo check --locked -p redactable --no-default-features --features "$FEATURE"
+          fi
+
+      - name: Strict rustdoc for isolated feature
+        env:
+          FEATURE: ${{ matrix.feature }}
+        run: |
+          if [[ "$FEATURE" == "no-default-features" ]]; then
+            RUSTDOCFLAGS="-D warnings" cargo doc --locked -p redactable --no-default-features --no-deps
+          else
+            RUSTDOCFLAGS="-D warnings" cargo doc --locked -p redactable --no-default-features --features "$FEATURE" --no-deps
+          fi

@@ -10,10 +10,12 @@
 //! Common scalar types implement `RedactableWithFormatter` as passthrough (unchanged output):
 //! `String`, `str`, `bool`, `char`, integers, floats, `Cow<str>`, `PhantomData`, `()`.
 //!
-//! Container implementations format inner values recursively. `RefCell`,
-//! including policy-backed formatting, uses a non-panicking borrow attempt and
-//! emits `<borrowed>` on a conflicting borrow. `Mutex` and `RwLock` use
-//! non-blocking lock attempts so display redaction does not wait behind a writer.
+//! Container implementations format inner values recursively. Library-owned
+//! `RefCell` formatting, including the generated policy companion route, uses a
+//! non-panicking borrow attempt and emits `<borrowed>` on a conflicting borrow.
+//! Explicit downstream companion fallbacks retain their implementor's behavior.
+//! `Mutex` and `RwLock` use non-blocking lock attempts so display redaction does
+//! not wait behind a writer.
 //!
 //! Feature-gated types: `chrono` date/time types, `time` crate types, `Uuid`.
 

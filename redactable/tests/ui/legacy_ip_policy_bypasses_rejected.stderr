@@ -1,0 +1,93 @@
+error[E0277]: `IpAddr` is not a supported map key for this IP-address policy
+  --> tests/ui/legacy_ip_policy_bypasses_rejected.rs:12:39
+   |
+12 |     let _ = apply_policy::<IpAddress, _>(value);
+   |                                       ^ the trait `redactable::redaction::ip_policy::IpMapKeySafe` is not implemented for `IpAddr`
+   |
+   = note: IP-address policy map keys must be known-safe non-text scalars; put typed IP data in values wrapped as `SensitiveValue<T, IpAddress>`
+   = help: the following other types implement trait `redactable::redaction::ip_policy::IpMapKeySafe`:
+             ()
+             NonZero<i128>
+             NonZero<i16>
+             NonZero<i32>
+             NonZero<i64>
+             NonZero<i8>
+             NonZero<isize>
+             NonZero<u128>
+           and $N others
+   = note: required for `HashMap<IpAddr, String>` to implement `redactable::__private::IpPolicyApplicable<IpAddress>`
+   = note: required for `IpAddressPolicyKind` to implement `redactable::__private::PolicyKindField<IpAddress, HashMap<IpAddr, String>>`
+   = note: required for `HashMap<IpAddr, String>` to implement `redactable::__private::PolicyField<IpAddress>`
+note: required by a bound in `apply_policy`
+  --> src/redaction/redact/core.rs
+   |
+   | pub fn apply_policy<P, V>(value: V) -> V
+   |        ------------ required by a bound in this function
+...
+   |     V: PolicyField<P>,
+   |        ^^^^^^^^^^^^^^ required by this bound in `apply_policy`
+
+error[E0277]: `IpAddr` is not a supported map key for this IP-address policy
+  --> tests/ui/legacy_ip_policy_bypasses_rejected.rs:16:13
+   |
+16 |     let _ = apply_policy_ref::<IpAddress, _>(value);
+   |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ the trait `redactable::redaction::ip_policy::IpMapKeySafe` is not implemented for `IpAddr`
+   |
+   = note: IP-address policy map keys must be known-safe non-text scalars; put typed IP data in values wrapped as `SensitiveValue<T, IpAddress>`
+   = help: the following other types implement trait `redactable::redaction::ip_policy::IpMapKeySafe`:
+             ()
+             NonZero<i128>
+             NonZero<i16>
+             NonZero<i32>
+             NonZero<i64>
+             NonZero<i8>
+             NonZero<isize>
+             NonZero<u128>
+           and $N others
+   = note: required for `HashMap<IpAddr, String>` to implement `redactable::__private::IpPolicyApplicableRef<IpAddress>`
+
+error[E0277]: `IpAddressPolicyKind` cannot use the legacy recursive policy traversal
+  --> tests/ui/legacy_ip_policy_bypasses_rejected.rs:20:46
+   |
+20 |     let _ = PolicyApplicable::apply_policy::<IpAddress, _>(value, &PolicyMapper);
+   |                                              ^^^^^^^^^ the trait `redactable::policy::RecursivePolicyKind` is not implemented for `IpAddressPolicyKind`
+   |
+   = note: use `apply_policy` or `apply_policy_ref` for kind-aware dispatch; inside IP containers wrap typed values in `SensitiveValue<T, IpAddress>`
+help: the following other types implement trait `redactable::policy::RecursivePolicyKind`
+  --> src/policy/policies.rs
+   |
+   | impl RecursivePolicyKind for TextPolicyKind {}
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `TextPolicyKind`
+   | impl RecursivePolicyKind for SecretPolicyKind {}
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `SecretPolicyKind`
+note: required by a bound in `redactable::PolicyApplicable::apply_policy`
+  --> src/redaction/redact/core.rs
+   |
+   |     fn apply_policy<P, M>(self, mapper: &M) -> Self
+   |        ------------ required by a bound in this associated function
+...
+   |         P::Kind: RecursivePolicyKind,
+   |                  ^^^^^^^^^^^^^^^^^^^ required by this bound in `PolicyApplicable::apply_policy`
+
+error[E0277]: `IpAddressPolicyKind` cannot use the legacy recursive policy traversal
+  --> tests/ui/legacy_ip_policy_bypasses_rejected.rs:24:53
+   |
+24 |     let _ = PolicyApplicableRef::apply_policy_ref::<IpAddress, _>(value, &PolicyMapper);
+   |                                                     ^^^^^^^^^ the trait `redactable::policy::RecursivePolicyKind` is not implemented for `IpAddressPolicyKind`
+   |
+   = note: use `apply_policy` or `apply_policy_ref` for kind-aware dispatch; inside IP containers wrap typed values in `SensitiveValue<T, IpAddress>`
+help: the following other types implement trait `redactable::policy::RecursivePolicyKind`
+  --> src/policy/policies.rs
+   |
+   | impl RecursivePolicyKind for TextPolicyKind {}
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `TextPolicyKind`
+   | impl RecursivePolicyKind for SecretPolicyKind {}
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `SecretPolicyKind`
+note: required by a bound in `redactable::PolicyApplicableRef::apply_policy_ref`
+  --> src/redaction/redact/core.rs
+   |
+   |     fn apply_policy_ref<P, M>(&self, mapper: &M) -> Self::Output
+   |        ---------------- required by a bound in this associated function
+...
+   |         P::Kind: RecursivePolicyKind,
+   |                  ^^^^^^^^^^^^^^^^^^^ required by this bound in `PolicyApplicableRef::apply_policy_ref`
