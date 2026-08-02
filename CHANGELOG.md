@@ -46,6 +46,10 @@
   bound. Types implementing `Redactable + Serialize` can call
   `.slog_redacted_json()` without implementing `Debug`.
 
+### Removed
+
+- Removed repository scripts that rewrote authorship, commit trailers, and tags.
+
 ### Documentation
 
 - Corrected the README's clone-based output and tracing adapter bounds by
