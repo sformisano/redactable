@@ -91,9 +91,10 @@ pub(super) fn run_structural_generated_dependency_roots() {
         struct SecretEvent { #[sensitive(redactable::Secret)] value: String }
     })
     .unwrap();
-    // Borrowed sensitive slog output fails closed without requiring or invoking
-    // the consumer's Serialize implementation.
-    assert_private_dependencies(expand(sensitive, DeriveKind::Sensitive).unwrap(), false);
+    // Borrowed sensitive slog output still fails closed without invoking the
+    // consumer's `Serialize`, but the generated producer requires it (D1), and
+    // it must resolve through `__private::serde`, never the consumer root.
+    assert_private_dependencies(expand(sensitive, DeriveKind::Sensitive).unwrap(), true);
 
     let sensitive_display: DeriveInput = syn::parse2(quote! {
         #[error("{value}")]

@@ -7,7 +7,7 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use redactable::{NotSensitive, NotSensitiveExt, tracing::TracingRedacted};
+use redactable::{BypassRedactionMarker, tracing::TracingRedacted};
 use tracing::{
     Event, Id, Metadata, Subscriber,
     field::{Field, Visit},
@@ -70,8 +70,8 @@ fn not_sensitive_wrapper_is_tracing_certified_without_certifying_the_raw_type() 
 
     const RAW_VALUE: &str = "declared-safe-tracing-value-665d";
     let value = RAW_VALUE.to_owned();
-    let owned = NotSensitive(value.clone());
-    let borrowed = value.not_sensitive();
+    let owned = BypassRedactionMarker(value.clone());
+    let borrowed = BypassRedactionMarker(&value);
     assert_tracing_certified(&owned);
     assert_tracing_certified(&borrowed);
 

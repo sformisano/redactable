@@ -1,6 +1,6 @@
 use redactable::Sensitive;
 
-#[derive(Sensitive)]
+#[derive(Clone, serde::Serialize, Sensitive)]
 #[not_sensitive]
 struct Event {
     value: String,

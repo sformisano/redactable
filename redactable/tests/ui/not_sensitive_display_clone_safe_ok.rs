@@ -1,6 +1,6 @@
 use std::fmt;
 
-use redactable::{NotSensitiveDisplay, ToRedactedOutput};
+use redactable::{NotSensitiveDisplay, ToRedacted};
 
 #[derive(Clone, NotSensitiveDisplay, serde::Serialize)]
 struct Generic<T>(T);
@@ -13,11 +13,5 @@ impl<T: fmt::Display> fmt::Display for Generic<T> {
 
 fn main() {
     let value = Generic(String::from("safe"));
-    let _ = value.to_redacted_output();
-
-    #[cfg(feature = "json")]
-    {
-        use redactable::RedactedJsonExt;
-        let _ = value.redacted_json().to_redacted_output();
-    }
+    let _ = value.to_redacted();
 }

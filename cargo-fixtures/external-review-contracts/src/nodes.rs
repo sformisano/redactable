@@ -1,25 +1,25 @@
 use redactable::{Secret, Sensitive, SensitiveDisplay, SensitiveDual};
 use serde::Serialize;
 
-#[derive(Sensitive)]
+#[derive(Clone, serde::Serialize, Sensitive)]
 pub struct Node {
     pub next: Option<Box<Node>>,
 }
 
-#[derive(Sensitive)]
+#[derive(Clone, serde::Serialize, Sensitive)]
 pub enum RecursiveEnum {
     Next(Box<RecursiveEnum>),
     End,
 }
 
 // `#[redactable(recursive)]` combined with a `#[sensitive(Secret)]` field.
-// Both the borrowed route (`.redact()`) and the consuming adapters are
+// Both structural traversal (`.redact()`) and the consuming adapters are
 // exercised below. The consuming route used to be a compile error for this
 // shape: the removed owned-capability hierarchy generated an owned traversal
 // bound that did not honor the override, forming a trait-solver cycle
 // (`E0275`). The adapters now route through `.redact()`, which honors it, so
 // recursive types are supported on every route.
-#[derive(Sensitive, Serialize)]
+#[derive(Clone, Sensitive, Serialize)]
 pub struct SecretRecursiveNode {
     #[sensitive(Secret)]
     pub secret: String,
@@ -27,35 +27,35 @@ pub struct SecretRecursiveNode {
     pub next: Option<Box<SecretRecursiveNode>>,
 }
 
-#[derive(Sensitive)]
+#[derive(Clone, serde::Serialize, Sensitive)]
 pub enum SecretRecursiveEnum {
     Next(#[redactable(recursive)] Box<SecretRecursiveEnum>),
     Secret(#[sensitive(Secret)] String),
 }
 
-#[derive(Sensitive)]
+#[derive(Clone, serde::Serialize, Sensitive)]
 pub enum LeftEnum {
     Next(Box<RightEnum>),
     End,
 }
 
-#[derive(Sensitive)]
+#[derive(Clone, serde::Serialize, Sensitive)]
 pub enum RightEnum {
     Next(Box<LeftEnum>),
     End,
 }
 
-#[derive(Sensitive)]
+#[derive(Clone, serde::Serialize, Sensitive)]
 pub struct Left {
     pub right: Option<Box<Right>>,
 }
 
-#[derive(Sensitive)]
+#[derive(Clone, serde::Serialize, Sensitive)]
 pub struct Right {
     pub left: Option<Box<Left>>,
 }
 
-#[derive(Sensitive)]
+#[derive(Clone, serde::Serialize, Sensitive)]
 pub struct GenericNode<T> {
     pub value: T,
     pub next: Option<Box<GenericNode<T>>>,
@@ -103,7 +103,7 @@ pub enum DisplayRightEnum {
     End,
 }
 
-#[derive(SensitiveDual)]
+#[derive(Clone, serde::Serialize, SensitiveDual)]
 #[error("dual {next:?}")]
 pub struct DualNode {
     pub next: Option<Box<DualNode>>,

@@ -1,0 +1,26 @@
+error[E0277]: the trait bound `DisplayOnly: ToRedacted` is not satisfied
+  --> tests/ui/to_redacted_arbitrary_display_rejected.rs:16:20
+   |
+16 |     require_output(&DisplayOnly);
+   |     -------------- ^^^^^^^^^^^^ unsatisfied trait bound
+   |     |
+   |     required by a bound introduced by this call
+   |
+help: the trait `ToRedacted` is not implemented for `DisplayOnly`
+  --> tests/ui/to_redacted_arbitrary_display_rejected.rs:5:1
+   |
+ 5 | struct DisplayOnly;
+   | ^^^^^^^^^^^^^^^^^^
+   = help: the following other types implement trait `ToRedacted`:
+             BypassDebugRedaction<T>
+             BypassDisplayRedaction<T>
+             BypassJsonRedaction<'_, T>
+             BypassTextRedaction
+             RedactedList<'_, T>
+             RedactedValue
+             SensitiveValue<T, P>
+note: required by a bound in `require_output`
+  --> tests/ui/to_redacted_arbitrary_display_rejected.rs:13:22
+   |
+13 | fn require_output<T: ToRedacted>(_: &T) {}
+   |                      ^^^^^^^^^^ required by this bound in `require_output`

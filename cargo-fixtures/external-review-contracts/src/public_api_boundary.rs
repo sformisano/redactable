@@ -5,8 +5,7 @@
 // fixture is a real downstream consumer, so the public/private boundary here is
 // the one a library author actually hits.
 use redactable::{
-    IntoRedactedOutputExt, Redactable, RedactableMapper, RedactableWithMapper, RedactedOutput,
-    Secret, Sensitive,
+    Redactable, RedactableMapper, RedactableWithMapper, Secret, Sensitive, ToRedacted,
 };
 use serde::Serialize;
 
@@ -21,6 +20,8 @@ impl RedactableWithMapper for PrivateDetail {
     }
 }
 
+impl Redactable for PrivateDetail {}
+
 /// Public named struct holding a private field type.
 #[derive(Clone, Sensitive, Serialize)]
 pub struct PublicEvent {
@@ -30,12 +31,13 @@ pub struct PublicEvent {
 }
 
 /// Public tuple struct holding a private field type.
-#[derive(Clone, Sensitive)]
+#[derive(serde::Serialize, Clone, Sensitive)]
 pub struct PublicTuple(#[sensitive(Secret)] pub String, PrivateDetail);
 
 /// Public generic struct holding a private field type.
-#[derive(Clone, Sensitive)]
+#[derive(serde::Serialize, Clone, Sensitive)]
 pub struct PublicGeneric<T> {
+    #[not_sensitive]
     pub label: T,
     detail: PrivateDetail,
 }
@@ -56,11 +58,8 @@ pub fn exercise() {
     // The unannotated private field is walked, not redacted.
     assert_eq!(redacted.detail.note, "note-canary");
 
-    // The same shape through the consuming adapter.
-    let output = match event.into_redacted_output() {
-        RedactedOutput::Text(output) => output,
-        other => panic!("structural output should be text, got {other:?}"),
-    };
+    // The same shape through the generated producer.
+    let output = event.to_redacted().json().to_string();
     assert!(output.contains("[REDACTED]"));
     assert!(!output.contains("token-canary"));
 

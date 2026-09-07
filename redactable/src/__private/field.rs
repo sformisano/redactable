@@ -1,5 +1,7 @@
 //! Field-level policy dispatch for owned and borrowed generated field shapes.
 
+use std::fmt::{Debug, Formatter, Result as FmtResult};
+
 use crate::{
     IpAddressPolicyKind, RedactableMapper, RedactableWithFormatter, RedactionPolicy,
     ScalarRedaction, SecretPolicyKind, TextPolicyKind,
@@ -41,7 +43,7 @@ pub trait PolicyFieldRefForFormatting<P: RedactionPolicy> {
     ) -> PolicyFormattingOutput<Self::FormattingOutput>;
 }
 
-/// Conflict-safe companion capability for generated recursive policy formatting.
+/// Legacy companion capability for custom leaves in generated policy formatting.
 ///
 /// Custom [`PolicyApplicableRef`] leaves use an empty implementation to select
 /// the legacy fallback. Library-owned recursive containers use the separate
@@ -50,7 +52,8 @@ pub trait PolicyFieldRefForFormatting<P: RedactionPolicy> {
 /// [`PolicyFieldRef`] directly and does not require this marker.
 ///
 /// ```ignore
-/// impl redactable::__private::PolicyApplicableRefForFormatting for MyLeaf {}
+/// use redactable::__private::PolicyApplicableRefForFormatting;
+/// impl PolicyApplicableRefForFormatting for MyLeaf {}
 /// ```
 #[diagnostic::on_unimplemented(
     message = "`{Self}` cannot use generated policy formatting",
@@ -62,7 +65,7 @@ pub trait PolicyApplicableRefForFormatting {
     ///
     /// Legacy compatibility implementations may override this method. Default
     /// generated wrappers use the separate generated-formatting capability.
-    fn fmt_policy_display<P>(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result
+    fn fmt_policy_display<P>(&self, formatter: &mut Formatter<'_>) -> FmtResult
     where
         P: RedactionPolicy,
         P::Kind: RecursivePolicyKind,
@@ -77,14 +80,14 @@ pub trait PolicyApplicableRefForFormatting {
     ///
     /// Default generated wrappers use the separate generated-formatting
     /// capability to preserve nested borrow conflicts without cloning.
-    fn fmt_policy_debug<P>(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result
+    fn fmt_policy_debug<P>(&self, formatter: &mut Formatter<'_>) -> FmtResult
     where
         P: RedactionPolicy,
         P::Kind: RecursivePolicyKind,
         Self: PolicyApplicableRef,
-        <Self as PolicyApplicableRef>::Output: std::fmt::Debug,
+        <Self as PolicyApplicableRef>::Output: Debug,
     {
-        std::fmt::Debug::fmt(&self.apply_policy_ref::<P, _>(&PolicyMapper), formatter)
+        Debug::fmt(&self.apply_policy_ref::<P, _>(&PolicyMapper), formatter)
     }
 }
 

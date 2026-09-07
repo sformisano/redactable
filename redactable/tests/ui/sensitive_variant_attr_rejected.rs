@@ -3,7 +3,7 @@
 
 use redactable::Sensitive;
 
-#[derive(Clone, Sensitive)]
+#[derive(serde::Serialize, Clone, Sensitive)]
 enum AuthEvent {
     #[sensitive(redactable::Secret)]
     Login { password: String },

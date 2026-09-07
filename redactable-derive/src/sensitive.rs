@@ -6,18 +6,26 @@
 
 use proc_macro2::{Ident, TokenStream};
 use quote::quote;
+use syn::{
+    Attribute, Data, DeriveInput, Error, Field, Fields, Generics, Result, WherePredicate,
+    spanned::Spanned,
+};
+#[cfg(feature = "tracing")]
+use syn::{ImplGenerics, TypeGenerics, WhereClause};
 #[cfg(feature = "slog")]
-use syn::parse_quote;
-use syn::{Data, DeriveInput, Fields, Result, spanned::Spanned};
+use syn::{Type, parse_quote};
 
 use crate::{
-    container::{ContainerOptions, parse_container_options, reject_field_only_container_attrs},
+    container::{
+        ContainerOptions, parse_container_options, reject_field_only_container_attrs,
+        reject_removed_output_option,
+    },
     crate_paths::{crate_root, isolate_generated_items},
-    debug_impl::derive_unredacted_debug,
     derive_enum::derive_enum,
     derive_struct::derive_struct,
     fresh_ident::FreshIdentAllocator,
     generics::add_predicates,
+    output::{display_to_redacted_impl, dual_to_redacted_impl, structural_to_redacted_impl},
     redacted_display::derive_redacted_display,
     strategy::parse_redactable_field_options,
 };
@@ -27,11 +35,10 @@ use crate::{
 /// Shared by `derive_struct`, `derive_enum`, and the top-level `expand()`.
 pub(crate) struct DeriveOutput {
     pub(crate) redaction_body: TokenStream,
-    pub(crate) used_generics: Vec<syn::WherePredicate>,
-    pub(crate) policy_applicable_generics: Vec<syn::WherePredicate>,
+    pub(crate) used_generics: Vec<WherePredicate>,
+    pub(crate) policy_applicable_generics: Vec<WherePredicate>,
     pub(crate) debug_redacted_body: TokenStream,
-    pub(crate) debug_unredacted_body: TokenStream,
-    pub(crate) debug_unredacted_generics: Vec<syn::WherePredicate>,
+    pub(crate) debug_generics: Vec<WherePredicate>,
 }
 
 /// Which derive macro invoked `expand()`.
@@ -43,6 +50,11 @@ pub(crate) enum DeriveKind {
     Sensitive,
     /// `#[derive(SensitiveDisplay)]` — display formatting via `RedactableWithFormatter`.
     SensitiveDisplay,
+}
+
+/// Output choices established by the authenticated derive entry point.
+struct ExpansionMode {
+    dual: bool,
 }
 
 pub(crate) fn expand(input: DeriveInput, kind: DeriveKind) -> Result<TokenStream> {
@@ -63,12 +75,13 @@ pub(crate) fn expand_with_mode(
         ..
     } = input;
 
+    reject_removed_output_option(&attrs)?;
     reject_field_only_container_attrs(&attrs)?;
     let ContainerOptions {
         dual: requested_dual,
     } = parse_container_options(&attrs)?;
     if requested_dual && !authenticated_dual {
-        return Err(syn::Error::new(
+        return Err(Error::new(
             ident.span(),
             "`#[sensitive(dual)]` is no longer accepted on `Sensitive` or `SensitiveDisplay`; use `#[derive(SensitiveDual)]` instead",
         ));
@@ -76,13 +89,15 @@ pub(crate) fn expand_with_mode(
     if matches!(&kind, DeriveKind::Sensitive) && !authenticated_dual {
         reject_display_only_field_options(&data)?;
     }
-    let dual = authenticated_dual;
+    let mode = ExpansionMode {
+        dual: authenticated_dual,
+    };
     let formatter = fresh.fresh("__redactable_f");
     let mapper = fresh.fresh("__redactable_mapper");
     let mapper_type = fresh.fresh("__RedactableMapper");
 
     if matches!(kind, DeriveKind::SensitiveDisplay) {
-        return expand_sensitive_display(ident, generics, data, attrs, &mut fresh, dual, formatter);
+        return expand_sensitive_display(ident, generics, data, attrs, &mut fresh, mode, formatter);
     }
 
     // Only DeriveKind::Sensitive reaches this point (SensitiveDisplay returns early above).
@@ -91,24 +106,25 @@ pub(crate) fn expand_with_mode(
         generics,
         data,
         &mut fresh,
-        dual,
+        mode,
         formatter,
         (mapper, mapper_type),
     )
 }
 
 /// Assembles the impls emitted by `SensitiveDisplay`: `RedactableWithFormatter`,
-/// `ToRedactedOutput`, the merged redacted/unredacted `Debug`, and — outside dual
-/// mode — the slog/tracing integration impls.
+/// `ToRedacted`, production-consistent `Debug`, and — outside dual mode — the
+/// slog/tracing integration impls.
 fn expand_sensitive_display(
     ident: Ident,
-    generics: syn::Generics,
+    generics: Generics,
     data: Data,
-    attrs: Vec<syn::Attribute>,
+    attrs: Vec<Attribute>,
     fresh: &mut FreshIdentAllocator,
-    dual: bool,
+    mode: ExpansionMode,
     formatter: Ident,
 ) -> Result<TokenStream> {
+    let ExpansionMode { dual } = mode;
     let crate_root = crate_root();
     let redacted_display_output =
         derive_redacted_display(&ident, &data, &attrs, &generics, &formatter, fresh)?;
@@ -141,42 +157,22 @@ fn expand_sensitive_display(
                 #redacted_display_body
             }
         }
+
+        impl #display_impl_generics #crate_root::__private::DeclaredFormatting for #ident #display_ty_generics #display_where_clause {}
     };
-    let to_redacted_output_impl = quote! {
-        impl #display_impl_generics #crate_root::ToRedactedOutput for #ident #display_ty_generics #display_where_clause {
-            fn to_redacted_output(&self) -> #crate_root::RedactedOutput {
-                #crate_root::RedactedOutput::Text(
-                    ::std::string::ToString::to_string(
-                        &#crate_root::RedactableWithFormatter::redacted_display(self),
-                    ),
-                )
-            }
-        }
+    // The display half owns the producer in dual mode: it is the half that
+    // knows the template, and only one impl may exist per type.
+    let to_redacted_impl = if dual {
+        dual_to_redacted_impl(&ident, &redacted_display_generics, &crate_root)
+    } else {
+        display_to_redacted_impl(&ident, &redacted_display_generics, &crate_root)
     };
 
-    let debug_output = derive_unredacted_debug(&ident, &data, &generics, &formatter, fresh)?;
-    // A single impl branches at runtime on `cfg!(test) || redactable::__TESTING`
-    // rather than emitting two `#[cfg]`-gated impls. The `feature = "testing"`
-    // check must resolve against `redactable`'s own feature, not the consumer's,
-    // so it is routed through the `__TESTING` constant. The where-clause is the
-    // union of the formatter bounds (redacted body) and the Debug bounds
-    // (unredacted body) because both bodies live in the same impl.
-    let debug_generics = add_predicates(
-        redacted_display_generics.clone(),
-        &debug_output.generics,
-        &ident,
-    );
-    let (debug_impl_generics, debug_ty_generics, debug_where_clause) =
-        debug_generics.split_for_impl();
-    let debug_unredacted_body = debug_output.body;
+    // Debug always uses the same selected template as redacted display.
     let debug_impl = quote! {
-        impl #debug_impl_generics ::core::fmt::Debug for #ident #debug_ty_generics #debug_where_clause {
+        impl #display_impl_generics ::core::fmt::Debug for #ident #display_ty_generics #display_where_clause {
             fn fmt(&self, #formatter: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
-                if ::core::cfg!(test) || #crate_root::__TESTING {
-                    #debug_unredacted_body
-                } else {
-                    #crate_root::RedactableWithFormatter::fmt_redacted(self, #formatter)
-                }
+                #crate_root::RedactableWithFormatter::fmt_redacted(self, #formatter)
             }
         }
     };
@@ -212,7 +208,7 @@ fn expand_sensitive_display(
 
     let generated = quote! {
         #redacted_display_impl
-        #to_redacted_output_impl
+        #to_redacted_impl
         #debug_impl
         #slog_impl
         #tracing_impl
@@ -221,24 +217,31 @@ fn expand_sensitive_display(
 }
 
 /// Assembles the impls emitted by `Sensitive`: `RedactableWithMapper`, `Redactable`,
-/// the merged redacted/unredacted `Debug`, and the slog/tracing integration impls.
+/// `ToRedacted`, production-consistent `Debug`, and the slog/tracing integration impls.
 fn expand_sensitive(
     ident: Ident,
-    generics: syn::Generics,
+    generics: Generics,
     data: Data,
     fresh: &mut FreshIdentAllocator,
-    dual: bool,
+    mode: ExpansionMode,
     formatter: Ident,
     mapper_idents: (Ident, Ident),
 ) -> Result<TokenStream> {
+    let ExpansionMode { dual } = mode;
     let crate_root = crate_root();
+    // Inverse of the display half: a dual type gets its single producer there.
+    let to_redacted_impl = if dual {
+        quote! {}
+    } else {
+        structural_to_redacted_impl(&ident, &generics, &crate_root)
+    };
     let (mapper, mapper_type) = mapper_idents;
 
     let derive_output = match data {
         Data::Struct(data) => derive_struct(&ident, data, &generics, &formatter, &mapper, fresh)?,
         Data::Enum(data) => derive_enum(&ident, data, &generics, &formatter, &mapper, fresh)?,
         Data::Union(u) => {
-            return Err(syn::Error::new(
+            return Err(Error::new(
                 u.union_token.span(),
                 "`Sensitive` cannot be derived for unions",
             ));
@@ -254,37 +257,20 @@ fn expand_sensitive(
     let (impl_generics, ty_generics, where_clause) = policy_generics.split_for_impl();
     #[cfg(feature = "slog")]
     let slog_base_generics = generics.clone();
-    // The merged Debug impl uses the unredacted bounds (a superset of the
-    // redacted bounds) because both bodies share one impl.
-    let debug_unredacted_generics =
-        add_predicates(generics, &derive_output.debug_unredacted_generics, &ident);
-    let (
-        debug_unredacted_impl_generics,
-        debug_unredacted_ty_generics,
-        debug_unredacted_where_clause,
-    ) = debug_unredacted_generics.split_for_impl();
+    let debug_generics = add_predicates(generics, &derive_output.debug_generics, &ident);
+    let (debug_impl_generics, debug_ty_generics, debug_where_clause) =
+        debug_generics.split_for_impl();
     let redaction_body = &derive_output.redaction_body;
     let debug_redacted_body = &derive_output.debug_redacted_body;
-    let debug_unredacted_body = &derive_output.debug_unredacted_body;
-    // In dual mode, SensitiveDisplay provides Debug — skip it here.
-    //
-    // A single impl branches at runtime on `cfg!(test) || redactable::__TESTING`
-    // rather than emitting two `#[cfg]`-gated impls. The `feature = "testing"`
-    // check must resolve against `redactable`'s own feature, not the consumer's,
-    // so it is routed through the `__TESTING` constant. The where-clause uses the
-    // unredacted bounds (a superset of the redacted bounds) because both bodies
-    // live in the same impl.
+    // Dual gets Debug from its display expansion; standalone Sensitive retains
+    // its annotation-driven production placeholders in every build mode.
     let debug_impl = if dual {
         quote! {}
     } else {
         quote! {
-            impl #debug_unredacted_impl_generics ::core::fmt::Debug for #ident #debug_unredacted_ty_generics #debug_unredacted_where_clause {
+            impl #debug_impl_generics ::core::fmt::Debug for #ident #debug_ty_generics #debug_where_clause {
                 fn fmt(&self, #formatter: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
-                    if ::core::cfg!(test) || #crate_root::__TESTING {
-                        #debug_unredacted_body
-                    } else {
-                        #debug_redacted_body
-                    }
+                    #debug_redacted_body
                 }
             }
         }
@@ -318,6 +304,8 @@ fn expand_sensitive(
 
         impl #impl_generics #crate_root::Redactable for #ident #ty_generics #where_clause {}
 
+        #to_redacted_impl
+
         #debug_impl
 
         #slog_impl
@@ -330,7 +318,7 @@ fn expand_sensitive(
 
 /// Rejects formatting-only field options when no display derive consumes them.
 fn reject_display_only_field_options(data: &Data) -> Result<()> {
-    fn check_field(field: &syn::Field) -> Result<()> {
+    fn check_field(field: &Field) -> Result<()> {
         let options = parse_redactable_field_options(&field.attrs)?;
         if options.legacy_formatting || options.generated_formatting {
             let span = field
@@ -338,7 +326,7 @@ fn reject_display_only_field_options(data: &Data) -> Result<()> {
                 .iter()
                 .find(|attr| attr.path().is_ident("redactable"))
                 .map_or_else(|| field.span(), Spanned::span);
-            return Err(syn::Error::new(
+            return Err(Error::new(
                 span,
                 "formatting route overrides are only used by `SensitiveDisplay`; use `SensitiveDual` when structural and display redaction are both needed",
             ));
@@ -374,7 +362,7 @@ fn reject_display_only_field_options(data: &Data) -> Result<()> {
 #[cfg(feature = "slog")]
 fn assemble_display_slog_impl(
     fresh: &mut FreshIdentAllocator,
-    generics: syn::Generics,
+    generics: Generics,
     ident: &Ident,
     crate_root: &TokenStream,
 ) -> TokenStream {
@@ -385,7 +373,7 @@ fn assemble_display_slog_impl(
     let slog_crate = quote! { #crate_root::__private::slog };
     let mut slog_generics = generics;
     let (_, ty_generics, _) = slog_generics.split_for_impl();
-    let self_ty: syn::Type = parse_quote!(#ident #ty_generics);
+    let self_ty: Type = parse_quote!(#ident #ty_generics);
     slog_generics
         .make_where_clause()
         .predicates
@@ -411,7 +399,7 @@ fn assemble_display_slog_impl(
 /// Assembles the `TracingRedacted` marker impl emitted by `SensitiveDisplay`.
 #[cfg(feature = "tracing")]
 fn assemble_display_tracing_impl(
-    redacted_display_generics: &syn::Generics,
+    redacted_display_generics: &Generics,
     crate_root: &TokenStream,
     ident: &Ident,
 ) -> TokenStream {
@@ -426,7 +414,7 @@ fn assemble_display_tracing_impl(
 #[cfg(feature = "slog")]
 fn assemble_sensitive_slog_impl(
     fresh: &mut FreshIdentAllocator,
-    slog_base_generics: syn::Generics,
+    slog_base_generics: Generics,
     ident: &Ident,
     crate_root: &TokenStream,
 ) -> TokenStream {
@@ -448,15 +436,9 @@ fn assemble_sensitive_slog_impl(
                 // `slog::Value` receives only `&self`. Stable Rust cannot prove
                 // that cloning or serializing that reference is observation-free
                 // for arbitrary fields, so generated borrowed logging fails closed.
-                // Callers that own the value can opt into structured output with
-                // `SlogRedactedExt::slog_redacted_json`.
-                let #redacted = #crate_root::__private::generated_redacted_json(
-                    #crate_root::__private::serde_json::Value::String(
-                        <::std::string::String as ::core::convert::From<&str>>::from(
-                            #crate_root::REDACTED_PLACEHOLDER,
-                        ),
-                    ),
-                );
+                // Callers that accept the clone can opt into structured output
+                // with `SlogRedactedExt::slog_redacted_json`.
+                let #redacted = #crate_root::__private::generated_redacted_json_placeholder();
                 #slog_crate::Value::serialize(&#redacted, #record, #key, #serializer)
             }
         }
@@ -468,9 +450,9 @@ fn assemble_sensitive_slog_impl(
 /// Assembles the `TracingRedacted` marker impl emitted by `Sensitive`.
 #[cfg(feature = "tracing")]
 fn assemble_sensitive_tracing_impl(
-    impl_generics: &syn::ImplGenerics<'_>,
-    ty_generics: &syn::TypeGenerics<'_>,
-    where_clause: Option<&syn::WhereClause>,
+    impl_generics: &ImplGenerics<'_>,
+    ty_generics: &TypeGenerics<'_>,
+    where_clause: Option<&WhereClause>,
     ident: &Ident,
     crate_root: &TokenStream,
 ) -> TokenStream {

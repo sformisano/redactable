@@ -7,7 +7,7 @@
 #![allow(unexpected_cfgs)]
 
 use std::{
-    fmt,
+    fmt::Debug,
     sync::{Arc, Mutex, MutexGuard},
 };
 
@@ -23,7 +23,7 @@ use tracing::{
     subscriber::with_default,
 };
 #[cfg(all(feature = "tracing-valuable", tracing_unstable))]
-use valuable::Valuable as _;
+use valuable::{NamedValues, Valuable as _, Value as ValuableValue, Visit as ValuableVisit};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct RecordedField {
@@ -70,7 +70,7 @@ impl CapturingVisitor<'_> {
 }
 
 impl Visit for CapturingVisitor<'_> {
-    fn record_debug(&mut self, field: &Field, value: &dyn fmt::Debug) {
+    fn record_debug(&mut self, field: &Field, value: &dyn Debug) {
         self.push(field, RecordedValue::Debug(format!("{value:?}")));
     }
 
@@ -79,7 +79,7 @@ impl Visit for CapturingVisitor<'_> {
     }
 
     #[cfg(all(feature = "tracing-valuable", tracing_unstable))]
-    fn record_value(&mut self, field: &Field, value: valuable::Value<'_>) {
+    fn record_value(&mut self, field: &Field, value: ValuableValue<'_>) {
         let mut capture = ValuableCapture::default();
         value.visit(&mut capture);
         self.push(field, RecordedValue::Valuable(capture.fields));
@@ -127,14 +127,14 @@ struct ValuableCapture {
 }
 
 #[cfg(all(feature = "tracing-valuable", tracing_unstable))]
-impl valuable::Visit for ValuableCapture {
-    fn visit_value(&mut self, value: valuable::Value<'_>) {
+impl ValuableVisit for ValuableCapture {
+    fn visit_value(&mut self, value: ValuableValue<'_>) {
         if let Some(value) = value.as_structable() {
             value.visit(self);
         }
     }
 
-    fn visit_named_fields(&mut self, named_values: &valuable::NamedValues<'_>) {
+    fn visit_named_fields(&mut self, named_values: &NamedValues<'_>) {
         for (field, value) in named_values.iter() {
             self.fields
                 .push((field.name().to_owned(), valuable_value_to_string(*value)));
@@ -143,7 +143,7 @@ impl valuable::Visit for ValuableCapture {
 }
 
 #[cfg(all(feature = "tracing-valuable", tracing_unstable))]
-fn valuable_value_to_string(value: valuable::Value<'_>) -> String {
+fn valuable_value_to_string(value: ValuableValue<'_>) -> String {
     value
         .as_str()
         .map_or_else(|| format!("{value:?}"), ToOwned::to_owned)
@@ -207,11 +207,8 @@ fn production_auth_event_tracing_matches_documentation() {
 
     let fields = capture_fields(|| tracing::info!(event = event.tracing_redacted_debug()));
     let output = debug_text(field_named(&fields, "event"), "event");
-    let expected = if cfg!(feature = "testing") {
-        "AuthEvent { api_key: \"***************2345\", user_email: \"al***@example.com\", action: \"login\" }"
-    } else {
-        "AuthEvent { api_key: \"[REDACTED]\", user_email: \"[REDACTED]\", action: \"login\" }"
-    };
+    let expected =
+        "AuthEvent { api_key: \"[REDACTED]\", user_email: \"[REDACTED]\", action: \"login\" }";
 
     assert_eq!(output, expected);
     assert!(!output.contains(API_KEY));
@@ -285,8 +282,9 @@ fn redacted_display_works_with_tracing_display_field() {
 fn valuable_structured_output_records_redacted_fields() {
     use redactable::{Sensitive, tracing::TracingValuableExt};
 
-    #[derive(Clone, Sensitive, valuable::Valuable)]
+    #[derive(serde::Serialize, Clone, Sensitive, valuable::Valuable)]
     struct ValuableUser {
+        #[not_sensitive]
         username: String,
         #[sensitive(Secret)]
         password: String,
@@ -326,8 +324,9 @@ fn valuable_structured_output_records_redacted_fields() {
 fn valuable_structured_output_records_redacted_fields_from_consuming_adapter() {
     use redactable::{Sensitive, tracing::IntoTracingRedactedValuableExt};
 
-    #[derive(Clone, Sensitive, valuable::Valuable)]
+    #[derive(serde::Serialize, Clone, Sensitive, valuable::Valuable)]
     struct ConsumedValuableUser {
+        #[not_sensitive]
         username: String,
         #[sensitive(Secret)]
         password: String,

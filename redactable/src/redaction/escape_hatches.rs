@@ -1,43 +1,54 @@
-//! Escape hatches for explicitly non-sensitive values.
+//! The Bypass family: deliberate escapes from redaction at a logging boundary.
 //!
-//! This module provides wrappers and extension traits for marking values as
-//! explicitly non-sensitive at logging boundaries:
+//! Every member is named for the action its author is taking. Constructing one
+//! is the declaration that the complete value it carries is safe to log:
 //!
-//! - [`NotSensitive`]: Wrapper with no formatting preference
-//! - [`NotSensitiveDisplay`]: Wrapper using `Display` formatting
-//! - [`NotSensitiveDebug`]: Wrapper using `Debug` formatting
-//! - [`NotSensitiveJson`]: Wrapper using JSON serialization (requires `json` feature)
+//! - [`BypassRedactionMarker`]: no formatting opinion; certifies a value for
+//!   `slog`'s native typed emitter, and the only member that accepts a type
+//!   with neither `Display` nor `Debug`
+//! - [`BypassDisplayRedaction`]: log the value's `Display` form as is
+//! - [`BypassDebugRedaction`]: log the value's `Debug` form as is
+//! - [`BypassJsonRedaction`]: log the value's `Serialize` form as is
+//! - [`BypassTextRedaction`]: log author-composed text
 //!
-//! `NotSensitiveDisplay` and `NotSensitiveDebug` can own their values when
-//! constructed directly. Their Serde implementations, available through the
-//! `json` feature, preserve the raw inner wire value and do not redact it.
+//! Every member is a tuple struct with a public field, so construction is
+//! `BypassDebugRedaction(&value)`. There is no eligibility bound and no reason
+//! argument: the declaration is the construction.
 //!
-//! And their corresponding extension traits:
-//! - [`NotSensitiveExt`]: Provides `.not_sensitive()`
-//! - [`NotSensitiveDisplayExt`]: Provides `.not_sensitive_display()`
-//! - [`NotSensitiveDebugExt`]: Provides `.not_sensitive_debug()`
-//! - [`NotSensitiveJsonExt`]: Provides `.not_sensitive_json()`
+//! `BypassDisplayRedaction` and `BypassDebugRedaction` can own their values.
+//! Their Serde implementations preserve the raw inner wire value and do not
+//! redact it.
+//!
+//! A foreign field inside a struct you own is not a job for this family:
+//! annotate it `#[not_sensitive]`. Reach for [`crate::BypassRedaction`] only
+//! when an API demands `Redactable` on a value you do not own.
 
-use std::ops::{Deref, DerefMut};
+use std::{
+    fmt::{Debug, Display, Formatter, Result as FmtResult},
+    ops::{Deref, DerefMut},
+};
 
-#[cfg(feature = "json")]
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
-#[cfg(feature = "json")]
-use super::output::serialize_redacted_json;
-use super::output::{RedactedOutput, ToRedactedOutput};
+use super::output::{RedactedValue, ToRedacted, serialize_redacted_json};
 
 // =============================================================================
-// NotSensitive - Generic wrapper with no formatting preference
+// BypassRedactionMarker - generic wrapper with no formatting preference
 // =============================================================================
 
-/// Wrapper for explicitly non-sensitive values without formatting opinions.
+/// Declares a value non-sensitive without selecting a logging format.
 ///
-/// Use `.not_sensitive()` to mark a value as safe to log. For `ToRedactedOutput`
-/// boundaries, use `NotSensitiveDisplay` or `NotSensitiveDebug`.
-pub struct NotSensitive<T>(pub T);
+/// This is the member to reach for when the sink already knows how to render
+/// the value: `slog`'s native typed emitter accepts
+/// `BypassRedactionMarker<T>` wherever `T: slog::Value`, keeping the emitted
+/// type rather than flattening it to a string. It also accepts a type
+/// implementing neither `Display` nor `Debug`.
+///
+/// For a `ToRedacted` boundary, use [`BypassDisplayRedaction`],
+/// [`BypassDebugRedaction`] or [`BypassJsonRedaction`] instead.
+pub struct BypassRedactionMarker<T>(pub T);
 
-impl<T> NotSensitive<T> {
+impl<T> BypassRedactionMarker<T> {
     /// Returns the inner value.
     #[must_use]
     pub fn inner(&self) -> &T {
@@ -45,7 +56,7 @@ impl<T> NotSensitive<T> {
     }
 }
 
-impl<T> Deref for NotSensitive<T> {
+impl<T> Deref for BypassRedactionMarker<T> {
     type Target = T;
 
     fn deref(&self) -> &Self::Target {
@@ -53,64 +64,74 @@ impl<T> Deref for NotSensitive<T> {
     }
 }
 
-impl<T> DerefMut for NotSensitive<T> {
+impl<T> DerefMut for BypassRedactionMarker<T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.0
     }
 }
 
-impl<T> std::fmt::Display for NotSensitive<T>
+impl<T> Display for BypassRedactionMarker<T>
 where
-    T: std::fmt::Display,
+    T: Display,
 {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        std::fmt::Display::fmt(&self.0, f)
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
+        Display::fmt(&self.0, f)
     }
 }
 
-impl<T> std::fmt::Debug for NotSensitive<T>
+impl<T> Debug for BypassRedactionMarker<T>
 where
-    T: std::fmt::Debug,
+    T: Debug,
 {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        std::fmt::Debug::fmt(&self.0, f)
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
+        Debug::fmt(&self.0, f)
     }
 }
 
 // =============================================================================
-// NotSensitiveDisplay - Wrapper using Display
+// BypassDisplayRedaction - log the Display form as is
 // =============================================================================
 
-/// Owns an explicitly non-sensitive value and emits its `Display` representation.
+/// Logs a value's `Display` form without redacting it.
 ///
 /// Constructing this wrapper declares that the complete formatted value is safe
-/// to log. Use `.not_sensitive_display()` when a borrowed logging view is enough,
-/// or construct `NotSensitiveDisplay(value)` when the wrapper must own the value.
-/// Consume an owned wrapper with [`Self::into_inner`].
+/// to log. Construct it over a reference for a borrowed logging view
+/// (`BypassDisplayRedaction(&value)`) or over the value itself when the wrapper
+/// must own it. Consume an owned wrapper with [`Self::into_inner`].
 ///
 /// # Raw serialization warning
 ///
-/// With the `json` feature, `Serialize` and `Deserialize` transparently expose
-/// the complete inner value. This supports ordinary transport and storage; it
-/// is not redaction and must not be treated as sanitized log output.
-/// See [`NotSensitiveDebug`] for Debug-selected output, `NotSensitiveJson`
-/// for a borrowed JSON logging view, and
-/// [`crate::NotSensitiveValue`] when no logging format should be selected.
+/// `Serialize` and `Deserialize` transparently expose the complete inner value.
+/// This supports ordinary transport and storage; it is not redaction and must
+/// not be treated as sanitized log output. See [`BypassDebugRedaction`] for
+/// `Debug`-selected output, [`BypassJsonRedaction`] for a borrowed JSON view,
+/// and [`BypassRedactionMarker`] when no logging format should be selected.
 ///
 /// ```
-/// use redactable::{NotSensitiveDisplay, ToRedactedOutput};
+/// use redactable::{BypassDisplayRedaction, ToRedacted};
 ///
-/// let count = NotSensitiveDisplay(42_u64);
-/// assert_eq!(
-///     count.to_redacted_output(),
-///     redactable::RedactedOutput::Text("42".to_owned())
-/// );
+/// let count = BypassDisplayRedaction(42_u64);
+/// assert_eq!(count.to_redacted().text(), "42");
 /// assert_eq!(count.into_inner(), 42);
 /// ```
+///
+/// The `Display` bound is checked where the value is produced, so a type
+/// without `Display` cannot reach a logging boundary this way:
+///
+/// ```compile_fail
+/// use redactable::{BypassDisplayRedaction, ToRedacted};
+///
+/// struct NoDisplay;
+///
+/// fn main() {
+///     let value = BypassDisplayRedaction(NoDisplay);
+///     let _ = value.to_redacted();
+/// }
+/// ```
 #[derive(Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct NotSensitiveDisplay<T>(pub T);
+pub struct BypassDisplayRedaction<T>(pub T);
 
-impl<T> NotSensitiveDisplay<T> {
+impl<T> BypassDisplayRedaction<T> {
     /// Returns the inner value.
     #[must_use]
     pub fn inner(&self) -> &T {
@@ -124,87 +145,81 @@ impl<T> NotSensitiveDisplay<T> {
     }
 }
 
-impl<T> ToRedactedOutput for NotSensitiveDisplay<T>
+impl<T> ToRedacted for BypassDisplayRedaction<T>
 where
-    T: std::fmt::Display,
+    T: Display,
 {
-    fn to_redacted_output(&self) -> RedactedOutput {
-        RedactedOutput::Text(self.0.to_string())
+    fn to_redacted(&self) -> RedactedValue {
+        RedactedValue::from_text(self.0.to_string())
     }
 }
 
-impl<T> std::fmt::Display for NotSensitiveDisplay<T>
+impl<T> Display for BypassDisplayRedaction<T>
 where
-    T: std::fmt::Display,
+    T: Display,
 {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        std::fmt::Display::fmt(&self.0, f)
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
+        Display::fmt(&self.0, f)
     }
 }
 
-impl<T> std::fmt::Debug for NotSensitiveDisplay<T>
+impl<T> Debug for BypassDisplayRedaction<T>
 where
-    T: std::fmt::Display,
+    T: Display,
 {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        std::fmt::Display::fmt(&self.0, f)
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
+        Display::fmt(&self.0, f)
     }
 }
 
-#[cfg(feature = "json")]
-impl<T: Serialize> Serialize for NotSensitiveDisplay<T> {
+impl<T: Serialize> Serialize for BypassDisplayRedaction<T> {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
-        S: serde::Serializer,
+        S: Serializer,
     {
         self.0.serialize(serializer)
     }
 }
 
-#[cfg(feature = "json")]
-impl<'de, T: Deserialize<'de>> Deserialize<'de> for NotSensitiveDisplay<T> {
+impl<'de, T: Deserialize<'de>> Deserialize<'de> for BypassDisplayRedaction<T> {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
-        D: serde::Deserializer<'de>,
+        D: Deserializer<'de>,
     {
         T::deserialize(deserializer).map(Self)
     }
 }
 
 // =============================================================================
-// NotSensitiveDebug - Wrapper using Debug
+// BypassDebugRedaction - log the Debug form as is
 // =============================================================================
 
-/// Owns an explicitly non-sensitive value and emits its `Debug` representation.
+/// Logs a value's `Debug` form without redacting it.
 ///
 /// Constructing this wrapper declares that the complete debug representation is
-/// safe to log. Use `.not_sensitive_debug()` when a borrowed logging view is
-/// enough, or construct `NotSensitiveDebug(value)` when the wrapper must own the
-/// value. Consume an owned wrapper with [`Self::into_inner`].
+/// safe to log. Construct it over a reference for a borrowed logging view
+/// (`BypassDebugRedaction(&value)`) or over the value itself when the wrapper
+/// must own it. Consume an owned wrapper with [`Self::into_inner`].
 ///
 /// # Raw serialization warning
 ///
-/// With the `json` feature, `Serialize` and `Deserialize` transparently expose
-/// the complete inner value. This supports ordinary transport and storage; it
-/// is not redaction and must not be treated as sanitized log output.
-/// See [`NotSensitiveDisplay`] for Display-selected output,
-/// `NotSensitiveJson` for a borrowed JSON logging view, and
-/// [`crate::NotSensitiveValue`] when no logging format should be selected.
+/// `Serialize` and `Deserialize` transparently expose the complete inner value.
+/// This supports ordinary transport and storage; it is not redaction and must
+/// not be treated as sanitized log output. See [`BypassDisplayRedaction`] for
+/// `Display`-selected output, [`BypassJsonRedaction`] for a borrowed JSON view,
+/// and [`BypassRedactionMarker`] when no logging format should be selected.
 ///
 /// ```
-/// use redactable::{NotSensitiveDebug, RedactedOutput, ToRedactedOutput};
+/// use redactable::{BypassDebugRedaction, ToRedacted};
 ///
-/// let id = NotSensitiveDebug(("public", 7_u64));
-/// assert_eq!(
-///     id.to_redacted_output(),
-///     RedactedOutput::Text("(\"public\", 7)".to_owned())
-/// );
+/// let id = BypassDebugRedaction(("public", 7_u64));
+/// assert_eq!(id.to_redacted().text(), "(\"public\", 7)");
 /// assert_eq!(id.into_inner(), ("public", 7));
 /// ```
 #[derive(Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct NotSensitiveDebug<T>(pub T);
+pub struct BypassDebugRedaction<T>(pub T);
 
-impl<T> NotSensitiveDebug<T> {
+impl<T> BypassDebugRedaction<T> {
     /// Returns the inner value.
     #[must_use]
     pub fn inner(&self) -> &T {
@@ -218,56 +233,53 @@ impl<T> NotSensitiveDebug<T> {
     }
 }
 
-impl<T> ToRedactedOutput for NotSensitiveDebug<T>
+impl<T> ToRedacted for BypassDebugRedaction<T>
 where
-    T: std::fmt::Debug,
+    T: Debug,
 {
-    fn to_redacted_output(&self) -> RedactedOutput {
-        RedactedOutput::Text(format!("{:?}", self.0))
+    fn to_redacted(&self) -> RedactedValue {
+        RedactedValue::from_text(format!("{:?}", self.0))
     }
 }
 
-impl<T> std::fmt::Debug for NotSensitiveDebug<T>
+impl<T> Debug for BypassDebugRedaction<T>
 where
-    T: std::fmt::Debug,
+    T: Debug,
 {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        std::fmt::Debug::fmt(&self.0, f)
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
+        Debug::fmt(&self.0, f)
     }
 }
 
-#[cfg(feature = "json")]
-impl<T: Serialize> Serialize for NotSensitiveDebug<T> {
+impl<T: Serialize> Serialize for BypassDebugRedaction<T> {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
-        S: serde::Serializer,
+        S: Serializer,
     {
         self.0.serialize(serializer)
     }
 }
 
-#[cfg(feature = "json")]
-impl<'de, T: Deserialize<'de>> Deserialize<'de> for NotSensitiveDebug<T> {
+impl<'de, T: Deserialize<'de>> Deserialize<'de> for BypassDebugRedaction<T> {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
-        D: serde::Deserializer<'de>,
+        D: Deserializer<'de>,
     {
         T::deserialize(deserializer).map(Self)
     }
 }
 
 // =============================================================================
-// NotSensitiveJson - Wrapper using JSON serialization
+// BypassJsonRedaction - log the Serialize form as is
 // =============================================================================
 
-/// Wrapper for explicitly non-sensitive values using JSON serialization.
+/// Logs a value's `Serialize` form without redacting it.
 ///
-/// Use `.not_sensitive_json()` to declare a value safe to log as JSON.
-#[cfg(feature = "json")]
-pub struct NotSensitiveJson<'a, T: ?Sized>(&'a T);
+/// Constructing this wrapper declares the borrowed value safe to log as JSON:
+/// `BypassJsonRedaction(&value)`.
+pub struct BypassJsonRedaction<'a, T: ?Sized>(pub &'a T);
 
-#[cfg(feature = "json")]
-impl<T: ?Sized> NotSensitiveJson<'_, T> {
+impl<T: ?Sized> BypassJsonRedaction<'_, T> {
     /// Returns the inner value.
     #[must_use]
     pub fn inner(&self) -> &T {
@@ -275,88 +287,41 @@ impl<T: ?Sized> NotSensitiveJson<'_, T> {
     }
 }
 
-#[cfg(feature = "json")]
-impl<T> ToRedactedOutput for NotSensitiveJson<'_, T>
+impl<T> ToRedacted for BypassJsonRedaction<'_, T>
 where
     T: Serialize + ?Sized,
 {
-    fn to_redacted_output(&self) -> RedactedOutput {
-        RedactedOutput::Json(serialize_redacted_json(self.0))
+    fn to_redacted(&self) -> RedactedValue {
+        RedactedValue::from_json(serialize_redacted_json(self.0))
     }
 }
 
-#[cfg(feature = "json")]
-impl<T> std::fmt::Debug for NotSensitiveJson<'_, T>
+impl<T> Debug for BypassJsonRedaction<'_, T>
 where
     T: Serialize + ?Sized,
 {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_tuple("NotSensitiveJson")
-            .field(&self.to_redacted_output())
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
+        f.debug_tuple("BypassJsonRedaction")
+            .field(&self.to_redacted())
             .finish()
     }
 }
 
 // =============================================================================
-// Extension traits
+// BypassTextRedaction - log author-composed text
 // =============================================================================
 
-/// Extension trait to mark values as explicitly non-sensitive for logging.
-pub trait NotSensitiveExt: Sized {
-    /// Wraps a reference to the value as explicitly non-sensitive.
-    fn not_sensitive(&self) -> NotSensitive<&Self> {
-        NotSensitive(self)
-    }
-}
-
-impl<T: Sized> NotSensitiveExt for T {}
-
-/// Extension trait to mark values as explicitly non-sensitive using `Display`.
+/// Logs author-composed summary text in place of a redacted value.
 ///
-/// ```compile_fail
-/// use redactable::NotSensitiveDisplayExt;
-///
-/// struct NoDisplay;
-///
-/// fn main() {
-///     let value = NoDisplay;
-///     let _ = value.not_sensitive_display();
-/// }
-/// ```
-pub trait NotSensitiveDisplayExt: Sized + std::fmt::Display {
-    /// Wraps a reference to the value as explicitly non-sensitive using `Display`.
-    fn not_sensitive_display(&self) -> NotSensitiveDisplay<&Self> {
-        NotSensitiveDisplay(self)
-    }
-}
+/// The caller chooses and reviews the text: `BypassTextRedaction(summary)`.
+/// This wrapper performs no redaction and makes no promise that the summary
+/// includes every field. Empty summaries are allowed; assert the intended
+/// summary separately in logging tests.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct BypassTextRedaction(pub String);
 
-impl<T> NotSensitiveDisplayExt for T where T: std::fmt::Display {}
-
-/// Extension trait to mark values as explicitly non-sensitive using `Debug`.
-pub trait NotSensitiveDebugExt: Sized + std::fmt::Debug {
-    /// Wraps a reference to the value as explicitly non-sensitive using `Debug`.
-    fn not_sensitive_debug(&self) -> NotSensitiveDebug<&Self> {
-        NotSensitiveDebug(self)
-    }
-}
-
-impl<T> NotSensitiveDebugExt for T where T: std::fmt::Debug {}
-
-/// Extension trait to mark values as explicitly non-sensitive using JSON.
-#[cfg(feature = "json")]
-pub trait NotSensitiveJsonExt {
-    /// Wraps the value as explicitly non-sensitive using JSON serialization.
-    fn not_sensitive_json(&self) -> NotSensitiveJson<'_, Self>
-    where
-        Self: Sized;
-}
-
-#[cfg(feature = "json")]
-impl<T> NotSensitiveJsonExt for T
-where
-    T: Serialize,
-{
-    fn not_sensitive_json(&self) -> NotSensitiveJson<'_, Self> {
-        NotSensitiveJson(self)
+impl ToRedacted for BypassTextRedaction {
+    fn to_redacted(&self) -> RedactedValue {
+        RedactedValue::from_text(self.0.clone())
     }
 }

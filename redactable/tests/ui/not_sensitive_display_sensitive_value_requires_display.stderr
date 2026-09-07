@@ -1,0 +1,21 @@
+error[E0277]: `SensitiveValue<String, Secret>` doesn't implement `std::fmt::Display`
+ --> tests/ui/not_sensitive_display_sensitive_value_requires_display.rs:7:20
+  |
+7 |     require_output(&BypassDisplayRedaction(sensitive));
+  |     -------------- ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ the trait `std::fmt::Display` is not implemented for `SensitiveValue<String, Secret>`
+  |     |
+  |     required by a bound introduced by this call
+  |
+help: the trait `ToRedacted` is implemented for `BypassDisplayRedaction<T>`
+ --> src/redaction/escape_hatches.rs
+  |
+  | / impl<T> ToRedacted for BypassDisplayRedaction<T>
+  | | where
+  | |     T: Display,
+  | |_______________^
+  = note: required for `BypassDisplayRedaction<SensitiveValue<String, Secret>>` to implement `ToRedacted`
+note: required by a bound in `require_output`
+ --> tests/ui/not_sensitive_display_sensitive_value_requires_display.rs:3:22
+  |
+3 | fn require_output<T: ToRedacted>(_: &T) {}
+  |                      ^^^^^^^^^^ required by this bound in `require_output`

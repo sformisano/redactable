@@ -1,25 +1,28 @@
-use std::{fmt, marker::PhantomData};
+use std::{
+    fmt::{Display, Formatter, Result as FmtResult},
+    marker::PhantomData,
+};
 
 use redactable::{
     NotSensitive, NotSensitiveDisplay, Redactable, RedactableWithFormatter, Sensitive,
     SensitiveDisplay,
 };
 
-#[derive(Clone, Sensitive)]
+#[derive(serde::Serialize, Clone, Sensitive)]
 struct SensitiveGenericM<M: Clone> {
     #[sensitive(redactable::Secret)]
     value: String,
     marker: PhantomData<M>,
 }
 
-#[derive(NotSensitive)]
+#[derive(serde::Serialize, NotSensitive)]
 struct NotSensitiveGenericM<M>(PhantomData<M>);
 
 #[derive(NotSensitiveDisplay)]
 struct NotSensitiveDisplayGenericM<M>(PhantomData<M>);
 
-impl<M> fmt::Display for NotSensitiveDisplayGenericM<M> {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl<M> Display for NotSensitiveDisplayGenericM<M> {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
         formatter.write_str("generic-m")
     }
 }
@@ -28,68 +31,99 @@ impl<M> fmt::Display for NotSensitiveDisplayGenericM<M> {
 struct CollisionSensitive {
     #[sensitive(redactable::Secret)]
     __redactable_mapper: String,
+    #[not_sensitive]
     __redactable_f: String,
+    #[not_sensitive]
     __redactable_debug: String,
+    #[not_sensitive]
     __redacted_0: String,
+    #[not_sensitive]
     field_0: String,
 }
 
 #[derive(serde::Serialize, SensitiveDisplay)]
-#[error("value {__redactable_mapper} {__redactable_f:?} {__redacted_0}")]
+#[error("value {__redactable_mapper} {__redactable_f} {__redacted_0}")]
 struct CollisionDisplay {
     #[sensitive(redactable::Secret)]
     __redactable_mapper: String,
+    #[not_sensitive]
     __redactable_f: String,
+    #[not_sensitive]
     __redactable_debug: String,
+    #[not_sensitive]
     __redacted_0: String,
 }
 
 #[derive(Clone, serde::Serialize, Sensitive)]
 struct LegacyCollisionSensitive {
+    #[not_sensitive]
     f: String,
+    #[not_sensitive]
     mapper: String,
+    #[not_sensitive]
     debug: String,
 }
 
 #[derive(serde::Serialize, SensitiveDisplay)]
 #[error("value {f}")]
 struct LegacyCollisionDisplay {
+    #[not_sensitive]
     f: String,
+    #[not_sensitive]
     mapper: String,
+    #[not_sensitive]
     debug: String,
 }
 
 #[derive(Clone, serde::Serialize, Sensitive)]
-struct CollisionTuple(#[sensitive(redactable::Secret)] String, String);
+struct CollisionTuple(
+    #[sensitive(redactable::Secret)] String,
+    #[not_sensitive] String,
+);
 
 #[derive(serde::Serialize, SensitiveDisplay)]
-#[error("tuple {0} {1:?}")]
-struct CollisionDisplayTuple(#[sensitive(redactable::Secret)] String, String);
+#[error("tuple {0} {1}")]
+struct CollisionDisplayTuple(
+    #[sensitive(redactable::Secret)] String,
+    #[not_sensitive] String,
+);
 
 #[derive(Clone, serde::Serialize, Sensitive)]
 enum CollisionEnum {
     Named {
         #[sensitive(redactable::Secret)]
         __redactable_mapper: String,
+        #[not_sensitive]
         __redactable_f: String,
+        #[not_sensitive]
         __redactable_debug: String,
+        #[not_sensitive]
         __redacted_0: String,
     },
-    Tuple(#[sensitive(redactable::Secret)] String, String),
+    Tuple(
+        #[sensitive(redactable::Secret)] String,
+        #[not_sensitive] String,
+    ),
 }
 
 #[derive(serde::Serialize, SensitiveDisplay)]
 enum CollisionDisplayEnum {
-    #[error("named {__redactable_mapper} {__redactable_debug:?}")]
+    #[error("named {__redactable_mapper} {__redactable_debug}")]
     Named {
         #[sensitive(redactable::Secret)]
         __redactable_mapper: String,
+        #[not_sensitive]
         __redactable_f: String,
+        #[not_sensitive]
         __redactable_debug: String,
+        #[not_sensitive]
         __redacted_0: String,
     },
-    #[error("tuple {0} {1:?}")]
-    Tuple(#[sensitive(redactable::Secret)] String, String),
+    #[error("tuple {0} {1}")]
+    Tuple(
+        #[sensitive(redactable::Secret)] String,
+        #[not_sensitive] String,
+    ),
 }
 
 fn main() {

@@ -1,6 +1,6 @@
 use std::marker::PhantomData;
 
-use super::*;
+use redactable::{Redactable, Secret, Sensitive};
 
 /// External type that does NOT implement RedactableWithMapper.
 /// This simulates types like `chrono::DateTime<Utc>` or other third-party types.
@@ -11,9 +11,9 @@ struct ExternalType;
 fn phantom_data_field_passes_through_without_bounds() {
     // This test verifies that PhantomData<T> fields work without
     // requiring T: RedactableWithMapper. If this compiles, the fix works.
-    #[derive(Clone, Sensitive)]
-    #[cfg_attr(feature = "slog", derive(serde::Serialize))]
+    #[derive(Clone, Sensitive, serde::Serialize)]
     struct TypedId<T> {
+        #[not_sensitive]
         id: String,
         #[sensitive(Secret)]
         secret: String,
@@ -40,16 +40,16 @@ fn phantom_data_field_passes_through_without_bounds() {
 #[test]
 fn phantom_data_with_qualified_path() {
     // Test with fully qualified std::marker::PhantomData
-    #[derive(Clone, Sensitive)]
-    #[cfg_attr(feature = "slog", derive(serde::Serialize))]
+    #[derive(Clone, Sensitive, serde::Serialize)]
     struct Wrapper<T> {
+        #[not_sensitive]
         value: String,
         _phantom: std::marker::PhantomData<T>,
     }
 
     let wrapper: Wrapper<ExternalType> = Wrapper {
         value: "test".into(),
-        _phantom: std::marker::PhantomData,
+        _phantom: PhantomData,
     };
 
     let redacted = wrapper.redact();
@@ -58,8 +58,7 @@ fn phantom_data_with_qualified_path() {
 
 #[test]
 fn multiple_phantom_data_fields() {
-    #[derive(Clone, Sensitive)]
-    #[cfg_attr(feature = "slog", derive(serde::Serialize))]
+    #[derive(Clone, Sensitive, serde::Serialize)]
     struct MultiPhantom<A, B, C> {
         #[sensitive(Secret)]
         data: String,
@@ -82,8 +81,7 @@ fn multiple_phantom_data_fields() {
 
 #[test]
 fn phantom_data_in_enum_variant() {
-    #[derive(Clone, Sensitive)]
-    #[cfg_attr(feature = "slog", derive(serde::Serialize))]
+    #[derive(Clone, Sensitive, serde::Serialize)]
     enum TypedEvent<T> {
         Created {
             #[sensitive(Secret)]

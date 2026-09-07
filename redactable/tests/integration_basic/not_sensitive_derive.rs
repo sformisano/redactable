@@ -1,9 +1,8 @@
-use super::*;
+use redactable::{NotSensitive, Redactable, Secret, Sensitive};
 
 #[test]
 fn passes_through_all_fields_unchanged() {
-    #[derive(Clone, NotSensitive)]
-    #[cfg_attr(feature = "slog", derive(serde::Serialize))]
+    #[derive(Clone, NotSensitive, serde::Serialize)]
     struct PublicInfo {
         id: u64,
         label: String,
@@ -21,15 +20,13 @@ fn passes_through_all_fields_unchanged() {
 
 #[test]
 fn does_not_walk_nested_sensitive_fields() {
-    #[derive(Clone, Sensitive)]
-    #[cfg_attr(feature = "slog", derive(serde::Serialize))]
+    #[derive(Clone, Sensitive, serde::Serialize)]
     struct Inner {
         #[sensitive(Secret)]
         secret: String,
     }
 
-    #[derive(Clone, NotSensitive)]
-    #[cfg_attr(feature = "slog", derive(serde::Serialize))]
+    #[derive(Clone, NotSensitive, serde::Serialize)]
     struct Outer {
         inner: Inner,
     }

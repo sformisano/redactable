@@ -1,4 +1,10 @@
-use super::*;
+use crate::slog_capture::{CapturedValue, CapturingSerializer, serialize_to_capture};
+use redactable::slog::SlogRedactedExt;
+use redactable::{
+    BypassJsonRedaction, Redactable, RedactableMapper, RedactableWithMapper, RedactedValue, Secret,
+    ToRedacted,
+};
+use serde::Serialize;
 
 #[derive(Clone, Serialize)]
 struct NoDebugEvent {
@@ -14,6 +20,15 @@ impl RedactableWithMapper for NoDebugEvent {
 }
 
 impl Redactable for NoDebugEvent {}
+
+// `SlogRedactedExt` is bounded on the producer, so a handwritten `Redactable`
+// type declares its own. `Debug` is still not required anywhere on this path.
+impl ToRedacted for NoDebugEvent {
+    fn to_redacted(&self) -> RedactedValue {
+        let redacted = self.clone().redact();
+        BypassJsonRedaction(&redacted).to_redacted()
+    }
+}
 
 #[test]
 fn slog_redacted_json_does_not_require_debug() {

@@ -1,9 +1,9 @@
-use super::*;
+use redactable::{Redactable, Secret, Sensitive};
+use std::collections::{BTreeMap, HashMap};
 
 #[test]
 fn traverses_btreemap_values() {
-    #[derive(Clone, Sensitive)]
-    #[cfg_attr(feature = "slog", derive(serde::Serialize))]
+    #[derive(Clone, Sensitive, serde::Serialize)]
     struct SensitiveValue2 {
         #[sensitive(Secret)]
         value: String,
@@ -22,8 +22,7 @@ fn traverses_btreemap_values() {
 
 #[test]
 fn traverses_box_contents() {
-    #[derive(Clone, Sensitive)]
-    #[cfg_attr(feature = "slog", derive(serde::Serialize))]
+    #[derive(Clone, Sensitive, serde::Serialize)]
     struct BoxedSensitive {
         #[sensitive(Secret)]
         value: String,
@@ -39,8 +38,7 @@ fn traverses_box_contents() {
 
 #[test]
 fn traverses_nested_boxes() {
-    #[derive(Clone, Sensitive)]
-    #[cfg_attr(feature = "slog", derive(serde::Serialize))]
+    #[derive(Clone, Sensitive, serde::Serialize)]
     struct DeepSensitive {
         #[sensitive(Secret)]
         value: String,
@@ -56,8 +54,7 @@ fn traverses_nested_boxes() {
 
 #[test]
 fn traverses_generic_containers() {
-    #[derive(Clone, Sensitive)]
-    #[cfg_attr(feature = "slog", derive(serde::Serialize))]
+    #[derive(Clone, Sensitive, serde::Serialize)]
     struct SensitiveWrapper {
         #[sensitive(Secret)]
         value: String,
@@ -94,8 +91,7 @@ fn traverses_generic_containers() {
 
 #[test]
 fn traverses_option_vec_nesting() {
-    #[derive(Clone, Sensitive)]
-    #[cfg_attr(feature = "slog", derive(serde::Serialize))]
+    #[derive(Clone, Sensitive, serde::Serialize)]
     struct SensitiveItem {
         #[sensitive(Secret)]
         value: String,

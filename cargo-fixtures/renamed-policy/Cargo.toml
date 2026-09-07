@@ -12,3 +12,4 @@ members = ["alias-provider"]
 [dependencies]
 alias-provider = { path = "alias-provider" }
 safe = { package = "redactable", path = "../../redactable", features = ["ip-address"] }
+serde = { version = "1", features = ["derive"] }

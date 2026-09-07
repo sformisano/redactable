@@ -1,4 +1,7 @@
-use super::*;
+use crate::slog_capture::{CapturedValue, CapturingSerializer, serialize_to_capture};
+use redactable::slog::SlogRedactedExt;
+use redactable::{RedactionPolicy, Sensitive, TextPolicyKind, TextRedactionPolicy};
+use serde::Serialize;
 
 #[test]
 fn applies_custom_policy() {
@@ -17,6 +20,7 @@ fn applies_custom_policy() {
     struct Payment {
         #[sensitive(CustomCreditCard)]
         card_number: String,
+        #[not_sensitive]
         amount: f64,
     }
 

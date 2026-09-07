@@ -1,9 +1,9 @@
-use super::*;
+use redactable::{Redactable, Secret, Sensitive};
+use std::collections::HashMap;
 
 #[test]
 fn applies_policy_to_option_vec() {
-    #[derive(Clone, Sensitive)]
-    #[cfg_attr(feature = "slog", derive(serde::Serialize))]
+    #[derive(Clone, Sensitive, serde::Serialize)]
     struct NestedWrappers {
         #[sensitive(Secret)]
         addresses: Option<Vec<String>>,
@@ -21,8 +21,7 @@ fn applies_policy_to_option_vec() {
 
 #[test]
 fn applies_policy_to_vec_option() {
-    #[derive(Clone, Sensitive)]
-    #[cfg_attr(feature = "slog", derive(serde::Serialize))]
+    #[derive(Clone, Sensitive, serde::Serialize)]
     struct NestedWrappers {
         #[sensitive(Secret)]
         values: Vec<Option<String>>,
@@ -40,8 +39,7 @@ fn applies_policy_to_vec_option() {
 
 #[test]
 fn applies_policy_to_deeply_nested_containers() {
-    #[derive(Clone, Sensitive)]
-    #[cfg_attr(feature = "slog", derive(serde::Serialize))]
+    #[derive(Clone, Sensitive, serde::Serialize)]
     struct DeepNest {
         #[sensitive(Secret)]
         values: Option<Vec<Option<String>>>,
@@ -59,8 +57,7 @@ fn applies_policy_to_deeply_nested_containers() {
 
 #[test]
 fn applies_policy_to_hashmap_vec() {
-    #[derive(Clone, Sensitive)]
-    #[cfg_attr(feature = "slog", derive(serde::Serialize))]
+    #[derive(Clone, Sensitive, serde::Serialize)]
     struct MapWithVec {
         #[sensitive(Secret)]
         data: HashMap<String, Vec<String>>,

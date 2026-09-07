@@ -1,18 +1,20 @@
-use super::*;
+use redactable::{Redactable, Secret, Sensitive, Token};
 
 #[test]
 fn applies_correct_policy_to_each_field() {
-    #[derive(Clone, Sensitive)]
-    #[cfg_attr(feature = "slog", derive(serde::Serialize))]
+    #[derive(Clone, Sensitive, serde::Serialize)]
     struct MixedRecord {
+        #[not_sensitive]
         id: u64,
         #[sensitive(Secret)]
         ssn: String,
+        #[not_sensitive]
         name: String,
         #[sensitive(Secret)]
         internal_score: i32,
         #[sensitive(Token)]
         api_key: String,
+        #[not_sensitive]
         public_data: String,
     }
 

@@ -1,38 +1,41 @@
 //! Runtime regressions for trait-directed traversal and complete-type bounds.
 
-use std::{cell::Cell, collections::HashMap, hash::BuildHasherDefault, rc::Rc, sync::Arc};
+use std::{
+    cell::Cell,
+    collections::{HashMap, hash_map::DefaultHasher},
+    hash::BuildHasherDefault,
+    rc::Rc,
+    sync::Arc,
+};
 
 use redactable::{Redactable, Secret, Sensitive};
 
 const CANARY: &str = "phase01-runtime-canary-c81e";
 
-#[derive(Clone, Sensitive)]
-#[cfg_attr(feature = "slog", derive(serde::Serialize))]
+#[derive(Clone, Sensitive, serde::Serialize)]
 struct SecretLeaf {
     #[sensitive(Secret)]
     value: String,
 }
 
-#[derive(Clone, Sensitive)]
-#[cfg_attr(feature = "slog", derive(serde::Serialize))]
+#[derive(Clone, Sensitive, serde::Serialize)]
 struct PhantomData<T> {
     value: T,
 }
 
-#[derive(Clone, Debug, Eq, Hash, PartialEq)]
-#[cfg_attr(feature = "slog", derive(serde::Serialize))]
+#[derive(Clone, Debug, Eq, Hash, PartialEq, serde::Serialize)]
 struct Key(u8);
 
-type Hasher = BuildHasherDefault<std::collections::hash_map::DefaultHasher>;
+type Hasher = BuildHasherDefault<DefaultHasher>;
 
-#[derive(Clone, Sensitive)]
-#[cfg_attr(feature = "slog", derive(serde::Serialize))]
+#[derive(Clone, Sensitive, serde::Serialize)]
 struct CompleteBounds {
     marker: PhantomData<SecretLeaf>,
-    #[cfg_attr(feature = "slog", serde(skip))]
+    #[serde(skip)]
     arc: Arc<SecretLeaf>,
-    #[cfg_attr(feature = "slog", serde(skip))]
+    #[serde(skip)]
     rc: Rc<SecretLeaf>,
+    #[not_sensitive]
     cell: Cell<u8>,
     map: HashMap<Key, SecretLeaf, Hasher>,
 }

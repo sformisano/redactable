@@ -22,11 +22,15 @@ all-features = true
 [features]
 default = ["policy", "redaction"]
 policy = []
-redaction = ["policy"]
-json = ["redaction", "dep:serde", "dep:serde_json"]
-slog = ["json", "dep:slog", "redactable-derive/slog"]
-tracing = ["json", "dep:tracing", "redactable-derive/tracing"]
+# Structural redaction always carries its JSON form: `Sensitive` requires
+# `serde::Serialize`, and every sink value can be read as JSON.
+redaction = ["policy", "dep:serde", "dep:serde_json"]
+# Compatibility alias: JSON is part of `redaction` since 0.12.
+json = ["redaction"]
+slog = ["redaction", "dep:slog", "redactable-derive/slog"]
+tracing = ["redaction", "dep:tracing", "redactable-derive/tracing"]
 tracing-valuable = ["tracing", "dep:valuable", "tracing/valuable"]
+# Enables test helpers (`testing::assert_json_shape` needs `redaction`).
 testing = []
 chrono = ["dep:chrono"]
 time = ["dep:time"]
@@ -37,7 +41,7 @@ extras = ["chrono", "time", "uuid", "ip-address"]
 [dependencies]
 # Exact pin: the derive generates code against this crate's internal items, so
 # the pair must always ship and resolve together.
-redactable-derive = { version = "=0.11.0", path = "../redactable-derive" }
+redactable-derive = { version = "=0.12.0", path = "../redactable-derive" }
 serde = { version = "1", optional = true, features = ["derive"] }
 serde_json = { version = "1", optional = true }
 slog = { version = "2.8", optional = true, features = ["nested-values"] }
@@ -51,3 +55,5 @@ uuid = { version = "1", optional = true }
 redactable-test-fixtures = { path = "../test-fixtures" }
 serde = { version = "1", features = ["derive"] }
 trybuild = "1"
+tempfile = "3"
+proptest = { version = "1", default-features = false, features = ["std"] }

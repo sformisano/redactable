@@ -1,4 +1,7 @@
-use super::*;
+use crate::slog_capture::{CapturedValue, CapturingSerializer, serialize_to_capture};
+use redactable::slog::SlogRedactedExt;
+use redactable::{Secret, Sensitive};
+use serde::Serialize;
 
 #[test]
 fn redacts_before_serialization() {

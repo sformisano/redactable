@@ -21,8 +21,7 @@ mod support {
     pub(crate) mod slog_capture;
 }
 
-#[derive(Clone, Sensitive)]
-#[cfg_attr(feature = "slog", derive(serde::Serialize))]
+#[derive(Clone, Sensitive, serde::Serialize)]
 struct BareAlias {
     #[sensitive(IpAddress)]
     value: ClientIp,
@@ -35,8 +34,7 @@ struct BareAliasDisplay {
     value: ClientIp,
 }
 
-#[derive(Clone, Sensitive)]
-#[cfg_attr(feature = "slog", derive(serde::Serialize))]
+#[derive(Clone, Sensitive, serde::Serialize)]
 struct SupportedRecursiveRoutes {
     #[sensitive(IpAddress)]
     wrapped: Vec<WrappedIp>,
@@ -57,8 +55,7 @@ struct SupportedRecursiveDisplay {
     set: BTreeSet<WrappedIp>,
 }
 
-#[derive(Clone, Sensitive)]
-#[cfg_attr(feature = "slog", derive(serde::Serialize))]
+#[derive(Clone, Sensitive, serde::Serialize)]
 struct GenericPolicy<P: RedactionPolicy> {
     #[sensitive(P)]
     text_values: HashMap<bool, String>,
@@ -79,8 +76,7 @@ mod custom {
     }
 }
 
-#[derive(Clone, Sensitive)]
-#[cfg_attr(feature = "slog", derive(serde::Serialize))]
+#[derive(Clone, Sensitive, serde::Serialize)]
 struct GenericRawIpKeyMaps<P: RedactionPolicy> {
     #[sensitive(P)]
     hash: HashMap<IpAddr, String>,

@@ -1,0 +1,31 @@
+error[E0573]: expected type, found derive macro `NotSensitiveDisplay`
+ --> tests/ui/bypass_shadowed_names.rs:6:21
+  |
+6 | fn type_position(_: NotSensitiveDisplay<u64>, _: NotSensitive<u64>) {}
+  |                     ^^^^^^^^^^^^^^^^^^^^^^^^ not a type
+
+error[E0573]: expected type, found derive macro `NotSensitive`
+ --> tests/ui/bypass_shadowed_names.rs:6:50
+  |
+6 | fn type_position(_: NotSensitiveDisplay<u64>, _: NotSensitive<u64>) {}
+  |                                                  ^^^^^^^^^^^^^^^^^ not a type
+
+warning: unused imports: `NotSensitiveDisplay` and `NotSensitive`
+ --> tests/ui/bypass_shadowed_names.rs:4:18
+  |
+4 | use redactable::{NotSensitive, NotSensitiveDisplay};
+  |                  ^^^^^^^^^^^^  ^^^^^^^^^^^^^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+error[E0423]: expected function, tuple struct or tuple variant, found derive macro `NotSensitiveDisplay`
+ --> tests/ui/bypass_shadowed_names.rs:9:13
+  |
+9 |     let _ = NotSensitiveDisplay(42_u64);
+  |             ^^^^^^^^^^^^^^^^^^^ not a function, tuple struct or tuple variant
+
+error[E0423]: expected function, tuple struct or tuple variant, found derive macro `NotSensitive`
+  --> tests/ui/bypass_shadowed_names.rs:10:13
+   |
+10 |     let _ = NotSensitive(42_u64);
+   |             ^^^^^^^^^^^^ not a function, tuple struct or tuple variant

@@ -1,9 +1,9 @@
-use redactable::{NotSensitiveDisplay, ToRedactedOutput};
+use redactable::{BypassDisplayRedaction, ToRedacted};
 
 struct NoDisplay;
 
-fn require_output<T: ToRedactedOutput>(_: &T) {}
+fn require_output<T: ToRedacted>(_: &T) {}
 
 fn main() {
-    require_output(&NotSensitiveDisplay(NoDisplay));
+    require_output(&BypassDisplayRedaction(NoDisplay));
 }

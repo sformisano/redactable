@@ -7,6 +7,7 @@ fn unified_feature_emits_all_private_root_impls() {
 
 #[test]
 fn workspace_metadata_has_one_redactable_identity_and_enabler_slog_edge() {
+    use serde_json::Value;
     use std::{path::Path, process::Command};
 
     let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
@@ -31,7 +32,7 @@ fn workspace_metadata_has_one_redactable_identity_and_enabler_slog_edge() {
         String::from_utf8_lossy(&output.stderr)
     );
 
-    let metadata: serde_json::Value =
+    let metadata: Value =
         serde_json::from_slice(&output.stdout).expect("cargo metadata must emit JSON");
     let packages = metadata["packages"]
         .as_array()

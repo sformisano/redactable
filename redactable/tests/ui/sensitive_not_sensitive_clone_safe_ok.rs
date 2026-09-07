@@ -1,4 +1,4 @@
-use redactable::{RedactedOutputExt, Sensitive, ToRedactedOutput};
+use redactable::{Sensitive, ToRedacted};
 
 #[derive(Clone, Sensitive, serde::Serialize)]
 struct Direct {
@@ -23,6 +23,7 @@ struct Cell<T>(T);
 
 #[derive(Clone, Sensitive, serde::Serialize)]
 struct DirectStdCell {
+    #[not_sensitive]
     value: std::cell::Cell<u8>,
 }
 
@@ -32,11 +33,8 @@ struct DirectStdRefCell {
     value: std::cell::RefCell<String>,
 }
 
-fn assert_output<T>(value: &T)
-where
-    T: redactable::Redactable + Clone + std::fmt::Debug + std::panic::RefUnwindSafe,
-{
-    let _ = value.redacted_output().to_redacted_output();
+fn assert_output<T: ToRedacted>(value: &T) {
+    let _ = value.to_redacted();
 }
 
 fn main() {
@@ -58,7 +56,9 @@ fn main() {
 
     #[cfg(feature = "slog")]
     {
-        fn assert_slog<T: redactable::__private::slog::Value>() {}
+        use redactable::__private::slog::Value;
+
+        fn assert_slog<T: Value>() {}
         assert_slog::<Direct>();
         assert_slog::<Generic<String>>();
         assert_slog::<Generic<RefCell>>();

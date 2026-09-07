@@ -23,20 +23,3 @@ help: the trait `redactable::__private::IpPolicyApplicable<IpAddress>` is not im
    = note: required for `std::option::Option<IpAddr>` to implement `redactable::__private::IpPolicyApplicable<IpAddress>`
    = note: required for `IpAddressPolicyKind` to implement `redactable::__private::PolicyKindField<IpAddress, std::option::Option<IpAddr>>`
    = note: required for `std::option::Option<IpAddr>` to implement `redactable::__private::PolicyField<IpAddress>`
-
-error[E0277]: `IpAddr` doesn't implement `Debug`
-  --> tests/ui/sensitive_ip_container_rejected_slog.rs:16:17
-   |
-16 | #[derive(Clone, Sensitive, serde::Serialize)]
-   |                 ^^^^^^^^^ the trait `Debug` is not implemented for `IpAddr`
-   |
-   = note: add `#[derive(Debug)]` to `IpAddr` or manually `impl Debug for IpAddr`
-help: the trait `Debug` is implemented for `std::option::Option<T>`
-  --> $RUST/core/src/option.rs
-   = note: required for `std::option::Option<IpAddr>` to implement `Debug`
-   = note: required for the cast from `&std::option::Option<IpAddr>` to `&dyn Debug`
-help: consider annotating `IpAddr` with `#[derive(Debug)]`
-   |
- 4 + #[derive(Debug)]
- 5 | struct IpAddr(String);
-   |

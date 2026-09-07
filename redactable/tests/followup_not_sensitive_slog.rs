@@ -4,10 +4,9 @@
 
 use std::cell::RefCell;
 
-use redactable::{
-    NotSensitiveExt, NotSensitiveJsonExt, RedactedOutput, ToRedactedOutput, slog::SlogRedacted,
-};
-use serde::Serialize;
+use redactable::{BypassJsonRedaction, BypassRedactionMarker, ToRedacted, slog::SlogRedacted};
+use serde::{Serialize, Serializer, ser::Error};
+use serde_json::Value as JsonValue;
 
 mod support {
     pub(crate) mod slog_capture;
@@ -26,12 +25,9 @@ struct FailingSerialization {
 impl Serialize for FailingSerialization {
     fn serialize<S>(&self, _serializer: S) -> Result<S::Ok, S::Error>
     where
-        S: serde::Serializer,
+        S: Serializer,
     {
-        Err(<S::Error as serde::ser::Error>::custom(format!(
-            "{FAILURE_DETAIL}:{}",
-            self.value
-        )))
+        Err(S::Error::custom(format!("{FAILURE_DETAIL}:{}", self.value)))
     }
 }
 
@@ -45,8 +41,8 @@ struct BorrowSensitiveSerialization {
     value: RefCell<String>,
 }
 
-fn assert_fixed_json_fallback(value: &serde_json::Value) {
-    assert_eq!(value, &serde_json::Value::String("[REDACTED]".into()));
+fn assert_fixed_json_fallback(value: &JsonValue) {
+    assert_eq!(value, &JsonValue::String("[REDACTED]".into()));
     let rendered = [value.to_string(), format!("{value:?}")];
     for output in rendered {
         assert!(!output.contains(FAILURE_CANARY));
@@ -60,13 +56,11 @@ fn explicitly_non_sensitive_json_failures_stay_json_and_omit_error_details() {
         value: FAILURE_CANARY.into(),
     };
 
-    let output = value.not_sensitive_json().to_redacted_output();
-    let RedactedOutput::Json(json) = output else {
-        panic!("not-sensitive JSON failure must preserve the JSON variant");
-    };
-    assert_fixed_json_fallback(&json);
+    let output = BypassJsonRedaction(&value).to_redacted();
+    let json = &output.json();
+    assert_fixed_json_fallback(json);
 
-    let debug = format!("{:?}", value.not_sensitive_json());
+    let debug = format!("{:?}", BypassJsonRedaction(&value));
     assert!(!debug.contains(FAILURE_CANARY));
     assert!(!debug.contains(FAILURE_DETAIL));
 
@@ -86,10 +80,7 @@ fn successful_explicitly_non_sensitive_json_and_slog_output_remains_raw() {
     };
     let expected = serde_json::json!({"value": RAW_VALUE});
 
-    assert_eq!(
-        value.not_sensitive_json().to_redacted_output(),
-        RedactedOutput::Json(expected.clone())
-    );
+    assert_eq!(BypassJsonRedaction(&value).to_redacted().json(), expected);
 
     let mut serializer = CapturingSerializer::new();
     serialize_to_capture(&value, "value", &mut serializer);
@@ -100,12 +91,12 @@ fn successful_explicitly_non_sensitive_json_and_slog_output_remains_raw() {
 }
 
 #[test]
-fn not_sensitive_wrapper_is_slog_certified_and_delegates_raw_output() {
+fn the_marker_wrapper_is_slog_certified_and_delegates_raw_output() {
     fn assert_slog_certified<T: SlogRedacted>(_: &T) {}
 
     const RAW_VALUE: &str = "declared-safe-slog-value-b83a";
     let value = RAW_VALUE.to_owned();
-    let wrapped = value.not_sensitive();
+    let wrapped = BypassRedactionMarker(&value);
     assert_slog_certified(&wrapped);
 
     let mut serializer = CapturingSerializer::new();
@@ -136,8 +127,6 @@ fn generated_not_sensitive_slog_preserves_raw_values_and_fail_closes_borrow_conf
     serialize_to_capture(&value, "borrowed", &mut serializer);
     assert_eq!(
         serializer.get("borrowed"),
-        Some(CapturedValue::Serde(serde_json::Value::String(
-            "[REDACTED]".into()
-        )))
+        Some(CapturedValue::Serde(JsonValue::String("[REDACTED]".into())))
     );
 }

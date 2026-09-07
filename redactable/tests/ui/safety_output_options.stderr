@@ -1,0 +1,59 @@
+error: `#[redactable(...)]` options belong on fields; annotate the specific recursive or legacy-formatted field
+ --> tests/ui/safety_output_options.rs:3:1
+  |
+3 | #[redactable()]
+  | ^^^^^^^^^^^^^^^
+
+error: `#[redactable(output = json)]` was removed; `Sensitive` and `SensitiveDual` always produce JSON
+ --> tests/ui/safety_output_options.rs:6:14
+  |
+6 | #[redactable(output = text)]
+  |              ^^^^^^
+
+error: `#[redactable(output = json)]` was removed; `Sensitive` and `SensitiveDual` always produce JSON
+ --> tests/ui/safety_output_options.rs:9:14
+  |
+9 | #[redactable(output = "json")]
+  |              ^^^^^^
+
+error: `#[redactable(output = json)]` was removed; `Sensitive` and `SensitiveDual` always produce JSON
+  --> tests/ui/safety_output_options.rs:12:14
+   |
+12 | #[redactable(output = json, output = json)]
+   |              ^^^^^^
+
+error: `#[redactable(output = json)]` was removed; `Sensitive` and `SensitiveDual` always produce JSON
+  --> tests/ui/safety_output_options.rs:15:14
+   |
+15 | #[redactable(output = json)]
+   |              ^^^^^^
+
+error: `#[redactable(output = json)]` was removed; `Sensitive` and `SensitiveDual` always produce JSON
+  --> tests/ui/safety_output_options.rs:19:14
+   |
+19 | #[redactable(output = json)]
+   |              ^^^^^^
+
+error: `#[redactable(...)]` is not supported on non-sensitive derives; annotate the specific recursive or legacy-formatted field of a `Sensitive` type
+  --> tests/ui/safety_output_options.rs:23:1
+   |
+23 | #[redactable(output = json)]
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error: `#[redactable(...)]` is not supported on non-sensitive derives; annotate the specific recursive or legacy-formatted field of a `Sensitive` type
+  --> tests/ui/safety_output_options.rs:26:1
+   |
+26 | #[redactable(output = json)]
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error: unknown redactable field option; expected `recursive`, `legacy_formatting`, or `generated_formatting`
+  --> tests/ui/safety_output_options.rs:30:18
+   |
+30 |     #[redactable(output = json)]
+   |                  ^^^^^^
+
+error: `#[redactable(...)]` is not supported on enum variants; annotate the specific field
+  --> tests/ui/safety_output_options.rs:36:5
+   |
+36 |     #[redactable(output = json)]
+   |     ^

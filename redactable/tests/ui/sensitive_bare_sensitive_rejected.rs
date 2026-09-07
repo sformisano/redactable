@@ -1,6 +1,6 @@
 use redactable::Sensitive;
 
-#[derive(Clone, Sensitive)]
+#[derive(serde::Serialize, Clone, Sensitive)]
 struct Credentials {
     #[sensitive]
     password: String,

@@ -1,23 +1,14 @@
-//! Tests for wrapper types: `SensitiveValue<T, P>` and `NotSensitiveValue<T>`.
+//! Tests for wrapper types: `SensitiveValue<T, P>` and `BypassRedaction<T>`.
 //!
 //! These tests verify:
 //! - Wrapper ergonomics (From, Deref, DerefMut, Debug)
 //! - Redaction behavior within containers
 //! - Orphan rule workarounds with `SensitiveWithPolicy`
 
-use redactable::{
-    NotSensitiveValue, Redactable, RedactedOutput, RedactionPolicy, Secret, Sensitive,
-    SensitiveValue, SensitiveWithPolicy, TextPolicyKind, TextRedactionPolicy, ToRedactedOutput,
-    Token,
-};
-#[cfg(feature = "slog")]
-use serde::Serialize;
-
 mod sensitive_value {
-    use super::*;
 
     mod construction {
-        use super::*;
+        use redactable::{Secret, SensitiveValue};
 
         #[test]
         fn creates_from_value() {
@@ -27,7 +18,7 @@ mod sensitive_value {
     }
 
     mod access {
-        use super::*;
+        use redactable::{Secret, SensitiveValue, Token};
 
         #[test]
         fn exposes_inner_value() {
@@ -45,7 +36,7 @@ mod sensitive_value {
     }
 
     mod formatting {
-        use super::*;
+        use redactable::{Secret, SensitiveValue, ToRedacted, Token};
 
         #[test]
         fn shows_redacted_in_debug() {
@@ -62,12 +53,9 @@ mod sensitive_value {
         }
 
         #[test]
-        fn converts_to_redacted_output() {
+        fn converts_to_the_sink_value() {
             let sensitive = SensitiveValue::<String, Secret>::from("secret".to_string());
-            assert_eq!(
-                sensitive.to_redacted_output(),
-                RedactedOutput::Text("[REDACTED]".to_string())
-            );
+            assert_eq!(sensitive.to_redacted().text(), "[REDACTED]");
         }
 
         #[cfg(feature = "json")]
@@ -77,20 +65,20 @@ mod sensitive_value {
             let json = serde_json::to_value(&sensitive).expect("serialize sensitive wrapper");
 
             assert_eq!(json, serde_json::json!("secret"));
-            assert_eq!(
-                sensitive.to_redacted_output(),
-                RedactedOutput::Text("[REDACTED]".to_string())
-            );
+            assert_eq!(sensitive.to_redacted().text(), "[REDACTED]");
         }
     }
 
     mod in_container {
-        use super::*;
+        use redactable::{
+            Redactable, Secret, Sensitive, SensitiveValue, SensitiveWithPolicy,
+            TextRedactionPolicy, Token,
+        };
+        use serde::Serialize;
 
         #[test]
         fn redacts_when_container_is_redacted() {
-            #[derive(Clone, Sensitive)]
-            #[cfg_attr(feature = "slog", derive(Serialize))]
+            #[derive(Clone, Sensitive, Serialize)]
             struct Config {
                 api_key: SensitiveValue<String, Token>,
             }
@@ -104,8 +92,7 @@ mod sensitive_value {
 
         #[test]
         fn works_with_custom_leaf_type() {
-            #[derive(Clone, PartialEq, Debug)]
-            #[cfg_attr(feature = "slog", derive(Serialize))]
+            #[derive(Clone, PartialEq, Debug, Serialize)]
             struct UserId(String);
 
             impl SensitiveWithPolicy<Secret> for UserId {
@@ -118,8 +105,7 @@ mod sensitive_value {
                 }
             }
 
-            #[derive(Clone, Sensitive)]
-            #[cfg_attr(feature = "slog", derive(Serialize))]
+            #[derive(Clone, Sensitive, Serialize)]
             struct Request {
                 user_id: SensitiveValue<UserId, Secret>,
             }
@@ -133,8 +119,7 @@ mod sensitive_value {
 
         #[test]
         fn works_in_option() {
-            #[derive(Clone, Sensitive)]
-            #[cfg_attr(feature = "slog", derive(Serialize))]
+            #[derive(Clone, Sensitive, Serialize)]
             struct MaybeSensitive {
                 sensitive: Option<SensitiveValue<String, Secret>>,
             }
@@ -152,8 +137,7 @@ mod sensitive_value {
 
         #[test]
         fn works_in_vec() {
-            #[derive(Clone, Sensitive)]
-            #[cfg_attr(feature = "slog", derive(Serialize))]
+            #[derive(Clone, Sensitive, Serialize)]
             struct Tokens {
                 values: Vec<SensitiveValue<String, Token>>,
             }
@@ -173,10 +157,9 @@ mod sensitive_value {
 }
 
 mod not_sensitive_value {
-    use super::*;
 
     mod construction {
-        use super::*;
+        use redactable::BypassRedaction;
 
         #[test]
         fn creates_from_value() {
@@ -185,7 +168,7 @@ mod not_sensitive_value {
                 data: String,
             }
 
-            let wrapped = NotSensitiveValue::from(ForeignType {
+            let wrapped = BypassRedaction::from(ForeignType {
                 data: "test".to_string(),
             });
             assert_eq!(wrapped.data, "test");
@@ -193,7 +176,7 @@ mod not_sensitive_value {
     }
 
     mod access {
-        use super::*;
+        use redactable::BypassRedaction;
 
         #[test]
         fn derefs_to_inner() {
@@ -202,7 +185,7 @@ mod not_sensitive_value {
                 value: i32,
             }
 
-            let wrapped = NotSensitiveValue::from(ForeignType { value: 42 });
+            let wrapped = BypassRedaction::from(ForeignType { value: 42 });
             assert_eq!(wrapped.value, 42);
         }
 
@@ -213,14 +196,14 @@ mod not_sensitive_value {
                 value: i32,
             }
 
-            let mut wrapped = NotSensitiveValue::from(ForeignType { value: 42 });
+            let mut wrapped = BypassRedaction::from(ForeignType { value: 42 });
             wrapped.value = 100;
             assert_eq!(wrapped.value, 100);
         }
     }
 
     mod formatting {
-        use super::*;
+        use redactable::BypassRedaction;
 
         #[test]
         fn shows_inner_in_debug() {
@@ -230,38 +213,37 @@ mod not_sensitive_value {
                 data: String,
             }
 
-            let wrapped = NotSensitiveValue::from(ForeignType {
+            let wrapped = BypassRedaction::from(ForeignType {
                 data: "visible".to_string(),
             });
             let debug = format!("{:?}", wrapped);
             assert!(debug.contains("visible"));
-            assert!(debug.contains("NotSensitiveValue"));
+            assert!(debug.contains("BypassRedaction"));
         }
     }
 
     mod in_container {
-        use super::*;
+        use redactable::{BypassRedaction, Redactable, Secret, Sensitive};
+        use serde::Serialize;
 
         #[test]
         fn passes_through_unchanged() {
-            #[derive(Clone, Debug, PartialEq)]
-            #[cfg_attr(feature = "slog", derive(Serialize))]
+            #[derive(Clone, Debug, PartialEq, Serialize)]
             struct ForeignConfig {
                 timeout: u64,
                 retries: u32,
             }
 
-            #[derive(Clone, Sensitive)]
-            #[cfg_attr(feature = "slog", derive(Serialize))]
+            #[derive(Clone, Sensitive, Serialize)]
             struct AppConfig {
                 #[sensitive(Secret)]
                 api_key: String,
-                foreign: NotSensitiveValue<ForeignConfig>,
+                foreign: BypassRedaction<ForeignConfig>,
             }
 
             let config = AppConfig {
                 api_key: "secret_key".to_string(),
-                foreign: NotSensitiveValue::from(ForeignConfig {
+                foreign: BypassRedaction::from(ForeignConfig {
                     timeout: 30,
                     retries: 3,
                 }),
@@ -275,38 +257,39 @@ mod not_sensitive_value {
 
         #[test]
         fn does_not_walk_nested_sensitive_fields() {
-            #[derive(Clone, Sensitive)]
-            #[cfg_attr(feature = "slog", derive(Serialize))]
+            #[derive(Clone, Sensitive, Serialize)]
             struct InnerSensitive {
                 #[sensitive(Secret)]
                 password: String,
             }
 
-            #[derive(Clone, Sensitive)]
-            #[cfg_attr(feature = "slog", derive(Serialize))]
+            #[derive(Clone, Sensitive, Serialize)]
             struct Outer {
-                inner: NotSensitiveValue<InnerSensitive>,
+                inner: BypassRedaction<InnerSensitive>,
             }
 
             let outer = Outer {
-                inner: NotSensitiveValue::from(InnerSensitive {
+                inner: BypassRedaction::from(InnerSensitive {
                     password: "hunter2".to_string(),
                 }),
             };
             let redacted = outer.redact();
 
-            // Password is NOT redacted because NotSensitiveValue is a passthrough
+            // Password is NOT redacted because BypassRedaction is a passthrough
             assert_eq!(redacted.inner.password, "hunter2");
         }
     }
 }
 
 mod orphan_rule_workaround {
-    use super::*;
+    use redactable::{
+        Redactable, RedactionPolicy, Secret, Sensitive, SensitiveValue, SensitiveWithPolicy,
+        TextPolicyKind, TextRedactionPolicy, ToRedacted, Token,
+    };
+    use serde::Serialize;
 
     // Simulate a foreign type from another crate
-    #[derive(Clone, PartialEq, Debug)]
-    #[cfg_attr(feature = "slog", derive(Serialize))]
+    #[derive(Clone, PartialEq, Debug, Serialize)]
     struct ForeignId(String);
 
     #[derive(Clone, Copy)]
@@ -340,8 +323,7 @@ mod orphan_rule_workaround {
 
     #[test]
     fn redacts_foreign_type_in_container() {
-        #[derive(Clone, Sensitive)]
-        #[cfg_attr(feature = "slog", derive(Serialize))]
+        #[derive(Clone, Sensitive, Serialize)]
         struct Integration {
             external_id: SensitiveValue<ForeignId, ForeignIdPolicy>,
             #[sensitive(Secret)]
@@ -362,13 +344,10 @@ mod orphan_rule_workaround {
     }
 
     #[test]
-    fn converts_to_redacted_output() {
+    fn converts_to_the_sink_value() {
         let wrapped =
             SensitiveValue::<ForeignId, ForeignIdPolicy>::from(ForeignId("id_xyz123".to_string()));
-        assert_eq!(
-            wrapped.to_redacted_output(),
-            RedactedOutput::Text("*****z123".to_string())
-        );
+        assert_eq!(wrapped.to_redacted().text(), "*****z123");
     }
 
     #[test]
@@ -403,29 +382,28 @@ mod orphan_rule_workaround {
 }
 
 mod combined_wrappers {
-    use super::*;
+    use redactable::{BypassRedaction, Redactable, Secret, Sensitive, SensitiveValue, Token};
+    use serde::Serialize;
 
     #[test]
     fn mixes_different_wrapper_types_in_same_container() {
-        #[derive(Clone, Debug)]
-        #[cfg_attr(feature = "slog", derive(Serialize))]
+        #[derive(Clone, Debug, Serialize)]
         struct ForeignMetadata {
             version: String,
         }
 
-        #[derive(Clone, Sensitive)]
-        #[cfg_attr(feature = "slog", derive(Serialize))]
+        #[derive(Clone, Sensitive, Serialize)]
         struct Service {
             #[sensitive(Secret)]
             credentials: String,
             api_token: SensitiveValue<String, Token>,
-            metadata: NotSensitiveValue<ForeignMetadata>,
+            metadata: BypassRedaction<ForeignMetadata>,
         }
 
         let service = Service {
             credentials: "password123".to_string(),
             api_token: SensitiveValue::from("sk_live_abc123def".to_string()),
-            metadata: NotSensitiveValue::from(ForeignMetadata {
+            metadata: BypassRedaction::from(ForeignMetadata {
                 version: "1.0.0".to_string(),
             }),
         };
@@ -440,23 +418,20 @@ mod combined_wrappers {
     fn not_sensitive_derive_and_wrapper_coexist() {
         use redactable::NotSensitive;
 
-        #[derive(Clone, Debug, NotSensitive)]
-        #[cfg_attr(feature = "slog", derive(Serialize))]
+        #[derive(Clone, Debug, NotSensitive, Serialize)]
         struct PublicData {
             name: String,
         }
 
-        #[derive(Clone, Debug)]
-        #[cfg_attr(feature = "slog", derive(Serialize))]
+        #[derive(Clone, Debug, Serialize)]
         struct ForeignData {
             value: i32,
         }
 
-        #[derive(Clone, Sensitive)]
-        #[cfg_attr(feature = "slog", derive(Serialize))]
+        #[derive(Clone, Sensitive, Serialize)]
         struct Combined {
             public: PublicData,
-            foreign: NotSensitiveValue<ForeignData>,
+            foreign: BypassRedaction<ForeignData>,
             #[sensitive(Secret)]
             password: String,
         }
@@ -465,7 +440,7 @@ mod combined_wrappers {
             public: PublicData {
                 name: "Alice".to_string(),
             },
-            foreign: NotSensitiveValue::from(ForeignData { value: 42 }),
+            foreign: BypassRedaction::from(ForeignData { value: 42 }),
             password: "password".to_string(),
         };
         let redacted = combined.redact();
@@ -478,7 +453,10 @@ mod combined_wrappers {
 
 #[cfg(feature = "json")]
 mod serde_json_round_trip {
-    use super::*;
+    use redactable::{
+        BypassRedaction, RedactionPolicy, SensitiveValue, SensitiveWithPolicy, TextPolicyKind,
+        TextRedactionPolicy,
+    };
     use serde::{Deserialize, Serialize};
 
     #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -539,7 +517,7 @@ mod serde_json_round_trip {
 
     #[test]
     fn not_sensitive_value_deserializes_inner_value_and_round_trips_raw_json() {
-        let wrapped = NotSensitiveValue::from(ForeignConfig {
+        let wrapped = BypassRedaction::from(ForeignConfig {
             timeout_secs: 30,
             retries: 2,
         });
@@ -550,7 +528,7 @@ mod serde_json_round_trip {
             serde_json::json!({ "timeout_secs": 30, "retries": 2 })
         );
 
-        let decoded: NotSensitiveValue<ForeignConfig> =
+        let decoded: BypassRedaction<ForeignConfig> =
             serde_json::from_value(json).expect("deserialize not-sensitive wrapper");
 
         assert_eq!(

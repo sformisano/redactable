@@ -1,4 +1,7 @@
-use super::*;
+use crate::slog_capture::{CapturedValue, CapturingSerializer, serialize_to_capture};
+use redactable::slog::SlogRedactedExt;
+use redactable::{Secret, Sensitive, Token};
+use serde::Serialize;
 
 #[test]
 fn redacts_enum_variants() {
@@ -9,6 +12,7 @@ fn redacts_enum_variants() {
             key: String,
         },
         Password {
+            #[not_sensitive]
             username: String,
             #[sensitive(Secret)]
             password: String,

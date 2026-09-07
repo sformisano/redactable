@@ -1,4 +1,8 @@
-use super::*;
+use crate::slog_capture::{CapturedValue, CapturingSerializer, serialize_to_capture};
+use redactable::slog::SlogRedactedExt;
+use redactable::{Secret, Sensitive, Token};
+use serde::Serialize;
+use std::collections::HashMap;
 
 #[test]
 fn redacts_vec_elements() {
@@ -38,6 +42,7 @@ fn redacts_option_values() {
     struct OptionalSensitive {
         #[sensitive(Secret)]
         secret: Option<String>,
+        #[not_sensitive]
         public: String,
     }
 

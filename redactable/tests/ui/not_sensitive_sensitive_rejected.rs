@@ -1,6 +1,6 @@
 use redactable::NotSensitive;
 
-#[derive(NotSensitive)]
+#[derive(serde::Serialize, NotSensitive)]
 struct Invalid {
     #[sensitive(redactable::Secret)]
     value: String,

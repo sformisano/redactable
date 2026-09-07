@@ -1,22 +1,24 @@
-use super::*;
+use crate::log_redacted;
+use redactable::{
+    Redactable, RedactionPolicy, Secret, Sensitive, SensitiveValue, SensitiveWithPolicy,
+    TextPolicyKind, TextRedactionPolicy, Token,
+};
 
 #[test]
 fn passes_through_unchanged_when_implementing_redactable_container() {
-    #[derive(Clone, PartialEq, Sensitive)]
-    #[cfg_attr(feature = "slog", derive(serde::Serialize))]
-    struct ExternalTimestamp(u64);
+    #[derive(Clone, PartialEq, Sensitive, serde::Serialize)]
+    struct ExternalTimestamp(#[not_sensitive] u64);
 
-    #[derive(Clone, PartialEq, Sensitive)]
-    #[cfg_attr(feature = "slog", derive(serde::Serialize))]
-    struct ExternalDecimal(f64);
+    #[derive(Clone, PartialEq, Sensitive, serde::Serialize)]
+    struct ExternalDecimal(#[not_sensitive] f64);
 
-    #[derive(Clone, Sensitive)]
-    #[cfg_attr(feature = "slog", derive(serde::Serialize))]
+    #[derive(Clone, Sensitive, serde::Serialize)]
     struct Transaction {
         #[sensitive(Secret)]
         account_number: String,
         timestamp: ExternalTimestamp,
         amount: ExternalDecimal,
+        #[not_sensitive]
         description: String,
     }
 
@@ -37,8 +39,7 @@ fn passes_through_unchanged_when_implementing_redactable_container() {
 
 #[test]
 fn redacts_via_sensitive_wrapper() {
-    #[derive(Clone, Debug, PartialEq)]
-    #[cfg_attr(feature = "slog", derive(serde::Serialize))]
+    #[derive(Clone, Debug, PartialEq, serde::Serialize)]
     struct ExternalId(String);
 
     impl SensitiveWithPolicy<Secret> for ExternalId {
@@ -51,8 +52,7 @@ fn redacts_via_sensitive_wrapper() {
         }
     }
 
-    #[derive(Clone, Sensitive)]
-    #[cfg_attr(feature = "slog", derive(serde::Serialize))]
+    #[derive(Clone, Sensitive, serde::Serialize)]
     struct Record {
         #[sensitive(Secret)]
         token: String,
@@ -74,8 +74,7 @@ fn redacts_via_sensitive_wrapper() {
 
 #[test]
 fn redacts_via_policy_trait() {
-    #[derive(Clone, Debug, PartialEq)]
-    #[cfg_attr(feature = "json", derive(serde::Serialize))]
+    #[derive(Clone, Debug, PartialEq, serde::Serialize)]
     struct ExternalType(String);
 
     #[derive(Clone, Copy)]
@@ -99,8 +98,7 @@ fn redacts_via_policy_trait() {
         }
     }
 
-    #[derive(Clone, Sensitive)]
-    #[cfg_attr(feature = "json", derive(serde::Serialize))]
+    #[derive(Clone, Sensitive, serde::Serialize)]
     struct Record {
         id: SensitiveValue<ExternalType, ExternalTypePolicy>,
     }
@@ -111,17 +109,14 @@ fn redacts_via_policy_trait() {
 
     let redacted = record.clone().redact();
     assert_eq!(redacted.id.expose(), &ExternalType("******al".to_string()));
-    assert_eq!(
-        log_redacted(&record.id),
-        RedactedOutput::Text("******al".to_string())
-    );
+    assert_eq!(log_redacted(&record.id).text(), "******al");
 }
 
 #[test]
 fn chooses_trait_based_on_wrapper_usage() {
-    #[derive(Clone, PartialEq, Sensitive)]
-    #[cfg_attr(feature = "slog", derive(serde::Serialize))]
+    #[derive(Clone, PartialEq, Sensitive, serde::Serialize)]
     struct UserId {
+        #[not_sensitive]
         prefix: String,
         #[sensitive(Secret)]
         value: String,
@@ -140,14 +135,12 @@ fn chooses_trait_based_on_wrapper_usage() {
         }
     }
 
-    #[derive(Clone, Sensitive)]
-    #[cfg_attr(feature = "slog", derive(serde::Serialize))]
+    #[derive(Clone, Sensitive, serde::Serialize)]
     struct AccountTraversed {
         user_id: UserId,
     }
 
-    #[derive(Clone, Sensitive)]
-    #[cfg_attr(feature = "slog", derive(serde::Serialize))]
+    #[derive(Clone, Sensitive, serde::Serialize)]
     struct AccountAsLeaf {
         user_id: SensitiveValue<UserId, Token>,
     }

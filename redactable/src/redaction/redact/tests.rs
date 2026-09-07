@@ -83,8 +83,7 @@ fn all_builtin_recursive_routes_propagate_formatting_conflicts() {
 
 #[test]
 fn redact_applies_policy() {
-    #[derive(Clone, Sensitive)]
-    #[cfg_attr(feature = "slog", derive(serde::Serialize))]
+    #[derive(Clone, Sensitive, serde::Serialize)]
     struct DefaultValue {
         #[sensitive(Secret)]
         value: String,
@@ -99,8 +98,7 @@ fn redact_applies_policy() {
 
 #[test]
 fn apply_policy_to_string() {
-    #[derive(Clone, Sensitive)]
-    #[cfg_attr(feature = "slog", derive(serde::Serialize))]
+    #[derive(Clone, Sensitive, serde::Serialize)]
     struct Simple {
         #[sensitive(Secret)]
         value: String,
@@ -115,8 +113,7 @@ fn apply_policy_to_string() {
 
 #[test]
 fn apply_policy_to_option_string() {
-    #[derive(Clone, Sensitive)]
-    #[cfg_attr(feature = "slog", derive(serde::Serialize))]
+    #[derive(Clone, Sensitive, serde::Serialize)]
     struct WithOption {
         #[sensitive(Secret)]
         value: Option<String>,
@@ -131,8 +128,7 @@ fn apply_policy_to_option_string() {
 
 #[test]
 fn apply_policy_to_vec_string() {
-    #[derive(Clone, Sensitive)]
-    #[cfg_attr(feature = "slog", derive(serde::Serialize))]
+    #[derive(Clone, Sensitive, serde::Serialize)]
     struct WithVec {
         #[sensitive(Secret)]
         values: Vec<String>,
@@ -154,8 +150,7 @@ fn apply_policy_to_arc_string() {
 
 #[test]
 fn apply_policy_to_nested_option_vec() {
-    #[derive(Clone, Sensitive)]
-    #[cfg_attr(feature = "slog", derive(serde::Serialize))]
+    #[derive(Clone, Sensitive, serde::Serialize)]
     struct Nested {
         #[sensitive(Secret)]
         values: Option<Vec<String>>,
@@ -173,8 +168,7 @@ fn apply_policy_to_nested_option_vec() {
 
 #[test]
 fn apply_policy_to_nested_vec_option() {
-    #[derive(Clone, Sensitive)]
-    #[cfg_attr(feature = "slog", derive(serde::Serialize))]
+    #[derive(Clone, Sensitive, serde::Serialize)]
     struct Nested {
         #[sensitive(Secret)]
         values: Vec<Option<String>>,
@@ -192,8 +186,7 @@ fn apply_policy_to_nested_vec_option() {
 
 #[test]
 fn apply_policy_to_deeply_nested() {
-    #[derive(Clone, Sensitive)]
-    #[cfg_attr(feature = "slog", derive(serde::Serialize))]
+    #[derive(Clone, Sensitive, serde::Serialize)]
     struct DeepNest {
         #[sensitive(Secret)]
         values: Option<Vec<Option<String>>>,
@@ -208,8 +201,7 @@ fn apply_policy_to_deeply_nested() {
 
 #[test]
 fn apply_policy_to_hashmap_values() {
-    #[derive(Clone, Sensitive)]
-    #[cfg_attr(feature = "slog", derive(serde::Serialize))]
+    #[derive(Clone, Sensitive, serde::Serialize)]
     struct WithMap {
         #[sensitive(Secret)]
         data: HashMap<String, String>,
@@ -231,8 +223,7 @@ fn apply_policy_to_hashmap_values() {
 
 #[test]
 fn apply_policy_to_nested_map_vec() {
-    #[derive(Clone, Sensitive)]
-    #[cfg_attr(feature = "slog", derive(serde::Serialize))]
+    #[derive(Clone, Sensitive, serde::Serialize)]
     struct ComplexNest {
         #[sensitive(Secret)]
         data: HashMap<String, Vec<String>>,

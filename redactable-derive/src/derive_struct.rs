@@ -6,6 +6,7 @@
 use proc_macro2::{Ident, TokenStream};
 use quote::{quote, quote_spanned};
 use syn::{DataStruct, Fields, Result, spanned::Spanned};
+use syn::{FieldsNamed, FieldsUnnamed, Generics};
 
 use crate::{
     DeriveOutput, crate_path,
@@ -17,7 +18,7 @@ use crate::{
 pub(crate) fn derive_struct(
     name: &Ident,
     data: DataStruct,
-    _generics: &syn::Generics,
+    _generics: &Generics,
     formatter: &Ident,
     mapper: &Ident,
     fresh: &mut FreshIdentAllocator,
@@ -37,10 +38,7 @@ pub(crate) fn derive_struct(
             debug_redacted_body: quote! {
                 #formatter.write_str(stringify!(#name))
             },
-            debug_unredacted_body: quote! {
-                #formatter.write_str(stringify!(#name))
-            },
-            debug_unredacted_generics: Vec::new(),
+            debug_generics: Vec::new(),
         }),
     }
 }
@@ -48,7 +46,7 @@ pub(crate) fn derive_struct(
 #[allow(clippy::too_many_lines)]
 fn derive_named_struct(
     name: &Ident,
-    fields: syn::FieldsNamed,
+    fields: FieldsNamed,
     container_path: &TokenStream,
     formatter: &Ident,
     mapper: &Ident,
@@ -62,14 +60,13 @@ fn derive_named_struct(
     let mut policy_applicable_generics = Vec::new();
     let mut debug_redacted_fields = Vec::new();
     let mut debug_redacted_patterns = Vec::new();
-    let mut debug_unredacted_fields = Vec::new();
-    let mut debug_unredacted_generics = Vec::new();
+    let mut debug_generics = Vec::new();
 
     let mut ctx = DeriveContext {
         container_path,
         container_predicates: &mut used_generics,
         policy_predicates: &mut policy_applicable_generics,
-        debug_unredacted_predicates: &mut debug_unredacted_generics,
+        debug_predicates: &mut debug_generics,
         mapper,
     };
 
@@ -99,19 +96,15 @@ fn derive_named_struct(
                 #debug.field(stringify!(#ident), &"[REDACTED]");
             }
         } else {
-            // Non-sensitive: normal binding, referenced in the field output
+            // Declared or explicitly public fields use their Debug implementation.
             debug_redacted_patterns.push(quote_spanned! { span => #ident: #binding });
             quote_spanned! { span =>
                 #debug.field(stringify!(#ident), #binding);
             }
         };
-        let debug_unredacted_field = quote_spanned! { span =>
-            #debug.field(stringify!(#ident), #binding);
-        };
 
         transforms.push(transform);
         debug_redacted_fields.push(debug_redacted_field);
-        debug_unredacted_fields.push(debug_unredacted_field);
     }
 
     Ok(DeriveOutput {
@@ -131,23 +124,14 @@ fn derive_named_struct(
                 }
             }
         },
-        debug_unredacted_body: quote! {
-            match self {
-                Self { #(#patterns),* } => {
-                    let mut #debug = #formatter.debug_struct(stringify!(#name));
-                    #(#debug_unredacted_fields)*
-                    #debug.finish()
-                }
-            }
-        },
-        debug_unredacted_generics,
+        debug_generics,
     })
 }
 
 #[allow(clippy::too_many_lines)]
 fn derive_unnamed_struct(
     name: &Ident,
-    fields: syn::FieldsUnnamed,
+    fields: FieldsUnnamed,
     container_path: &TokenStream,
     formatter: &Ident,
     mapper: &Ident,
@@ -160,14 +144,13 @@ fn derive_unnamed_struct(
     let mut policy_applicable_generics = Vec::new();
     let mut debug_redacted_fields = Vec::new();
     let mut debug_redacted_patterns = Vec::new();
-    let mut debug_unredacted_fields = Vec::new();
-    let mut debug_unredacted_generics = Vec::new();
+    let mut debug_generics = Vec::new();
 
     let mut ctx = DeriveContext {
         container_path,
         container_predicates: &mut used_generics,
         policy_predicates: &mut policy_applicable_generics,
-        debug_unredacted_predicates: &mut debug_unredacted_generics,
+        debug_predicates: &mut debug_generics,
         mapper,
     };
 
@@ -196,19 +179,15 @@ fn derive_unnamed_struct(
                 #debug.field(&"[REDACTED]");
             }
         } else {
-            // Non-sensitive: normal binding, referenced in the field output
+            // Declared or explicitly public fields use their Debug implementation.
             debug_redacted_patterns.push(quote_spanned! { span => #binding });
             quote_spanned! { span =>
                 #debug.field(#binding);
             }
         };
-        let debug_unredacted_field = quote_spanned! { span =>
-            #debug.field(#binding);
-        };
 
         transforms.push(transform);
         debug_redacted_fields.push(debug_redacted_field);
-        debug_unredacted_fields.push(debug_unredacted_field);
     }
 
     Ok(DeriveOutput {
@@ -228,15 +207,6 @@ fn derive_unnamed_struct(
                 }
             }
         },
-        debug_unredacted_body: quote! {
-            match self {
-                Self ( #(#bindings),* ) => {
-                    let mut #debug = #formatter.debug_tuple(stringify!(#name));
-                    #(#debug_unredacted_fields)*
-                    #debug.finish()
-                }
-            }
-        },
-        debug_unredacted_generics,
+        debug_generics,
     })
 }

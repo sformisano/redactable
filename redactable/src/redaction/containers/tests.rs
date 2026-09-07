@@ -7,22 +7,24 @@ use std::{
     sync::{Arc, Mutex, RwLock},
 };
 
-use crate::{Secret, Sensitive, redaction::traits::Redactable};
+use crate::{
+    Secret, Sensitive,
+    redaction::{
+        redact::PolicyMapper,
+        traits::{Redactable, RedactableWithMapper},
+    },
+};
 
 /// Runs the traversal machinery on a value regardless of certification.
 ///
 /// Leaf passthroughs deliberately do not implement `Redactable` (no declared
 /// redaction behavior), but their machinery-level passthrough is still a
 /// contract worth asserting.
-fn machine_redact<T: crate::redaction::traits::RedactableWithMapper>(value: T) -> T {
-    crate::redaction::traits::RedactableWithMapper::redact_with(
-        value,
-        &crate::redaction::redact::PolicyMapper,
-    )
+fn machine_redact<T: RedactableWithMapper>(value: T) -> T {
+    value.redact_with(&PolicyMapper)
 }
 
-#[derive(Clone, Sensitive)]
-#[cfg_attr(feature = "json", derive(serde::Serialize))]
+#[derive(Clone, Sensitive, serde::Serialize)]
 struct SensitiveString {
     #[sensitive(Secret)]
     value: String,
@@ -232,8 +234,7 @@ fn tuple_traversal_redacts_all_arities() {
 
 #[test]
 fn vecdeque_policy_redacts_raw_string_elements() {
-    #[derive(Clone, Sensitive)]
-    #[cfg_attr(feature = "json", derive(serde::Serialize))]
+    #[derive(Clone, Sensitive, serde::Serialize)]
     struct WithVecDeque {
         #[sensitive(Secret)]
         values: VecDeque<String>,
@@ -252,8 +253,7 @@ fn vecdeque_policy_redacts_raw_string_elements() {
 
 #[test]
 fn array_policy_redacts_raw_string_elements() {
-    #[derive(Clone, Sensitive)]
-    #[cfg_attr(feature = "json", derive(serde::Serialize))]
+    #[derive(Clone, Sensitive, serde::Serialize)]
     struct WithArray {
         #[sensitive(Secret)]
         values: [String; 2],
@@ -383,8 +383,7 @@ fn map_keys_are_not_redacted_by_default() {
 
 #[test]
 fn map_keys_are_never_redacted() {
-    #[derive(Clone, Hash, Eq, PartialEq, Sensitive)]
-    #[cfg_attr(feature = "json", derive(serde::Serialize))]
+    #[derive(Clone, Hash, Eq, PartialEq, Sensitive, serde::Serialize)]
     struct SensitiveKey {
         #[sensitive(Secret)]
         value: String,
@@ -505,8 +504,7 @@ fn ip_in_container_redacts_via_sensitive_value_workaround() {
 
     use crate::{IpAddress, SensitiveValue};
 
-    #[derive(Clone, Sensitive)]
-    #[cfg_attr(feature = "json", derive(serde::Serialize))]
+    #[derive(Clone, Sensitive, serde::Serialize)]
     struct Peer {
         addr: Option<SensitiveValue<IpAddr, IpAddress>>,
     }
@@ -531,8 +529,7 @@ fn annotated_ipaddr_redacts() {
 
     use crate::{IpAddress, RedactableWithFormatter, SensitiveDisplay};
 
-    #[derive(Clone, Sensitive)]
-    #[cfg_attr(feature = "slog", derive(serde::Serialize))]
+    #[derive(Clone, Sensitive, serde::Serialize)]
     struct Connection {
         #[sensitive(IpAddress)]
         ip: IpAddr,

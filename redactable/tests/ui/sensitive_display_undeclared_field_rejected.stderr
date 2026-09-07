@@ -1,0 +1,24 @@
+error[E0277]: `String` has no declared redacted formatting
+ --> tests/ui/sensitive_display_undeclared_field_rejected.rs:6:24
+  |
+6 |     Invalid { context: String },
+  |                        ^^^^^^ this formatted field needs a redaction declaration
+  |
+  = help: the trait `redactable::__private::DeclaredFormatting` is not implemented for `String`
+  = note: select `#[sensitive(Policy)]`, use a declared type, or explicitly mark the field `#[not_sensitive]`
+  = note: for a local container, derive `SensitiveDisplay` or `SensitiveDual` and declare its formatted fields; reviewed manual formatters may implement `redactable::__private::DeclaredFormatting`
+  = help: the following other types implement trait `redactable::__private::DeclaredFormatting`:
+            &T
+            (T0, T1)
+            (T0, T1, T2)
+            (T0, T1, T2, T3)
+            (T0,)
+            Arc<T>
+            BTreeMap<K, V>
+            BTreeSet<T>
+          and $N others
+note: required by a bound in `redactable::__private::require_declared_formatting`
+ --> src/__private/declaration.rs
+  |
+  | pub fn require_declared_formatting<T: DeclaredFormatting + ?Sized>(_: &T) {}
+  |                                       ^^^^^^^^^^^^^^^^^^ required by this bound in `require_declared_formatting`
