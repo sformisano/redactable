@@ -5,12 +5,7 @@
 
 #![allow(clippy::redundant_locals, clippy::box_collection)]
 
-use std::marker::PhantomData;
-
-use redactable::{
-    Email, PhoneNumber, Pii, Redactable, RedactionPolicy, Secret, Sensitive, TextPolicyKind,
-    TextRedactionPolicy,
-};
+use redactable::{RedactionPolicy, TextPolicyKind, TextRedactionPolicy};
 
 /// Custom policy that fully redacts (for testing custom policies)
 #[derive(Clone, Copy)]
@@ -43,13 +38,15 @@ impl RedactionPolicy for PartiallyVisible {
 /// Expected behavior: `#[sensitive(Policy)]` should work on Option<T>,
 /// Vec<T>, Box<T> and apply the policy to the inner value(s).
 mod wrapper_types_with_policy {
-    use super::*;
+    use super::{FullRedact, PartiallyVisible};
+    use redactable::{Email, PhoneNumber, Redactable, Secret, Sensitive};
 
     #[test]
     fn applies_policy_to_option_string() {
         #[derive(Clone, Sensitive)]
         #[cfg_attr(feature = "slog", derive(serde::Serialize))]
         struct UserProfile {
+            #[not_sensitive]
             username: String,
             #[sensitive(Email)]
             email: Option<String>,
@@ -85,6 +82,7 @@ mod wrapper_types_with_policy {
         #[derive(Clone, Sensitive)]
         #[cfg_attr(feature = "slog", derive(serde::Serialize))]
         struct AuditLog {
+            #[not_sensitive]
             event_type: String,
             #[sensitive(FullRedact)]
             affected_users: Vec<String>,
@@ -125,6 +123,7 @@ mod wrapper_types_with_policy {
         #[derive(Clone, Sensitive)]
         #[cfg_attr(feature = "slog", derive(serde::Serialize))]
         struct EncryptedPayload {
+            #[not_sensitive]
             algorithm: String,
             #[sensitive(Secret)]
             key: Box<String>,
@@ -149,7 +148,9 @@ mod wrapper_types_with_policy {
         #[derive(Clone, Sensitive)]
         #[cfg_attr(feature = "slog", derive(serde::Serialize))]
         struct DatabaseConfig {
+            #[not_sensitive]
             host: String,
+            #[not_sensitive]
             port: u16,
             #[sensitive(Secret)]
             password: Option<String>,
@@ -193,7 +194,9 @@ mod wrapper_types_with_policy {
 /// Expected behavior: PhantomData<T> should be automatically handled as a
 /// pass-through (no redaction needed).
 mod phantom_data {
-    use super::*;
+    use super::PartiallyVisible;
+    use redactable::{Redactable, Secret, Sensitive};
+    use std::marker::PhantomData;
 
     #[test]
     fn works_in_generic_struct() {
@@ -230,6 +233,7 @@ mod phantom_data {
         #[derive(Clone, Sensitive)]
         #[cfg_attr(feature = "slog", derive(serde::Serialize))]
         struct BorrowedRef<'a, T> {
+            #[not_sensitive]
             name: String,
             #[sensitive(Secret)]
             secret: String,
@@ -275,15 +279,20 @@ mod phantom_data {
 ///
 /// These tests combine multiple features to simulate realistic usage patterns.
 mod real_world_scenarios {
-    use super::*;
+    use super::PartiallyVisible;
+    use redactable::{Email, PhoneNumber, Pii, Redactable, Secret, Sensitive};
+    use std::marker::PhantomData;
 
     #[test]
     fn user_account_model() {
         #[derive(Clone, Sensitive)]
         #[cfg_attr(feature = "slog", derive(serde::Serialize))]
         struct UserAccount<Id: Clone> {
+            #[not_sensitive]
             id: u64,
+            #[not_sensitive]
             username: String,
+            #[not_sensitive]
             is_active: bool,
             #[sensitive(Pii)]
             full_name: String,
@@ -327,12 +336,16 @@ mod real_world_scenarios {
             vec!["[REDACTED]", "[REDACTED]", "[REDACTED]"]
         );
 
-        // In test builds, Sensitive generates unredacted Debug (shows actual values)
+        // Explicit public fields remain visible; policy fields use full masks.
         let debug_output = format!("{:?}", account);
         assert!(
             debug_output.contains("johndoe"),
-            "test-mode Debug should show actual values, got: {debug_output}"
+            "declared public username should remain visible, got: {debug_output}"
         );
+        assert!(debug_output.contains("[REDACTED]"));
+        assert!(!debug_output.contains("John Doe"));
+        assert!(!debug_output.contains("john.doe@example.com"));
+        assert!(!debug_output.contains("$argon2id$"));
     }
 
     #[test]
@@ -347,9 +360,13 @@ mod real_world_scenarios {
         #[derive(Clone, Sensitive)]
         #[cfg_attr(feature = "slog", derive(serde::Serialize))]
         struct PaymentResponse {
+            #[not_sensitive]
             transaction_id: String,
+            #[not_sensitive]
             status: String,
+            #[not_sensitive]
             amount_cents: i64,
+            #[not_sensitive]
             currency: String,
             #[sensitive(PartiallyVisible)]
             card_number: String,

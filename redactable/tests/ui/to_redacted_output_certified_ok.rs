@@ -1,7 +1,9 @@
+use std::hash::Hash;
+
 use redactable::{
     NotSensitiveDebug, NotSensitiveDebugExt, NotSensitiveDisplay, NotSensitiveDisplayExt,
-    Redactable, RedactedOutput, RedactedOutputExt, Secret, Sensitive, SensitiveDisplay,
-    SensitiveValue, ToRedactedOutput,
+    Redactable, RedactedOutputExt, Secret, Sensitive, SensitiveDisplay, SensitiveValue,
+    ToRedactedOutput, UncheckedRedactedSummary,
 };
 use serde::Serialize;
 
@@ -9,12 +11,13 @@ fn assert_redacted_output<T: ToRedactedOutput>(value: &T) {
     let _ = value.to_redacted_output();
 }
 
-fn assert_common_traits<T: Clone + Copy + Default + Eq + Ord + std::hash::Hash>() {}
+fn assert_common_traits<T: Clone + Copy + Default + Eq + Ord + Hash>() {}
 
 #[derive(Clone, Sensitive, Serialize)]
 struct Account {
     #[sensitive(Secret)]
     token: String,
+    #[not_sensitive]
     name: String,
 }
 
@@ -22,6 +25,7 @@ struct Account {
 enum LoginError {
     #[error("login failed for {user} {password}")]
     Invalid {
+        #[not_sensitive]
         user: String,
         #[sensitive(Secret)]
         password: String,
@@ -39,7 +43,8 @@ fn main() {
     };
     let token = SensitiveValue::<String, Secret>::from(String::from("secret"));
     let public = String::from("ok");
-    let output = RedactedOutput::Text(String::from("already redacted"));
+    let output =
+        UncheckedRedactedSummary::new(String::from("already redacted")).to_redacted_output();
 
     assert_redacted_output(&account.redacted_output());
     assert_redacted_output(&err);

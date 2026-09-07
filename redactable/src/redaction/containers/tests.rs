@@ -7,18 +7,21 @@ use std::{
     sync::{Arc, Mutex, RwLock},
 };
 
-use crate::{Secret, Sensitive, redaction::traits::Redactable};
+use crate::{
+    Secret, Sensitive,
+    redaction::{
+        redact::PolicyMapper,
+        traits::{Redactable, RedactableWithMapper},
+    },
+};
 
 /// Runs the traversal machinery on a value regardless of certification.
 ///
 /// Leaf passthroughs deliberately do not implement `Redactable` (no declared
 /// redaction behavior), but their machinery-level passthrough is still a
 /// contract worth asserting.
-fn machine_redact<T: crate::redaction::traits::RedactableWithMapper>(value: T) -> T {
-    crate::redaction::traits::RedactableWithMapper::redact_with(
-        value,
-        &crate::redaction::redact::PolicyMapper,
-    )
+fn machine_redact<T: RedactableWithMapper>(value: T) -> T {
+    value.redact_with(&PolicyMapper)
 }
 
 #[derive(Clone, Sensitive)]

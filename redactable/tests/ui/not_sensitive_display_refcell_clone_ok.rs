@@ -1,4 +1,7 @@
-use std::{cell::RefCell, fmt};
+use std::{
+    cell::RefCell,
+    fmt::{Display, Formatter, Result as FmtResult},
+};
 
 use redactable::{NotSensitiveDisplay, RedactedJsonExt, ToRedactedOutput};
 
@@ -7,8 +10,8 @@ type CellAlias<T> = RefCell<T>;
 #[derive(Clone, NotSensitiveDisplay, serde::Serialize)]
 struct Direct(CellAlias<String>);
 
-impl fmt::Display for Direct {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl Display for Direct {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
         formatter.write_str("direct")
     }
 }
@@ -16,8 +19,8 @@ impl fmt::Display for Direct {
 #[derive(Clone, NotSensitiveDisplay, serde::Serialize)]
 struct Generic<T>(T);
 
-impl<T> fmt::Display for Generic<T> {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl<T> Display for Generic<T> {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
         formatter.write_str("generic")
     }
 }

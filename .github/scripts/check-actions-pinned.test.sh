@@ -10,8 +10,8 @@ set -uo pipefail
 checker="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/check-actions-pinned.sh"
 failures=0
 
-# Runs the checker against a throwaway repo containing $2 as a workflow (or, when
-# $3 is given, at that path) and asserts its exit status is $1.
+# Runs the checker against a throwaway repo containing $3 as a workflow (or, when
+# $4 is given, at that path) and asserts its exit status is $1.
 expect() {
     local want="$1" name="$2" content="$3" path="${4:-.github/workflows/w.yml}"
     local dir

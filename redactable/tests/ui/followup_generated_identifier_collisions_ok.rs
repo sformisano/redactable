@@ -1,7 +1,10 @@
 #![allow(non_upper_case_globals)]
 #![allow(non_snake_case)]
 
-use std::{fmt, marker::PhantomData};
+use std::{
+    fmt::{Display, Formatter, Result as FmtResult},
+    marker::PhantomData,
+};
 
 use redactable::{
     NotSensitive, NotSensitiveDisplay, Redactable, RedactableWithFormatter, Sensitive,
@@ -23,14 +26,12 @@ struct SensitiveType<__RedactableMapper> {
 struct NotSensitiveType<__RedactableMapper>(PhantomData<__RedactableMapper>);
 
 #[derive(NotSensitiveDisplay)]
-struct NotSensitiveDisplayShape<
-    '__redactable_f,
-    __RedactableMapper,
-    const __redactable_f: usize,
->(&'__redactable_f __RedactableMapper);
+struct NotSensitiveDisplayShape<'__redactable_f, __RedactableMapper, const __redactable_f: usize>(
+    &'__redactable_f __RedactableMapper,
+);
 
-impl<T: fmt::Display, const N: usize> fmt::Display for NotSensitiveDisplayShape<'_, T, N> {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl<T: Display, const N: usize> Display for NotSensitiveDisplayShape<'_, T, N> {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
         write!(formatter, "{}-{N}", self.0)
     }
 }
@@ -109,7 +110,9 @@ impl DualNamed {
 struct DualGeneratedFamilies {
     #[sensitive(redactable::Secret)]
     __RedactableDualType: String,
+    #[not_sensitive]
     __redactable_require_sensitive_display: String,
+    #[not_sensitive]
     __redactable_require_sensitive: String,
 }
 
@@ -119,7 +122,7 @@ struct TupleShape(#[sensitive(redactable::Secret)] String);
 #[derive(Clone, Serialize, Sensitive)]
 struct TupleBindingFamilies<const field_0: usize, const field_1: usize>(
     #[sensitive(redactable::Secret)] String,
-    String,
+    #[not_sensitive] String,
 );
 
 #[derive(Clone, Serialize, Sensitive)]
@@ -207,7 +210,9 @@ fn main() {
 
     #[cfg(feature = "slog")]
     {
-        fn assert_value<T: slog::Value>() {}
+        use slog::Value;
+
+        fn assert_value<T: Value>() {}
         assert_value::<SlogConst<9>>();
         assert_value::<RawSlogConst<9>>();
         assert_value::<SlogGeneratedFamilies<1, 2, 3>>();

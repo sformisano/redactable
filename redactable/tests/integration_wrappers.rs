@@ -5,19 +5,10 @@
 //! - Redaction behavior within containers
 //! - Orphan rule workarounds with `SensitiveWithPolicy`
 
-use redactable::{
-    NotSensitiveValue, Redactable, RedactedOutput, RedactionPolicy, Secret, Sensitive,
-    SensitiveValue, SensitiveWithPolicy, TextPolicyKind, TextRedactionPolicy, ToRedactedOutput,
-    Token,
-};
-#[cfg(feature = "slog")]
-use serde::Serialize;
-
 mod sensitive_value {
-    use super::*;
 
     mod construction {
-        use super::*;
+        use redactable::{Secret, SensitiveValue};
 
         #[test]
         fn creates_from_value() {
@@ -27,7 +18,7 @@ mod sensitive_value {
     }
 
     mod access {
-        use super::*;
+        use redactable::{Secret, SensitiveValue, Token};
 
         #[test]
         fn exposes_inner_value() {
@@ -45,7 +36,7 @@ mod sensitive_value {
     }
 
     mod formatting {
-        use super::*;
+        use redactable::{RedactedOutputView, Secret, SensitiveValue, ToRedactedOutput, Token};
 
         #[test]
         fn shows_redacted_in_debug() {
@@ -65,8 +56,8 @@ mod sensitive_value {
         fn converts_to_redacted_output() {
             let sensitive = SensitiveValue::<String, Secret>::from("secret".to_string());
             assert_eq!(
-                sensitive.to_redacted_output(),
-                RedactedOutput::Text("[REDACTED]".to_string())
+                sensitive.to_redacted_output().view(),
+                RedactedOutputView::Text("[REDACTED]")
             );
         }
 
@@ -78,14 +69,19 @@ mod sensitive_value {
 
             assert_eq!(json, serde_json::json!("secret"));
             assert_eq!(
-                sensitive.to_redacted_output(),
-                RedactedOutput::Text("[REDACTED]".to_string())
+                sensitive.to_redacted_output().view(),
+                RedactedOutputView::Text("[REDACTED]")
             );
         }
     }
 
     mod in_container {
-        use super::*;
+        use redactable::{
+            Redactable, Secret, Sensitive, SensitiveValue, SensitiveWithPolicy,
+            TextRedactionPolicy, Token,
+        };
+        #[cfg(feature = "slog")]
+        use serde::Serialize;
 
         #[test]
         fn redacts_when_container_is_redacted() {
@@ -173,10 +169,9 @@ mod sensitive_value {
 }
 
 mod not_sensitive_value {
-    use super::*;
 
     mod construction {
-        use super::*;
+        use redactable::NotSensitiveValue;
 
         #[test]
         fn creates_from_value() {
@@ -193,7 +188,7 @@ mod not_sensitive_value {
     }
 
     mod access {
-        use super::*;
+        use redactable::NotSensitiveValue;
 
         #[test]
         fn derefs_to_inner() {
@@ -220,7 +215,7 @@ mod not_sensitive_value {
     }
 
     mod formatting {
-        use super::*;
+        use redactable::NotSensitiveValue;
 
         #[test]
         fn shows_inner_in_debug() {
@@ -240,7 +235,9 @@ mod not_sensitive_value {
     }
 
     mod in_container {
-        use super::*;
+        use redactable::{NotSensitiveValue, Redactable, Secret, Sensitive};
+        #[cfg(feature = "slog")]
+        use serde::Serialize;
 
         #[test]
         fn passes_through_unchanged() {
@@ -302,7 +299,12 @@ mod not_sensitive_value {
 }
 
 mod orphan_rule_workaround {
-    use super::*;
+    use redactable::{
+        Redactable, RedactedOutputView, RedactionPolicy, Secret, Sensitive, SensitiveValue,
+        SensitiveWithPolicy, TextPolicyKind, TextRedactionPolicy, ToRedactedOutput, Token,
+    };
+    #[cfg(feature = "slog")]
+    use serde::Serialize;
 
     // Simulate a foreign type from another crate
     #[derive(Clone, PartialEq, Debug)]
@@ -366,8 +368,8 @@ mod orphan_rule_workaround {
         let wrapped =
             SensitiveValue::<ForeignId, ForeignIdPolicy>::from(ForeignId("id_xyz123".to_string()));
         assert_eq!(
-            wrapped.to_redacted_output(),
-            RedactedOutput::Text("*****z123".to_string())
+            wrapped.to_redacted_output().view(),
+            RedactedOutputView::Text("*****z123")
         );
     }
 
@@ -403,7 +405,9 @@ mod orphan_rule_workaround {
 }
 
 mod combined_wrappers {
-    use super::*;
+    use redactable::{NotSensitiveValue, Redactable, Secret, Sensitive, SensitiveValue, Token};
+    #[cfg(feature = "slog")]
+    use serde::Serialize;
 
     #[test]
     fn mixes_different_wrapper_types_in_same_container() {
@@ -478,7 +482,10 @@ mod combined_wrappers {
 
 #[cfg(feature = "json")]
 mod serde_json_round_trip {
-    use super::*;
+    use redactable::{
+        NotSensitiveValue, RedactionPolicy, SensitiveValue, SensitiveWithPolicy, TextPolicyKind,
+        TextRedactionPolicy,
+    };
     use serde::{Deserialize, Serialize};
 
     #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]

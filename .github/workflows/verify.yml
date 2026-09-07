@@ -70,14 +70,15 @@ jobs:
       - name: Deny policy check
         run: cargo deny check
 
-      # The all-features build enables `testing`, which intentionally changes
-      # generated Debug output. Keep the ordinary production branch explicit.
+      # Keep default and all-feature builds explicit. Generated Debug must
+      # retain the same redaction when the testing helpers are enabled.
       - name: Tests (default production features)
         run: cargo test --locked --workspace --all-targets
 
       - name: Panic-abort fixture from a clean Cargo home
         run: |
           clean_cargo_home="$(mktemp -d)"
+          trap 'rm -rf -- "$clean_cargo_home"' EXIT
           CARGO_HOME="$clean_cargo_home" cargo test --locked -p redactable --test followup_refcell_panic_abort --features slog,tracing
 
       - name: Tests (all features)
@@ -100,6 +101,9 @@ jobs:
 
       - name: External consumer regression contracts
         run: cargo run --locked --manifest-path cargo-fixtures/external-review-contracts/Cargo.toml
+
+      - name: Axis-shaped output consumer
+        run: cargo test --locked --manifest-path cargo-fixtures/axis-safety-consumer/Cargo.toml
 
       - name: Slog feature-unification fixture
         run: cargo test --manifest-path cargo-fixtures/slog-feature-unification/Cargo.toml --workspace

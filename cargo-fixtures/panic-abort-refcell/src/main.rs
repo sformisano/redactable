@@ -1,18 +1,12 @@
-use std::{
-    cell::RefCell,
-    collections::BTreeMap,
-    marker::PhantomData,
-    rc::Rc,
-    sync::Arc,
-};
+use std::{cell::RefCell, collections::BTreeMap, marker::PhantomData, rc::Rc, sync::Arc};
 
+use redactable::tracing::{
+    IntoTracingRedactedDebugExt, TracingRedactedDebugExt, TracingRedactedExt,
+};
 use redactable::{
     IntoRedactedJsonExt, IntoRedactedOutputExt, IpAddress, RedactableWithFormatter,
     RedactedJsonExt, RedactedOutputExt, RedactionPolicy, Secret, Sensitive, SensitiveDisplay,
     ToRedactedOutput,
-};
-use redactable::tracing::{
-    IntoTracingRedactedDebugExt, TracingRedactedDebugExt, TracingRedactedExt,
 };
 use serde::Serialize;
 
@@ -80,7 +74,10 @@ where
     assert!(!shared_output.contains("panic-abort-canary"));
     drop(shared);
     let mutable = arc.value.borrow_mut();
-    assert_eq!(arc.redacted_display().to_string(), "<borrowed> | <borrowed>");
+    assert_eq!(
+        arc.redacted_display().to_string(),
+        "<borrowed> | <borrowed>"
+    );
     drop(mutable);
 
     let rc = RcAliasDisplay::<P, String> {
@@ -145,7 +142,14 @@ fn assert_borrowed_map_key() {
             "panic-abort-canary".to_owned(),
         )])),
     };
-    let borrow = nested.values.as_ref().unwrap().keys().next().unwrap().borrow_mut();
+    let borrow = nested
+        .values
+        .as_ref()
+        .unwrap()
+        .keys()
+        .next()
+        .unwrap()
+        .borrow_mut();
     let output = nested.redacted_display().to_string();
     assert!(output.contains("<borrowed>"));
     assert!(!output.contains("panic-abort-canary"));

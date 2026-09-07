@@ -1,4 +1,7 @@
-use super::*;
+use crate::slog_capture::{CapturedValue, CapturingSerializer, serialize_to_capture};
+use redactable::slog::SlogRedactedExt;
+use redactable::{Pii, Secret, Sensitive};
+use serde::Serialize;
 
 #[test]
 fn redacts_nested_struct() {
@@ -6,11 +9,13 @@ fn redacts_nested_struct() {
     struct Address {
         #[sensitive(Pii)]
         street: String,
+        #[not_sensitive]
         city: String,
     }
 
     #[derive(Clone, Sensitive, Serialize)]
     struct Person {
+        #[not_sensitive]
         name: String,
         #[sensitive(Secret)]
         ssn: String,

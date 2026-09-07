@@ -1,14 +1,18 @@
-use super::*;
+use crate::log_redacted;
+use redactable::{
+    Redactable, RedactedOutputView, RedactionPolicy, Secret, Sensitive, SensitiveValue,
+    SensitiveWithPolicy, TextPolicyKind, TextRedactionPolicy, Token,
+};
 
 #[test]
 fn passes_through_unchanged_when_implementing_redactable_container() {
     #[derive(Clone, PartialEq, Sensitive)]
     #[cfg_attr(feature = "slog", derive(serde::Serialize))]
-    struct ExternalTimestamp(u64);
+    struct ExternalTimestamp(#[not_sensitive] u64);
 
     #[derive(Clone, PartialEq, Sensitive)]
     #[cfg_attr(feature = "slog", derive(serde::Serialize))]
-    struct ExternalDecimal(f64);
+    struct ExternalDecimal(#[not_sensitive] f64);
 
     #[derive(Clone, Sensitive)]
     #[cfg_attr(feature = "slog", derive(serde::Serialize))]
@@ -17,6 +21,7 @@ fn passes_through_unchanged_when_implementing_redactable_container() {
         account_number: String,
         timestamp: ExternalTimestamp,
         amount: ExternalDecimal,
+        #[not_sensitive]
         description: String,
     }
 
@@ -112,8 +117,8 @@ fn redacts_via_policy_trait() {
     let redacted = record.clone().redact();
     assert_eq!(redacted.id.expose(), &ExternalType("******al".to_string()));
     assert_eq!(
-        log_redacted(&record.id),
-        RedactedOutput::Text("******al".to_string())
+        log_redacted(&record.id).view(),
+        RedactedOutputView::Text("******al")
     );
 }
 
@@ -122,6 +127,7 @@ fn chooses_trait_based_on_wrapper_usage() {
     #[derive(Clone, PartialEq, Sensitive)]
     #[cfg_attr(feature = "slog", derive(serde::Serialize))]
     struct UserId {
+        #[not_sensitive]
         prefix: String,
         #[sensitive(Secret)]
         value: String,

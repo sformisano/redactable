@@ -1,0 +1,30 @@
+error[E0599]: no associated function or constant named `Text` found for struct `RedactedOutput` in the current scope
+ --> tests/ui/safety_output_text_construction.rs:4:29
+  |
+4 |     let _ = RedactedOutput::Text(String::from("raw"));
+  |                             ^^^^ associated function or constant not found in `RedactedOutput`
+
+error[E0624]: associated function `text` is private
+ --> tests/ui/safety_output_text_construction.rs:5:29
+  |
+5 |     let _ = RedactedOutput::text(String::from("raw"));
+  |                             ^^^^ private associated function
+  |
+ ::: src/redaction/output.rs
+  |
+  |     pub(crate) fn text(text: String) -> Self {
+  |     ---------------------------------------- private associated function defined here
+
+error[E0277]: the trait bound `RedactedOutput: From<String>` is not satisfied
+ --> tests/ui/safety_output_text_construction.rs:6:49
+  |
+6 |     let _: RedactedOutput = String::from("raw").into();
+  |                                                 ^^^^ the trait `From<String>` is not implemented for `RedactedOutput`
+  |
+  = note: required for `String` to implement `Into<RedactedOutput>`
+
+error[E0616]: field `representation` of struct `RedactedOutput` is private
+ --> tests/ui/safety_output_text_construction.rs:9:34
+  |
+9 |         representation: declared.representation,
+  |                                  ^^^^^^^^^^^^^^ private field

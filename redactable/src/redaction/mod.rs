@@ -18,6 +18,8 @@ mod escape_hatches;
 mod ip_policy;
 #[cfg(feature = "json")]
 mod json;
+#[cfg(feature = "json")]
+mod list;
 mod output;
 pub mod redact;
 mod traits;
@@ -29,17 +31,20 @@ pub use display::{PolicyRedactedFormatterRef, RedactableWithFormatter, RedactedF
 // Re-export escape hatches
 pub use escape_hatches::{
     NotSensitive, NotSensitiveDebug, NotSensitiveDebugExt, NotSensitiveDisplay,
-    NotSensitiveDisplayExt, NotSensitiveExt,
+    NotSensitiveDisplayExt, NotSensitiveExt, UncheckedRedactedSummary,
 };
 #[cfg(feature = "json")]
 pub use escape_hatches::{NotSensitiveJson, NotSensitiveJsonExt};
+#[cfg(feature = "json")]
+pub use list::RedactedList;
 #[cfg(feature = "json")]
 pub use output::serialize_redacted_json;
 #[cfg(feature = "json")]
 pub use output::{IntoRedactedJsonExt, RedactedJson, RedactedJsonExt, RedactedJsonRef};
 // Re-export output types
 pub use output::{
-    IntoRedactedOutputExt, RedactedOutput, RedactedOutputExt, RedactedOutputRef, ToRedactedOutput,
+    IntoRedactedOutputExt, RedactedOutput, RedactedOutputExt, RedactedOutputRef,
+    RedactedOutputView, ToRedactedOutput,
 };
 // Re-export redaction machinery
 pub use redact::{

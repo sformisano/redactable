@@ -7,7 +7,10 @@
 use std::collections::BTreeSet;
 
 use quote::ToTokens;
-use syn::{Generics, Ident, Type, TypeParamBound, WherePredicate, parse_quote, visit::Visit};
+use syn::{
+    Generics, Ident, Path, Type, TypeParamBound, TypePath, WherePredicate, parse_quote,
+    punctuated::Punctuated, token::Plus, visit::Visit,
+};
 
 use crate::{crate_path, crate_root};
 
@@ -73,9 +76,7 @@ pub(crate) fn references_explicit_policy_applicable_ref(generics: &Generics, ty:
     })
 }
 
-fn bounds_include_policy_applicable_ref(
-    bounds: &syn::punctuated::Punctuated<TypeParamBound, syn::token::Plus>,
-) -> bool {
+fn bounds_include_policy_applicable_ref(bounds: &Punctuated<TypeParamBound, Plus>) -> bool {
     bounds.iter().any(|bound| {
         matches!(bound, TypeParamBound::Trait(bound) if bound.path.segments.last().is_some_and(|segment| segment.ident == "PolicyApplicableRef"))
     })
@@ -98,7 +99,7 @@ struct ReferencedOwnerTypeParameters<'a> {
 }
 
 impl<'ast> Visit<'ast> for ReferencedOwnerTypeParameters<'_> {
-    fn visit_type_path(&mut self, node: &'ast syn::TypePath) {
+    fn visit_type_path(&mut self, node: &'ast TypePath) {
         if node.qself.is_none() && node.path.leading_colon.is_none() {
             for segment in &node.path.segments {
                 if is_owner_type_parameter(self.generics, &segment.ident) {
@@ -116,7 +117,7 @@ fn is_owner_type_parameter(generics: &Generics, ident: &Ident) -> bool {
         .any(|parameter| parameter.ident == *ident)
 }
 
-pub(crate) fn policy_is_owner_type_parameter(generics: &Generics, policy: &syn::Path) -> bool {
+pub(crate) fn policy_is_owner_type_parameter(generics: &Generics, policy: &Path) -> bool {
     policy.leading_colon.is_none()
         && policy.segments.len() == 1
         && policy.segments[0].arguments.is_empty()
@@ -129,7 +130,7 @@ struct OwnerTypeParameterVisitor<'a> {
 }
 
 impl<'ast> Visit<'ast> for OwnerTypeParameterVisitor<'_> {
-    fn visit_type_path(&mut self, node: &'ast syn::TypePath) {
+    fn visit_type_path(&mut self, node: &'ast TypePath) {
         if node.qself.is_none()
             && node.path.leading_colon.is_none()
             && node
@@ -183,7 +184,7 @@ struct RecursiveSelfTypeVisitor<'a> {
 }
 
 impl<'ast> Visit<'ast> for RecursiveSelfTypeVisitor<'_> {
-    fn visit_type_path(&mut self, node: &'ast syn::TypePath) {
+    fn visit_type_path(&mut self, node: &'ast TypePath) {
         if node.qself.is_none() && node.path.leading_colon.is_none() {
             let segments = &node.path.segments;
             let direct_owner = segments.len() == 1 && segments[0].ident == *self.owner;
@@ -212,14 +213,14 @@ fn push_unique(predicates: &mut Vec<WherePredicate>, predicate: WherePredicate) 
 }
 
 pub(crate) fn push_container_predicate(predicates: &mut Vec<WherePredicate>, ty: &Type) {
-    let trait_path = crate_path("RedactableWithMapper");
+    let trait_path = crate_path("Redactable");
     push_unique(predicates, parse_quote!(#ty: #trait_path));
 }
 
 pub(crate) fn push_policy_predicate(
     predicates: &mut Vec<WherePredicate>,
     ty: &Type,
-    policy: &syn::Path,
+    policy: &Path,
 ) {
     let crate_root = crate_root();
     push_unique(
@@ -231,7 +232,7 @@ pub(crate) fn push_policy_predicate(
 pub(crate) fn push_generated_policy_display_formatting_predicate(
     predicates: &mut Vec<WherePredicate>,
     ty: &Type,
-    policy: &syn::Path,
+    policy: &Path,
 ) {
     let crate_root = crate_root();
     push_unique(
@@ -247,7 +248,7 @@ pub(crate) fn push_generated_policy_display_formatting_predicate(
 pub(crate) fn push_policy_display_formatting_predicate(
     predicates: &mut Vec<WherePredicate>,
     ty: &Type,
-    policy: &syn::Path,
+    policy: &Path,
 ) {
     let crate_root = crate_root();
     push_unique(
@@ -259,7 +260,7 @@ pub(crate) fn push_policy_display_formatting_predicate(
 pub(crate) fn push_policy_debug_formatting_predicate(
     predicates: &mut Vec<WherePredicate>,
     ty: &Type,
-    policy: &syn::Path,
+    policy: &Path,
 ) {
     let crate_root = crate_root();
     push_unique(
@@ -271,7 +272,7 @@ pub(crate) fn push_policy_debug_formatting_predicate(
 pub(crate) fn push_generated_policy_debug_formatting_predicate(
     predicates: &mut Vec<WherePredicate>,
     ty: &Type,
-    policy: &syn::Path,
+    policy: &Path,
 ) {
     let crate_root = crate_root();
     push_unique(
@@ -325,7 +326,7 @@ pub(crate) fn push_direct_marker_debug_formatting_predicates(
 pub(crate) fn push_legacy_policy_display_formatting_predicates(
     predicates: &mut Vec<WherePredicate>,
     ty: &Type,
-    policy: &syn::Path,
+    policy: &Path,
 ) {
     let crate_root = crate_root();
     push_unique(
@@ -341,7 +342,7 @@ pub(crate) fn push_legacy_policy_display_formatting_predicates(
 pub(crate) fn push_legacy_policy_debug_formatting_predicates(
     predicates: &mut Vec<WherePredicate>,
     ty: &Type,
-    policy: &syn::Path,
+    policy: &Path,
 ) {
     let crate_root = crate_root();
     push_unique(
@@ -363,6 +364,6 @@ pub(crate) fn push_display_predicate(predicates: &mut Vec<WherePredicate>, ty: &
 }
 
 pub(crate) fn push_redacted_display_predicate(predicates: &mut Vec<WherePredicate>, ty: &Type) {
-    let trait_path = crate_path("RedactableWithFormatter");
+    let trait_path = crate_path("__private::DeclaredFormatting");
     push_unique(predicates, parse_quote!(#ty: #trait_path));
 }

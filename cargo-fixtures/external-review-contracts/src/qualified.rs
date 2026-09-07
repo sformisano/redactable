@@ -1,4 +1,4 @@
-use redactable::{RedactableMapper, RedactableWithMapper};
+use redactable::{Redactable, RedactableMapper, RedactableWithMapper};
 
 pub struct Node<T>(pub T);
 
@@ -7,3 +7,5 @@ impl<T: RedactableWithMapper> RedactableWithMapper for Node<T> {
         Self(self.0.redact_with(mapper))
     }
 }
+
+impl<T: Redactable> Redactable for Node<T> {}

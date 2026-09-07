@@ -1,10 +1,15 @@
 use std::boxed::Box as RenamedBox;
 use std::net::Ipv4Addr as RenamedPeer;
 use std::primitive::u32 as RenamedCount;
-use std::{fmt, marker::PhantomData, net::Ipv4Addr};
+use std::{
+    fmt::{Debug, Formatter, Result as FmtResult},
+    marker::PhantomData,
+    net::Ipv4Addr,
+};
 
 use redactable::__private::PolicyApplicableRefForFormatting as FormattingMarker;
-use redactable::{RedactableMapper, RedactionPolicy, SensitiveDisplay};
+use redactable::policy::RecursivePolicyKind;
+use redactable::{PolicyApplicableRef, RedactableMapper, RedactionPolicy, SensitiveDisplay};
 
 pub type Count = u32;
 pub type Peer = Ipv4Addr;
@@ -65,13 +70,13 @@ pub struct GenericPolicyRenamedBox<P: RedactionPolicy> {
 
 pub struct LocalLeaf<T>(pub T);
 
-impl redactable::PolicyApplicableRef for LocalLeaf<u8> {
+impl PolicyApplicableRef for LocalLeaf<u8> {
     type Output = String;
 
     fn apply_policy_ref<P, M>(&self, _mapper: &M) -> Self::Output
     where
         P: RedactionPolicy,
-        P::Kind: redactable::policy::RecursivePolicyKind,
+        P::Kind: RecursivePolicyKind,
         M: RedactableMapper,
     {
         P::policy().apply_to(&self.0.to_string())
@@ -80,8 +85,8 @@ impl redactable::PolicyApplicableRef for LocalLeaf<u8> {
 
 impl FormattingMarker for LocalLeaf<u8> {}
 
-impl fmt::Debug for LocalLeaf<u8> {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl Debug for LocalLeaf<u8> {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
         self.0.fmt(formatter)
     }
 }

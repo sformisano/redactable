@@ -1,4 +1,4 @@
-use super::*;
+use redactable::{Redactable, Secret, Sensitive};
 
 #[test]
 fn redacts_numeric_types_to_zero() {
@@ -11,6 +11,7 @@ fn redacts_numeric_types_to_zero() {
         secret_flag: bool,
         #[sensitive(Secret)]
         secret_char: char,
+        #[not_sensitive]
         public_number: i32,
     }
 

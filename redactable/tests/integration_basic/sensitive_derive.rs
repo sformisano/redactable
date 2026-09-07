@@ -1,7 +1,6 @@
-use super::*;
-
 mod structs {
-    use super::*;
+    use redactable::{Redactable, Secret, Sensitive, Token};
+    use std::collections::HashMap;
 
     #[test]
     fn redacts_classified_fields() {
@@ -47,6 +46,7 @@ mod structs {
         struct User {
             #[sensitive(Secret)]
             password: String,
+            #[not_sensitive]
             username: String,
         }
 
@@ -68,6 +68,7 @@ mod structs {
         struct Address {
             #[sensitive(Secret)]
             street: String,
+            #[not_sensitive]
             city: String,
         }
 
@@ -107,13 +108,13 @@ mod structs {
 }
 
 mod tuple_structs {
-    use super::*;
+    use redactable::{Redactable, Secret, Sensitive, Token};
 
     #[test]
     fn redacts_annotated_fields() {
         #[derive(Clone, Sensitive)]
         #[cfg_attr(feature = "slog", derive(serde::Serialize))]
-        struct TupleSensitive(#[sensitive(Secret)] String, String);
+        struct TupleSensitive(#[sensitive(Secret)] String, #[not_sensitive] String);
 
         let tuple = TupleSensitive("secret_value".into(), "public_value".into());
         let redacted = tuple.redact();
@@ -129,7 +130,7 @@ mod tuple_structs {
         struct AuthCredentials(
             #[sensitive(Secret)] String,
             #[sensitive(Token)] String,
-            String,
+            #[not_sensitive] String,
         );
 
         let creds = AuthCredentials("hunter2".into(), "sk_live_abc123def".into(), "alice".into());
@@ -142,7 +143,7 @@ mod tuple_structs {
 }
 
 mod enums {
-    use super::*;
+    use redactable::{Redactable, Secret, Sensitive, Token};
 
     #[test]
     fn redacts_struct_variant_fields() {
@@ -189,7 +190,7 @@ mod enums {
         #[cfg_attr(feature = "slog", derive(serde::Serialize))]
         enum Auth {
             ApiKey(#[sensitive(Token)] String),
-            Basic(#[sensitive(Secret)] String, String),
+            Basic(#[sensitive(Secret)] String, #[not_sensitive] String),
             None,
         }
 
@@ -220,7 +221,7 @@ mod enums {
 }
 
 mod nested_fields {
-    use super::*;
+    use redactable::{Redactable, Secret, Sensitive};
 
     #[test]
     fn walks_nested_structs_without_annotation() {
@@ -229,6 +230,7 @@ mod nested_fields {
         struct Credentials {
             #[sensitive(Secret)]
             password: String,
+            #[not_sensitive]
             username: String,
         }
 
@@ -271,6 +273,7 @@ mod nested_fields {
         struct Inner {
             #[sensitive(Secret)]
             secret: String,
+            #[not_sensitive]
             public: i32,
         }
 
@@ -278,6 +281,7 @@ mod nested_fields {
         #[cfg_attr(feature = "slog", derive(serde::Serialize))]
         struct Outer {
             inner: Inner,
+            #[not_sensitive]
             label: String,
         }
 

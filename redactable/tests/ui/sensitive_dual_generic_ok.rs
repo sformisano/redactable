@@ -18,7 +18,5 @@ fn main() {
         marker: PhantomData,
     };
     let rendered = format!("{value:?}");
-    if !redactable::__TESTING {
-        assert!(!rendered.contains(CANARY));
-    }
+    assert_eq!(rendered, "[REDACTED]");
 }

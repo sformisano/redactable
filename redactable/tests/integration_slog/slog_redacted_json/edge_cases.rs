@@ -1,4 +1,7 @@
-use super::*;
+use crate::slog_capture::{CapturedValue, CapturingSerializer, serialize_to_capture};
+use redactable::slog::SlogRedactedExt;
+use redactable::{Pii, Secret, Sensitive};
+use serde::Serialize;
 
 #[test]
 fn handles_empty_string() {
@@ -49,7 +52,9 @@ fn handles_unicode() {
 fn handles_no_sensitive_fields() {
     #[derive(Clone, Sensitive, Serialize)]
     struct PublicData {
+        #[not_sensitive]
         name: String,
+        #[not_sensitive]
         count: i32,
     }
 

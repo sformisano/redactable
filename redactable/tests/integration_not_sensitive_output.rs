@@ -2,26 +2,27 @@
 
 use std::{
     collections::hash_map::DefaultHasher,
-    fmt,
+    fmt::{Debug, Display, Formatter, Result as FmtResult},
     hash::{Hash, Hasher},
+    num::NonZeroU8,
 };
 
 use redactable::{
     NotSensitiveDebug, NotSensitiveDebugExt, NotSensitiveDisplay, NotSensitiveDisplayExt,
-    RedactedOutput, ToRedactedOutput,
+    RedactedOutput, RedactedOutputView, ToRedactedOutput,
 };
 
 #[derive(Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 struct Distinct(u8);
 
-impl fmt::Debug for Distinct {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl Debug for Distinct {
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         write!(f, "debug:{}", self.0)
     }
 }
 
-impl fmt::Display for Distinct {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl Display for Distinct {
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         write!(f, "display:{}", self.0)
     }
 }
@@ -37,10 +38,10 @@ fn owned_wrappers_preserve_the_selected_format() {
     let debug = NotSensitiveDebug(Distinct(7));
     let display = NotSensitiveDisplay(Distinct(7));
 
-    assert_eq!(output(&debug), RedactedOutput::Text("debug:7".to_owned()));
+    assert_eq!(output(&debug).view(), RedactedOutputView::Text("debug:7"));
     assert_eq!(
-        output(&display),
-        RedactedOutput::Text("display:7".to_owned())
+        output(&display).view(),
+        RedactedOutputView::Text("display:7")
     );
 }
 
@@ -105,22 +106,22 @@ fn extension_traits_keep_constructing_borrowed_format_wrappers() {
 #[test]
 fn standard_library_values_work_in_owned_wrappers() {
     let debug = NotSensitiveDebug(Some(12_u8));
-    let display = NotSensitiveDisplay(std::num::NonZeroU8::new(12).expect("non-zero fixture"));
+    let display = NotSensitiveDisplay(NonZeroU8::new(12).expect("non-zero fixture"));
 
     assert_eq!(
-        debug.to_redacted_output(),
-        RedactedOutput::Text("Some(12)".to_owned())
+        debug.to_redacted_output().view(),
+        RedactedOutputView::Text("Some(12)")
     );
     assert_eq!(
-        display.to_redacted_output(),
-        RedactedOutput::Text("12".to_owned())
+        display.to_redacted_output().view(),
+        RedactedOutputView::Text("12")
     );
 }
 
 #[cfg(feature = "json")]
 mod serde_contract {
     use redactable::{
-        NotSensitiveDebug, NotSensitiveDisplay, RedactedOutput, Secret, SensitiveValue,
+        NotSensitiveDebug, NotSensitiveDisplay, RedactedOutputView, Secret, SensitiveValue,
         ToRedactedOutput,
     };
     use serde::{Deserialize, Serialize};
@@ -197,8 +198,8 @@ mod serde_contract {
             serde_json::json!("public")
         );
         assert_eq!(
-            public.to_redacted_output(),
-            RedactedOutput::Text("\"public\"".to_owned())
+            public.to_redacted_output().view(),
+            RedactedOutputView::Text("\"public\"")
         );
 
         let sensitive = SensitiveValue::<String, Secret>::from("secret".to_owned());
@@ -207,12 +208,13 @@ mod serde_contract {
             serde_json::json!("secret")
         );
         assert_eq!(
-            sensitive.to_redacted_output(),
-            RedactedOutput::Text("[REDACTED]".to_owned())
+            sensitive.to_redacted_output().view(),
+            RedactedOutputView::Text("[REDACTED]")
         );
 
         let nested = NotSensitiveDebug(sensitive);
-        let RedactedOutput::Text(nested_output) = nested.to_redacted_output() else {
+        let nested_output = nested.to_redacted_output();
+        let RedactedOutputView::Text(nested_output) = nested_output.view() else {
             panic!("debug output must remain textual");
         };
         assert!(nested_output.contains("[REDACTED]"));

@@ -1,4 +1,6 @@
-use super::*;
+use redactable::slog::SlogRedacted;
+use redactable::{Email, Sensitive};
+use serde::Serialize;
 
 #[test]
 fn sensitive_type_implements_slog_redacted() {

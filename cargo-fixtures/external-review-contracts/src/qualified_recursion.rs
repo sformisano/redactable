@@ -1,4 +1,6 @@
+// Qualified type paths intentionally exercise derive name resolution.
 use redactable::{Redactable, RedactableWithFormatter, Sensitive, SensitiveDisplay, SensitiveDual};
+use redactable::{Secret, SensitiveValue};
 
 #[derive(Sensitive)]
 pub struct SelfNode<T> {
@@ -21,7 +23,9 @@ pub struct SelfDualNode<T> {
 }
 
 pub mod tree {
-    use redactable::{Redactable, RedactableWithFormatter, Sensitive, SensitiveDisplay};
+    use redactable::{
+        Redactable, RedactableWithFormatter, Secret, Sensitive, SensitiveDisplay, SensitiveValue,
+    };
 
     #[derive(Sensitive)]
     pub enum Tree<T> {
@@ -39,13 +43,17 @@ pub mod tree {
 
     pub fn exercise() {
         let _ = Tree::Branch(
-            String::from("secret"),
-            Box::new(Tree::Leaf(String::from("secret"))),
+            SensitiveValue::<String, Secret>::from(String::from("secret")),
+            Box::new(Tree::Leaf(SensitiveValue::<String, Secret>::from(
+                String::from("secret"),
+            ))),
         )
         .redact();
         let _ = DisplayTree::Branch(
-            String::from("secret"),
-            Box::new(DisplayTree::Leaf(String::from("secret"))),
+            SensitiveValue::<String, Secret>::from(String::from("secret")),
+            Box::new(DisplayTree::Leaf(SensitiveValue::<String, Secret>::from(
+                String::from("secret"),
+            ))),
         )
         .redacted_display()
         .to_string();
@@ -54,18 +62,18 @@ pub mod tree {
 
 pub fn exercise() {
     let _ = SelfNode {
-        value: String::from("secret"),
+        value: SensitiveValue::<String, Secret>::from(String::from("secret")),
         next: None,
     }
     .redact();
     let _ = SelfDisplayNode {
-        value: String::from("secret"),
+        value: SensitiveValue::<String, Secret>::from(String::from("secret")),
         next: None,
     }
     .redacted_display()
     .to_string();
     let _ = SelfDualNode {
-        value: String::from("secret"),
+        value: SensitiveValue::<String, Secret>::from(String::from("secret")),
         next: None,
     }
     .redact();

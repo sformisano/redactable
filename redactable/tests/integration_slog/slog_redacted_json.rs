@@ -1,4 +1,7 @@
-use super::*;
+use crate::slog_capture::{CapturedValue, CapturingSerializer, serialize_to_capture};
+use redactable::slog::SlogRedactedExt;
+use redactable::{Redactable, RedactableMapper, RedactableWithMapper, Secret};
+use serde::Serialize;
 
 #[derive(Clone, Serialize)]
 struct NoDebugEvent {

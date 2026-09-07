@@ -1,0 +1,15 @@
+error: `#[redactable(output = json)]` requires redactable's `json` feature; enable that feature on the runtime dependency
+ --> tests/ui/safety_json_feature_required.rs:2:17
+  |
+2 | #[derive(Clone, Sensitive, serde::Serialize)]
+  |                 ^^^^^^^^^
+  |
+  = note: this error originates in the macro `::redactable::__private::generated_json_output` which comes from the expansion of the derive macro `Sensitive` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error: `#[redactable(output = json)]` requires redactable's `json` feature; enable that feature on the runtime dependency
+ --> tests/ui/safety_json_feature_required.rs:8:17
+  |
+8 | #[derive(Clone, SensitiveDual, serde::Serialize)]
+  |                 ^^^^^^^^^^^^^
+  |
+  = note: this error originates in the macro `::redactable::__private::generated_json_output` which comes from the expansion of the derive macro `SensitiveDual` (in Nightly builds, run with -Z macro-backtrace for more info)

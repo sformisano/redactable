@@ -2,12 +2,14 @@
 //!
 //! This module provides types for producing logging-safe output:
 //!
-//! - [`RedactedOutput`]: The output enum (Text or Json)
+//! - [`RedactedOutput`]: Owned output with read-only Text or Json inspection
 //! - [`ToRedactedOutput`]: Trait for types that can produce redacted output
 //! - [`RedactedOutputRef`]: Wrapper for explicit redacted output
 //! - [`IntoRedactedOutputExt`]: Consuming output adapter that redacts via `.redact()`
 //! - [`RedactedJson`]: Owned redacted JSON output
 //! - [`RedactedJsonRef`]: Wrapper for redacted JSON output
+
+use std::fmt::{Debug, Formatter, Result as FmtResult};
 
 #[cfg(feature = "json")]
 use serde::Serialize;
@@ -34,8 +36,8 @@ use crate::policy::RedactionPolicy;
 /// [`REDACTED_PLACEHOLDER`] string instead of propagating the error or
 /// emitting partially serialized data.
 ///
-/// `value` is taken by ownership because `serde_json::to_value` consumes it;
-/// clone first if the original is still needed.
+/// `value` is passed to `serde_json::to_value`. Pass a serializable reference
+/// when the original value must remain available.
 ///
 /// [`REDACTED_PLACEHOLDER`]: crate::policy::REDACTED_PLACEHOLDER
 #[cfg(feature = "json")]
@@ -50,18 +52,80 @@ pub fn serialize_redacted_json<T: Serialize>(value: T) -> JsonValue {
 
 /// Output produced at a logging boundary.
 ///
-/// Marked `#[non_exhaustive]`: the `Json` variant only exists with the `json`
-/// feature, and feature unification means another crate in the build graph can
-/// switch it on. Exhaustive matches would break the moment that happens, so
-/// downstream matches must carry a wildcard arm.
+/// Obtain this value from a redacting adapter or a named output declaration.
+/// Inspect the selected representation through [`Self::view`].
+#[derive(Clone, PartialEq, Eq)]
+pub struct RedactedOutput {
+    representation: OutputRepresentation,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
-#[non_exhaustive]
-pub enum RedactedOutput {
-    /// Redacted text output.
+enum OutputRepresentation {
     Text(String),
-    /// Redacted structured JSON output (requires the `json` feature).
     #[cfg(feature = "json")]
     Json(JsonValue),
+}
+
+/// Read-only inspection of the representation selected for logging.
+///
+/// Downstream matches need a wildcard arm because feature unification can
+/// enable JSON and future versions may add representations.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum RedactedOutputView<'a> {
+    /// Redacted text output.
+    Text(&'a str),
+    /// Redacted structured JSON output (requires the `json` feature).
+    #[cfg(feature = "json")]
+    Json(&'a JsonValue),
+}
+
+impl RedactedOutput {
+    /// Borrows the selected output without granting construction or mutation.
+    #[must_use]
+    pub fn view(&self) -> RedactedOutputView<'_> {
+        match &self.representation {
+            OutputRepresentation::Text(text) => RedactedOutputView::Text(text),
+            #[cfg(feature = "json")]
+            OutputRepresentation::Json(json) => RedactedOutputView::Json(json),
+        }
+    }
+
+    pub(crate) fn text(text: String) -> Self {
+        Self {
+            representation: OutputRepresentation::Text(text),
+        }
+    }
+
+    #[cfg(feature = "json")]
+    pub(crate) fn json(json: JsonValue) -> Self {
+        Self {
+            representation: OutputRepresentation::Json(json),
+        }
+    }
+
+    #[cfg(any(feature = "slog", feature = "tracing"))]
+    pub(crate) fn into_text(self) -> String {
+        match self.representation {
+            OutputRepresentation::Text(text) => text,
+            #[cfg(feature = "json")]
+            OutputRepresentation::Json(json) => json.to_string(),
+        }
+    }
+
+    #[cfg(feature = "json")]
+    pub(super) fn into_json(self) -> JsonValue {
+        match self.representation {
+            OutputRepresentation::Text(text) => JsonValue::String(text),
+            OutputRepresentation::Json(json) => json,
+        }
+    }
+}
+
+impl Debug for RedactedOutput {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
+        Debug::fmt(&self.representation, formatter)
+    }
 }
 
 // =============================================================================
@@ -73,12 +137,31 @@ pub enum RedactedOutput {
 /// This trait is intentionally narrower than `RedactableWithFormatter`.
 /// Passthrough scalar formatting is useful inside redacted templates, but it
 /// does not certify a raw value as safe at a logging boundary.
+///
+/// For structured values, use [`RedactedOutputExt::redacted_output`] or
+/// [`IntoRedactedOutputExt::into_redacted_output`]. With `json`, use
+/// `RedactedJsonExt::redacted_json` or
+/// `IntoRedactedJsonExt::into_redacted_json`; `Sensitive` and `SensitiveDual`
+/// can select that borrowing bridge with `#[redactable(output = json)]`.
+/// Borrowing structural bridges require `Clone`; consuming bridges redact
+/// the owned value. Their formatting and serialization bounds still apply.
+///
+/// Handwritten implementations can delegate to those bridges or declare selected
+/// output with [`struct@crate::NotSensitiveDisplay`], [`crate::NotSensitiveDebug`],
+/// `NotSensitiveJson`, or [`crate::UncheckedRedactedSummary`]. The JSON wrapper
+/// is available through `NotSensitiveJsonExt::not_sensitive_json` with
+/// `json`. These declarations and user-defined policies remain the author's
+/// responsibility; output construction does not prove confidentiality or
+/// completeness. Inspect the result through [`RedactedOutput::view`].
+#[cfg_attr(
+    feature = "json",
+    doc = "See [`RedactedJsonExt::redacted_json`], [`IntoRedactedJsonExt::into_redacted_json`], and [`crate::NotSensitiveJsonExt::not_sensitive_json`] for the JSON bridges and explicit escape."
+)]
 pub trait ToRedactedOutput {
     /// Produces an owned, logging-safe representation of this value.
     ///
-    /// The implementing type certifies that the returned [`RedactedOutput`]
-    /// contains no sensitive data: either redaction has already been applied
-    /// or the value was never sensitive. Logging integrations call this
+    /// The implementing type selects the returned [`RedactedOutput`] through
+    /// redaction or an explicit declaration. Logging integrations call this
     /// method at the logging boundary; prefer it over formatting the raw
     /// value with `Display` or `Debug`.
     ///
@@ -103,7 +186,7 @@ where
     P: RedactionPolicy,
 {
     fn to_redacted_output(&self) -> RedactedOutput {
-        RedactedOutput::Text(self.redacted())
+        RedactedOutput::text(self.redacted())
     }
 }
 
@@ -127,10 +210,10 @@ pub struct RedactedOutputRef<'a, T: ?Sized>(&'a T);
 
 impl<T> ToRedactedOutput for RedactedOutputRef<'_, T>
 where
-    T: Redactable + Clone + std::fmt::Debug,
+    T: Redactable + Clone + Debug,
 {
     fn to_redacted_output(&self) -> RedactedOutput {
-        RedactedOutput::Text(format!("{:?}", self.0.clone().redact()))
+        RedactedOutput::text(format!("{:?}", self.0.clone().redact()))
     }
 }
 
@@ -172,19 +255,19 @@ pub trait RedactedOutputExt {
 /// behind an `Arc`/`Rc` therefore still panics. Prefer unique ownership
 /// ([`Box`]) for values you log. (`Arc<RefCell<T>>` is `!Send + !Sync` and an
 /// anti-pattern regardless.)
-pub trait IntoRedactedOutputExt: Redactable + std::fmt::Debug + Sized {
+pub trait IntoRedactedOutputExt: Redactable + Debug + Sized {
     /// Consumes and redacts the value, then returns its logging-safe Debug text.
     #[must_use]
     fn into_redacted_output(self) -> RedactedOutput {
-        RedactedOutput::Text(format!("{:?}", self.redact()))
+        RedactedOutput::text(format!("{:?}", self.redact()))
     }
 }
 
-impl<T> IntoRedactedOutputExt for T where T: Redactable + std::fmt::Debug {}
+impl<T> IntoRedactedOutputExt for T where T: Redactable + Debug {}
 
 impl<T> RedactedOutputExt for T
 where
-    T: Redactable + Clone + std::fmt::Debug,
+    T: Redactable + Clone + Debug,
 {
     fn redacted_output(&self) -> RedactedOutputRef<'_, Self> {
         RedactedOutputRef(self)
@@ -217,7 +300,7 @@ impl RedactedJson {
 #[cfg(feature = "json")]
 impl ToRedactedOutput for RedactedJson {
     fn to_redacted_output(&self) -> RedactedOutput {
-        RedactedOutput::Json(self.value.clone())
+        RedactedOutput::json(self.value.clone())
     }
 }
 
@@ -244,7 +327,7 @@ where
 {
     fn to_redacted_output(&self) -> RedactedOutput {
         let redacted = self.0.clone().redact();
-        RedactedOutput::Json(serialize_redacted_json(redacted))
+        RedactedOutput::json(serialize_redacted_json(redacted))
     }
 }
 

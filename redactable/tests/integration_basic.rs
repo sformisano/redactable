@@ -7,14 +7,7 @@
 
 #![allow(clippy::redundant_locals)]
 
-use std::collections::{BTreeMap, HashMap};
-
-use redactable::{
-    NotSensitive, NotSensitiveDebugExt, NotSensitiveDisplayExt, NotSensitiveExt, Redactable,
-    RedactedOutput, RedactedOutputExt, RedactionPolicy, Secret, Sensitive, SensitiveDisplay,
-    SensitiveValue, SensitiveWithPolicy, TextPolicyKind, TextRedactionPolicy, ToRedactedOutput,
-    Token,
-};
+use redactable::{RedactedOutput, ToRedactedOutput};
 
 fn log_redacted<T: ToRedactedOutput>(value: &T) -> RedactedOutput {
     value.to_redacted_output()

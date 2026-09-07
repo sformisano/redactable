@@ -13,7 +13,7 @@ pub enum RecursiveEnum {
 }
 
 // `#[redactable(recursive)]` combined with a `#[sensitive(Secret)]` field.
-// Both the borrowed route (`.redact()`) and the consuming adapters are
+// Both structural traversal (`.redact()`) and the consuming adapters are
 // exercised below. The consuming route used to be a compile error for this
 // shape: the removed owned-capability hierarchy generated an owned traversal
 // bound that did not honor the override, forming a trait-solver cycle

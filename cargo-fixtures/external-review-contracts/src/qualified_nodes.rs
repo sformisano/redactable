@@ -1,3 +1,4 @@
+// Qualified type paths intentionally exercise derive name resolution.
 use redactable::Sensitive;
 
 use crate::qualified;

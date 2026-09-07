@@ -1,4 +1,4 @@
-use super::*;
+use redactable::{Redactable, Secret, Sensitive};
 
 #[test]
 fn passes_through_foreign_types_in_struct() {
@@ -81,6 +81,7 @@ fn works_on_enum_variant_fields() {
         Failure {
             #[not_sensitive]
             code: u32,
+            #[not_sensitive]
             message: String,
         },
     }

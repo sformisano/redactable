@@ -1,4 +1,5 @@
-use super::*;
+use redactable::{Redactable, Secret, Sensitive};
+use std::collections::{BTreeMap, HashMap};
 
 #[test]
 fn traverses_btreemap_values() {

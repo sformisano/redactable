@@ -1,37 +1,39 @@
 mod sensitive_display {
+    use trybuild::TestCases;
+
     #[test]
-    fn accepts_raw_required_pattern() {
-        let t = trybuild::TestCases::new();
-        t.pass("tests/ui/sensitive_display_raw_required.rs");
+    fn rejects_undeclared_referenced_field() {
+        let t = TestCases::new();
+        t.compile_fail("tests/ui/sensitive_display_undeclared_field_rejected.rs");
     }
 
     #[test]
     fn accepts_raw_ok_pattern() {
-        let t = trybuild::TestCases::new();
+        let t = TestCases::new();
         t.pass("tests/ui/sensitive_display_raw_ok.rs");
     }
 
     #[test]
     fn accepts_strict_ok_pattern() {
-        let t = trybuild::TestCases::new();
+        let t = TestCases::new();
         t.pass("tests/ui/sensitive_display_strict_ok.rs");
     }
 
     #[test]
     fn accepts_nested_ok_pattern() {
-        let t = trybuild::TestCases::new();
+        let t = TestCases::new();
         t.pass("tests/ui/sensitive_display_nested_ok.rs");
     }
 
     #[test]
     fn accepts_policy_redacted_containers() {
-        let t = trybuild::TestCases::new();
+        let t = TestCases::new();
         t.pass("tests/ui/sensitive_display_policy_containers_ok.rs");
     }
 
     #[test]
     fn accepts_complete_field_type_bounds() {
-        let t = trybuild::TestCases::new();
+        let t = TestCases::new();
         if cfg!(feature = "slog") {
             t.pass("tests/ui/phase01_complete_type_bounds_slog_ok.rs");
         } else {
@@ -41,25 +43,25 @@ mod sensitive_display {
 
     #[test]
     fn accepts_policy_associated_output_complete_type_bound() {
-        let t = trybuild::TestCases::new();
+        let t = TestCases::new();
         t.pass("tests/ui/phase01_policy_output_complete_type_bound_ok.rs");
     }
 
     #[test]
     fn accepts_policy_associated_output_debug_complete_type_bound() {
-        let t = trybuild::TestCases::new();
+        let t = TestCases::new();
         t.pass("tests/ui/phase01_policy_output_debug_complete_type_bound_ok.rs");
     }
 
     #[test]
     fn accepts_policy_associated_output_both_complete_type_bounds() {
-        let t = trybuild::TestCases::new();
+        let t = TestCases::new();
         t.pass("tests/ui/phase01_policy_output_both_complete_type_bounds_ok.rs");
     }
 
     #[test]
     fn rejects_custom_policy_ref_without_formatting_companion() {
-        let t = trybuild::TestCases::new();
+        let t = TestCases::new();
         if cfg!(feature = "slog") {
             t.compile_fail(
                 "tests/ui/sensitive_display_custom_policy_ref_missing_formatting_companion_slog.rs",
@@ -73,45 +75,45 @@ mod sensitive_display {
 
     #[test]
     fn rejects_legacy_formatting_without_policy() {
-        let t = trybuild::TestCases::new();
+        let t = TestCases::new();
         t.compile_fail("tests/ui/sensitive_display_legacy_formatting_without_policy.rs");
     }
 
     #[test]
     fn accepts_combined_recursive_legacy_formatting() {
-        let t = trybuild::TestCases::new();
+        let t = TestCases::new();
         t.pass("tests/ui/sensitive_display_combined_recursive_legacy_ok.rs");
         t.pass("tests/ui/sensitive_dual_combined_recursive_legacy_ok.rs");
     }
 
     #[test]
     fn rejects_duplicate_or_unknown_redactable_options() {
-        let t = trybuild::TestCases::new();
+        let t = TestCases::new();
         t.compile_fail("tests/ui/sensitive_display_duplicate_legacy_formatting_rejected.rs");
         t.compile_fail("tests/ui/sensitive_display_unknown_redactable_option_rejected.rs");
     }
 
     #[test]
     fn accepts_complete_type_bounds_for_all_data_shapes() {
-        let t = trybuild::TestCases::new();
+        let t = TestCases::new();
         t.pass("tests/ui/phase01_sensitive_display_shapes_complete_type_bounds_ok.rs");
     }
 
     #[test]
     fn accepts_fill_chars_that_look_dynamic_after_alignment() {
-        let t = trybuild::TestCases::new();
+        let t = TestCases::new();
         t.pass("tests/ui/sensitive_display_fill_chars_ok.rs");
     }
 
     #[test]
     fn accepts_unicode_named_fields() {
-        let t = trybuild::TestCases::new();
+        let t = TestCases::new();
         t.pass("tests/ui/sensitive_display_unicode_fields_ok.rs");
     }
 
     #[test]
     fn rejects_real_nonzero_policy_by_trait_resolution() {
-        let t = trybuild::TestCases::new();
+        let t = TestCases::new();
         if cfg!(feature = "slog") {
             t.compile_fail("tests/ui/sensitive_display_nonzero_secret_rejected_slog.rs");
         } else {
@@ -121,55 +123,55 @@ mod sensitive_display {
 
     #[test]
     fn documents_walk_default_debug_current_semantics() {
-        let t = trybuild::TestCases::new();
+        let t = TestCases::new();
         t.pass("tests/ui/sensitive_display_walk_default_debug_current_semantics_ok.rs");
     }
 
     #[test]
     fn rejects_missing_template() {
-        let t = trybuild::TestCases::new();
+        let t = TestCases::new();
         t.compile_fail("tests/ui/sensitive_display_missing_template_rejected.rs");
     }
 
     #[test]
     fn rejects_unknown_template_field() {
-        let t = trybuild::TestCases::new();
+        let t = TestCases::new();
         t.compile_fail("tests/ui/sensitive_display_unknown_field_rejected.rs");
     }
 
     #[test]
     fn rejects_union() {
-        let t = trybuild::TestCases::new();
+        let t = TestCases::new();
         t.compile_fail("tests/ui/sensitive_display_union_rejected.rs");
     }
 
     #[test]
     fn rejects_sparse_positional_placeholders() {
-        let t = trybuild::TestCases::new();
+        let t = TestCases::new();
         t.compile_fail("tests/ui/sensitive_display_sparse_positional_rejected.rs");
     }
 
     #[test]
     fn rejects_dynamic_width_or_precision() {
-        let t = trybuild::TestCases::new();
+        let t = TestCases::new();
         t.compile_fail("tests/ui/sensitive_display_dynamic_width_rejected.rs");
     }
 
     #[test]
     fn rejects_unsupported_format_specifier() {
-        let t = trybuild::TestCases::new();
+        let t = TestCases::new();
         t.compile_fail("tests/ui/sensitive_display_unsupported_specifier_rejected.rs");
     }
 
     #[test]
     fn rejects_variant_level_attribute() {
-        let t = trybuild::TestCases::new();
+        let t = TestCases::new();
         t.compile_fail("tests/ui/sensitive_display_variant_attr_rejected.rs");
     }
 
     #[test]
     fn rejects_dual_without_sensitive() {
-        let t = trybuild::TestCases::new();
+        let t = TestCases::new();
         t.compile_fail("tests/ui/sensitive_display_dual_without_sensitive_rejected.rs");
     }
 }

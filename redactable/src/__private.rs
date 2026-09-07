@@ -4,10 +4,40 @@
 //! retain recursive compatibility traversal, while IP kinds use a positive,
 //! fail-closed structural traversal with safe map-key bounds.
 
+mod declaration;
 mod field;
 mod formatting;
 mod kinds;
 mod output;
+
+#[cfg(feature = "slog")]
+use crate::RedactedJson;
+#[cfg(feature = "slog")]
+use serde_json::Value;
+
+pub use declaration::{
+    DeclaredFormatting, require_declared_formatting, require_declared_redaction,
+};
+
+/// Emits a generated JSON producer only when the runtime has JSON support.
+#[cfg(feature = "json")]
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __redactable_generated_json_output {
+    ($($items:item)*) => { $($items)* };
+}
+
+/// Reports a missing runtime feature without resolving JSON-only items.
+#[cfg(not(feature = "json"))]
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __redactable_generated_json_output {
+    ($($items:item)*) => {
+        ::core::compile_error!("`#[redactable(output = json)]` requires redactable's `json` feature; enable that feature on the runtime dependency");
+    };
+}
+
+pub use crate::__redactable_generated_json_output as generated_json_output;
 
 #[doc(hidden)]
 pub use crate::redaction::{IpPolicyApplicable, IpPolicyApplicableRef};
@@ -47,6 +77,6 @@ pub use output::{PolicyFormattingOutput, PolicyRefCellOutput};
 /// Constructs generated borrowed slog output without exposing internal constructors.
 #[cfg(feature = "slog")]
 #[doc(hidden)]
-pub fn generated_redacted_json(value: serde_json::Value) -> crate::RedactedJson {
-    crate::RedactedJson::new(value)
+pub fn generated_redacted_json_placeholder() -> RedactedJson {
+    RedactedJson::new(Value::String(crate::REDACTED_PLACEHOLDER.to_owned()))
 }

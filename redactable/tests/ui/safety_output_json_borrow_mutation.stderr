@@ -1,0 +1,7 @@
+error[E0596]: cannot borrow `*value` as mutable, as it is behind a `&` reference
+ --> tests/ui/safety_output_json_borrow_mutation.rs:7:9
+  |
+6 |     if let RedactedOutputView::Json(value) = output.view() {
+  |                                     ----- consider changing this binding's type to be: `&mut Value`
+7 |         value["public"] = false.into();
+  |         ^^^^^ `value` is a `&` reference, so it cannot be borrowed as mutable

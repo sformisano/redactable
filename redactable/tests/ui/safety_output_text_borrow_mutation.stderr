@@ -1,0 +1,7 @@
+error[E0596]: cannot borrow `*text` as mutable, as it is behind a `&` reference
+ --> tests/ui/safety_output_text_borrow_mutation.rs:6:9
+  |
+5 |     if let RedactedOutputView::Text(text) = output.view() {
+  |                                     ---- consider changing this binding's type to be: `&mut str`
+6 |         text.make_ascii_uppercase();
+  |         ^^^^ `text` is a `&` reference, so it cannot be borrowed as mutable

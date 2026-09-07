@@ -2,6 +2,45 @@
 
 ## Unreleased
 
+### Breaking
+
+- Sensitive derives now require declared redaction behavior on default fields.
+  Raw leaves need a policy or explicit `#[not_sensitive]`; supported containers
+  check their contents. `SensitiveDisplay` checks only template references,
+  while `SensitiveDual` checks every structural field. Manual formatters can
+  declare their formatting behavior with `__private::DeclaredFormatting`.
+- `RedactedOutput` is opaque. Read it through the non-exhaustive borrowed
+  `RedactedOutputView`; replace raw construction with a redacting bridge or
+  an explicit output escape. The arbitrary hidden JSON factory is replaced
+  by a zero-argument fixed-placeholder operation.
+- Generated `Debug` keeps production redaction in consumer tests and with the
+  `testing` feature. The feature now enables test helpers without raw exposure.
+
+### Added
+
+- `#[redactable(output = json)]` on `Sensitive` and `SensitiveDual` generates
+  `ToRedactedOutput` through the existing `Clone` + `Serialize` JSON bridge.
+  Dual retains its text template through `.redacted_display()`.
+- `UncheckedRedactedSummary` records deliberately selected text, including
+  empty summaries. It does not validate the summary's disclosure or completeness.
+- `RedactedList` produces item-limited JSON with an explicit `NonZeroUsize`
+  limit and visible omitted count. It runs only included producers and does
+  not bound total bytes, depth, or policy cost.
+- `testing::assert_json_shape`, with `testing` and `json`, checks object keys,
+  array positions, and scalar kinds with strict JSON Pointer opaque paths.
+  Expected policy values must still be checked independently.
+
+### Fixed
+
+- The slog display adapter now renders the representation selected by
+  `ToRedactedOutput`, including compact JSON, instead of calling a potentially
+  different formatter. Direct generated slog placeholders remain unchanged.
+
+### Documentation
+
+- Updated field-declaration migrations, output-boundary examples, Debug behavior,
+  clone requirements, policy exceptions, and explicit public passthrough guidance.
+
 ## 0.11.0 - 2026-07-19
 
 ### Breaking

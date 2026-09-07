@@ -22,6 +22,7 @@
 //!
 //! #[derive(Clone, Sensitive, serde::Serialize)]
 //! struct User {
+//!     #[not_sensitive]
 //!     name: String,
 //!     #[sensitive(Secret)]
 //!     token: String,
@@ -41,7 +42,10 @@
 //! # }
 //! ```
 
-use std::fmt;
+use std::fmt::{Debug, Display};
+
+#[cfg(feature = "tracing-valuable")]
+use valuable::{Valuable, Value as ValuableValue, Visit as ValuableVisit};
 
 #[cfg(feature = "json")]
 use serde::Serialize;
@@ -80,7 +84,7 @@ pub trait TracingRedacted {}
 /// otherwise implement [`Redactable`]. The helper clones and redacts the value
 /// before it reaches the subscriber, then records the redacted clone through
 /// `tracing::field::debug`.
-pub trait TracingRedactedDebugExt: Redactable + Clone + fmt::Debug {
+pub trait TracingRedactedDebugExt: Redactable + Clone + Debug {
     /// Redacts the value and wraps the redacted clone for `tracing` debug
     /// recording.
     ///
@@ -106,7 +110,7 @@ pub trait TracingRedactedDebugExt: Redactable + Clone + fmt::Debug {
 /// behind an `Arc`/`Rc` therefore still panics. Prefer unique ownership
 /// ([`Box`]) for values you log. (`Arc<RefCell<T>>` is `!Send + !Sync` and an
 /// anti-pattern regardless.)
-pub trait IntoTracingRedactedDebugExt: Redactable + fmt::Debug + Sized {
+pub trait IntoTracingRedactedDebugExt: Redactable + Debug + Sized {
     /// Consumes and redacts the value before handing it to `tracing`.
     #[must_use]
     fn into_tracing_redacted_debug(self) -> DebugValue<Self> {
@@ -114,11 +118,11 @@ pub trait IntoTracingRedactedDebugExt: Redactable + fmt::Debug + Sized {
     }
 }
 
-impl<T> IntoTracingRedactedDebugExt for T where T: Redactable + fmt::Debug {}
+impl<T> IntoTracingRedactedDebugExt for T where T: Redactable + Debug {}
 
 impl<T> TracingRedactedDebugExt for T
 where
-    T: Redactable + Clone + fmt::Debug,
+    T: Redactable + Clone + Debug,
 {
     fn tracing_redacted_debug(&self) -> DebugValue<Self> {
         debug(self.clone().redact())
@@ -151,11 +155,7 @@ where
 {
     fn tracing_redacted(&self) -> DisplayValue<String> {
         let output = self.to_redacted_output();
-        let text = match output {
-            RedactedOutput::Text(text) => text,
-            #[cfg(feature = "json")]
-            RedactedOutput::Json(json) => json.to_string(),
-        };
+        let text = output.into_text();
         display(text)
     }
 }
@@ -172,13 +172,13 @@ where
 {
 }
 
-impl<T> TracingRedacted for NotSensitiveDisplay<T> where T: fmt::Display {}
+impl<T> TracingRedacted for NotSensitiveDisplay<T> where T: Display {}
 
-impl<T> TracingRedacted for NotSensitiveDebug<T> where T: fmt::Debug {}
+impl<T> TracingRedacted for NotSensitiveDebug<T> where T: Debug {}
 
 impl<T> TracingRedacted for NotSensitive<T> {}
 
-impl<T> TracingRedacted for RedactedOutputRef<'_, T> where T: Redactable + Clone + fmt::Debug {}
+impl<T> TracingRedacted for RedactedOutputRef<'_, T> where T: Redactable + Clone + Debug {}
 
 #[cfg(feature = "json")]
 impl<T> TracingRedacted for NotSensitiveJson<'_, T> where T: Serialize + ?Sized {}
@@ -226,12 +226,12 @@ impl<T> TracingRedactedValue<T> {
 }
 
 #[cfg(feature = "tracing-valuable")]
-impl<T: valuable::Valuable> valuable::Valuable for TracingRedactedValue<T> {
-    fn as_value(&self) -> valuable::Value<'_> {
+impl<T: Valuable> Valuable for TracingRedactedValue<T> {
+    fn as_value(&self) -> ValuableValue<'_> {
         self.redacted.as_value()
     }
 
-    fn visit(&self, visit: &mut dyn valuable::Visit) {
+    fn visit(&self, visit: &mut dyn ValuableVisit) {
         self.redacted.visit(visit);
     }
 }
@@ -258,6 +258,7 @@ impl<T> TracingRedacted for TracingRedactedValue<T> {}
 ///
 /// #[derive(Clone, Sensitive, valuable::Valuable)]
 /// struct User {
+///     #[not_sensitive]
 ///     username: String,
 ///     #[sensitive(Secret)]
 ///     password: String,
@@ -271,7 +272,7 @@ impl<T> TracingRedacted for TracingRedactedValue<T> {}
 #[cfg(feature = "tracing-valuable")]
 pub trait TracingValuableExt {
     /// The redacted type that will be wrapped in `TracingRedactedValue`.
-    type Redacted: valuable::Valuable;
+    type Redacted: Valuable;
 
     /// Redacts the value and wraps it for structured tracing output.
     ///
@@ -302,7 +303,7 @@ pub trait TracingValuableExt {
 /// ([`Box`]) for values you log. (`Arc<RefCell<T>>` is `!Send + !Sync` and an
 /// anti-pattern regardless.)
 #[cfg(feature = "tracing-valuable")]
-pub trait IntoTracingRedactedValuableExt: Redactable + valuable::Valuable + Sized {
+pub trait IntoTracingRedactedValuableExt: Redactable + Valuable + Sized {
     /// Consumes and redacts the value before wrapping it for `valuable` output.
     #[must_use]
     fn into_tracing_redacted_valuable(self) -> TracingRedactedValue<Self> {
@@ -311,12 +312,12 @@ pub trait IntoTracingRedactedValuableExt: Redactable + valuable::Valuable + Size
 }
 
 #[cfg(feature = "tracing-valuable")]
-impl<T> IntoTracingRedactedValuableExt for T where T: Redactable + valuable::Valuable {}
+impl<T> IntoTracingRedactedValuableExt for T where T: Redactable + Valuable {}
 
 #[cfg(feature = "tracing-valuable")]
 impl<T> TracingValuableExt for T
 where
-    T: Redactable + Clone + valuable::Valuable,
+    T: Redactable + Clone + Valuable,
 {
     type Redacted = T;
 
@@ -327,7 +328,10 @@ where
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use super::{TracingRedactedDebugExt, TracingRedactedExt};
+    use crate::redaction::{
+        Redactable, RedactableMapper, RedactableWithMapper, RedactedOutput, ToRedactedOutput,
+    };
 
     // Mock type for testing TracingRedactedExt
     struct MockRedactable {
@@ -336,7 +340,7 @@ mod tests {
 
     impl ToRedactedOutput for MockRedactable {
         fn to_redacted_output(&self) -> RedactedOutput {
-            RedactedOutput::Text(format!("[REDACTED:{}]", self.value.len()))
+            RedactedOutput::text(format!("[REDACTED:{}]", self.value.len()))
         }
     }
 
@@ -365,8 +369,8 @@ mod tests {
         password: String,
     }
 
-    impl crate::redaction::RedactableWithMapper for MockStructuralRedactable {
-        fn redact_with<M: crate::redaction::RedactableMapper>(self, _mapper: &M) -> Self {
+    impl RedactableWithMapper for MockStructuralRedactable {
+        fn redact_with<M: RedactableMapper>(self, _mapper: &M) -> Self {
             Self {
                 password: "[REDACTED]".to_string(),
             }
@@ -391,8 +395,9 @@ mod tests {
 
     #[cfg(feature = "tracing-valuable")]
     mod valuable_tests {
-        use super::*;
-        use crate::redaction::{RedactableMapper, RedactableWithMapper};
+        use crate::redaction::{Redactable, RedactableMapper, RedactableWithMapper};
+        use crate::tracing::TracingValuableExt;
+        use valuable::Valuable;
 
         // Mock type that implements both Redactable and Valuable
         #[derive(Clone, Debug, valuable::Valuable)]
@@ -437,7 +442,7 @@ mod tests {
             let valuable_wrapper = mock.tracing_redacted_valuable();
 
             // Verify it implements Valuable by calling as_value
-            let _ = valuable::Valuable::as_value(&valuable_wrapper);
+            let _ = Valuable::as_value(&valuable_wrapper);
         }
     }
 }

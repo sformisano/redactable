@@ -12,9 +12,10 @@ error[E0277]: the trait bound `String: SlogRedactedDisplayExt` is not satisfied
              NotSensitiveJson<'_, T>
              RedactedJson
              RedactedJsonRef<'_, T>
+             RedactedList<'_, T>
              RedactedOutput
              RedactedOutputRef<'_, T>
-             SensitiveValue<T, P>
+           and $N others
    = note: required for `String` to implement `SlogRedactedDisplayExt`
 note: required by a bound in `require_certified`
   --> tests/ui/slog_redacted_display_raw_string_rejected.rs:12:25

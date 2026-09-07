@@ -1,4 +1,9 @@
-use super::*;
+use std::fmt::{Debug, Display, Formatter, Result as FmtResult};
+
+use crate::log_redacted;
+use redactable::{
+    NotSensitiveDebugExt, NotSensitiveDisplayExt, NotSensitiveExt, RedactedOutputView,
+};
 
 #[test]
 fn debug_wrapper_uses_debug_formatting() {
@@ -11,8 +16,8 @@ fn debug_wrapper_uses_debug_formatting() {
     let value = DebugOnly { id: 7 };
     let redacted = log_redacted(&value.not_sensitive_debug());
     assert_eq!(
-        redacted,
-        RedactedOutput::Text("DebugOnly { id: 7 }".to_string())
+        redacted.view(),
+        RedactedOutputView::Text("DebugOnly { id: 7 }")
     );
 }
 
@@ -48,27 +53,24 @@ fn not_sensitive_borrows_so_value_remains_usable() {
 fn display_wrapper_uses_display_and_debug_wrapper_uses_debug() {
     struct FormatType(u64);
 
-    impl std::fmt::Display for FormatType {
-        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    impl Display for FormatType {
+        fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
             write!(f, "display-{}", self.0)
         }
     }
 
-    impl std::fmt::Debug for FormatType {
-        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    impl Debug for FormatType {
+        fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
             write!(f, "debug-{}", self.0)
         }
     }
 
     let value = FormatType(1);
     let display_output = log_redacted(&value.not_sensitive_display());
-    assert_eq!(
-        display_output,
-        RedactedOutput::Text("display-1".to_string())
-    );
+    assert_eq!(display_output.view(), RedactedOutputView::Text("display-1"));
 
     let debug_output = log_redacted(&value.not_sensitive_debug());
-    assert_eq!(debug_output, RedactedOutput::Text("debug-1".to_string()));
+    assert_eq!(debug_output.view(), RedactedOutputView::Text("debug-1"));
 
     let display_wrapper = value.not_sensitive_display();
     assert_eq!(format!("{display_wrapper:?}"), "display-1");

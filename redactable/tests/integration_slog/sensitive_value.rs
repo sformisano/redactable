@@ -1,4 +1,5 @@
-use super::*;
+use crate::slog_capture::{CapturedValue, CapturingSerializer, serialize_to_capture};
+use redactable::{SensitiveValue, Token};
 
 #[test]
 fn slog_serialization_emits_redacted_value() {

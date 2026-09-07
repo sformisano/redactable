@@ -1,5 +1,6 @@
 use std::cell::RefCell;
 
+use redactable::__private::slog::Value;
 use redactable::Sensitive;
 
 type CellAlias<T> = RefCell<T>;
@@ -16,7 +17,7 @@ struct Generic<T> {
     value: T,
 }
 
-fn assert_slog<T: redactable::__private::slog::Value>() {}
+fn assert_slog<T: Value>() {}
 
 fn main() {
     assert_slog::<Generic<RefCell<String>>>();

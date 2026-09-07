@@ -9,22 +9,18 @@
 
 use std::{
     cell::RefCell,
-    collections::{BTreeMap, HashMap},
-    fmt,
+    collections::BTreeMap,
     panic::{AssertUnwindSafe, catch_unwind},
     sync::{Arc, Mutex},
 };
 
 use redactable::{
-    Email, IntoRedactedOutputExt, NotSensitiveJsonExt, PhoneNumber, Pii, Redactable,
-    RedactableMapper, RedactableWithFormatter, RedactableWithMapper, RedactedJsonExt,
-    RedactedOutput, RedactedOutputExt, RedactionPolicy, Secret, Sensitive, SensitiveDisplay,
-    SensitiveValue, TextPolicyKind, TextRedactionPolicy, ToRedactedOutput, Token,
-    slog::{SlogRedacted, SlogRedactedExt},
+    IntoRedactedOutputExt, RedactedOutput, RedactedOutputExt, Secret, Sensitive, ToRedactedOutput,
 };
 use redactable_test_fixtures::GenericDualFixture;
 use serde::Serialize;
-use slog::{Drain as _, KV as _};
+use serde_json::Value as JsonValue;
+use slog::{Drain, KV as _, Logger, Never, OwnedKVList, Record};
 
 #[path = "support/slog_capture.rs"]
 pub(crate) mod slog_capture;
@@ -36,15 +32,11 @@ struct CapturingDrain {
     captured: Arc<Mutex<Vec<CapturedValue>>>,
 }
 
-impl slog::Drain for CapturingDrain {
+impl Drain for CapturingDrain {
     type Ok = ();
-    type Err = slog::Never;
+    type Err = Never;
 
-    fn log(
-        &self,
-        record: &slog::Record<'_>,
-        values: &slog::OwnedKVList,
-    ) -> Result<Self::Ok, Self::Err> {
+    fn log(&self, record: &Record<'_>, values: &OwnedKVList) -> Result<Self::Ok, Self::Err> {
         let mut serializer = CapturingSerializer::new();
         record
             .kv()
@@ -63,13 +55,13 @@ impl slog::Drain for CapturingDrain {
     }
 }
 
-fn capturing_logger() -> (slog::Logger, Arc<Mutex<Vec<CapturedValue>>>) {
+fn capturing_logger() -> (Logger, Arc<Mutex<Vec<CapturedValue>>>) {
     let captured = Arc::new(Mutex::new(Vec::new()));
     let drain = CapturingDrain {
         captured: Arc::clone(&captured),
     }
     .fuse();
-    (slog::Logger::root(drain, slog::o!()), captured)
+    (Logger::root(drain, slog::o!()), captured)
 }
 
 #[test]
@@ -132,14 +124,60 @@ fn concrete_borrow_sensitive_map_key_slog_emits_placeholder_without_cloning() {
 
     assert_eq!(
         serializer.get("event"),
-        Some(CapturedValue::Serde(serde_json::Value::String(
-            String::from("[REDACTED]")
-        )))
+        Some(CapturedValue::Serde(JsonValue::String(String::from(
+            "[REDACTED]"
+        ))))
     );
 }
 
 fn log_redacted<T: ToRedactedOutput>(value: &T) -> RedactedOutput {
     value.to_redacted_output()
+}
+
+#[test]
+fn display_adapter_emits_selected_text_and_json_through_real_drain() {
+    use std::fmt::{Formatter, Result as FmtResult};
+
+    use redactable::{
+        NotSensitiveJsonExt, RedactableWithFormatter, UncheckedRedactedSummary,
+        slog::SlogRedactedDisplayExt,
+    };
+
+    struct Divergent {
+        json: bool,
+    }
+
+    impl RedactableWithFormatter for Divergent {
+        fn fmt_redacted(&self, f: &mut Formatter<'_>) -> FmtResult {
+            f.write_str("FORMATTER")
+        }
+    }
+
+    impl ToRedactedOutput for Divergent {
+        fn to_redacted_output(&self) -> RedactedOutput {
+            if self.json {
+                serde_json::json!({"approved": true, "owner_name": "[REDACTED]"})
+                    .not_sensitive_json()
+                    .to_redacted_output()
+            } else {
+                UncheckedRedactedSummary::new("SELECTED".to_owned()).to_redacted_output()
+            }
+        }
+    }
+
+    let (logger, captured) = capturing_logger();
+    let text = Divergent { json: false };
+    let json = Divergent { json: true };
+    assert_eq!(text.redacted_display().to_string(), "FORMATTER");
+    slog::info!(logger, "selected text"; "event" => text.slog_redacted_display());
+    slog::info!(logger, "selected JSON text"; "event" => json.slog_redacted_display());
+    assert_eq!(
+        *captured.lock().expect("capture lock"),
+        vec![
+            CapturedValue::Str("SELECTED".to_owned()),
+            CapturedValue::Str("{\"approved\":true,\"owner_name\":\"[REDACTED]\"}".to_owned()),
+        ]
+    );
 }
 
 #[path = "integration_slog/marker_trait.rs"]

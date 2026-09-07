@@ -1,9 +1,13 @@
-use super::*;
+use crate::slog_capture::{CapturedValue, CapturingSerializer, serialize_to_capture};
+use redactable::slog::SlogRedactedExt;
+use redactable::{Email, PhoneNumber, Pii, Secret, Sensitive};
+use serde::Serialize;
 
 #[test]
 fn redacts_simple_struct() {
     #[derive(Clone, Sensitive, Serialize)]
     struct User {
+        #[not_sensitive]
         username: String,
         #[sensitive(Secret)]
         password: String,

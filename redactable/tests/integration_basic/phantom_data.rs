@@ -1,6 +1,6 @@
 use std::marker::PhantomData;
 
-use super::*;
+use redactable::{Redactable, Secret, Sensitive};
 
 /// External type that does NOT implement RedactableWithMapper.
 /// This simulates types like `chrono::DateTime<Utc>` or other third-party types.
@@ -14,6 +14,7 @@ fn phantom_data_field_passes_through_without_bounds() {
     #[derive(Clone, Sensitive)]
     #[cfg_attr(feature = "slog", derive(serde::Serialize))]
     struct TypedId<T> {
+        #[not_sensitive]
         id: String,
         #[sensitive(Secret)]
         secret: String,
@@ -43,13 +44,14 @@ fn phantom_data_with_qualified_path() {
     #[derive(Clone, Sensitive)]
     #[cfg_attr(feature = "slog", derive(serde::Serialize))]
     struct Wrapper<T> {
+        #[not_sensitive]
         value: String,
         _phantom: std::marker::PhantomData<T>,
     }
 
     let wrapper: Wrapper<ExternalType> = Wrapper {
         value: "test".into(),
-        _phantom: std::marker::PhantomData,
+        _phantom: PhantomData,
     };
 
     let redacted = wrapper.redact();

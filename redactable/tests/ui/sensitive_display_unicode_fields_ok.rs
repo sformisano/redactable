@@ -3,10 +3,11 @@ use redactable::{RedactableWithFormatter, SensitiveDisplay};
 const CANARY: &str = "unicode-field-secret-canary";
 
 #[derive(SensitiveDisplay)]
-#[error("{café} {café:?} {jalapeño} {jalapeño:?} {公開} {公開:?}")]
+#[error("{café} {café:?} {jalapeño} {jalapeño} {公開} {公開:?}")]
 struct UnicodeStruct {
     #[sensitive(redactable::Secret)]
     café: String,
+    #[not_sensitive]
     jalapeño: String,
     #[not_sensitive]
     公開: String,
@@ -14,10 +15,11 @@ struct UnicodeStruct {
 
 #[derive(SensitiveDisplay)]
 enum UnicodeEnum {
-    #[error("{café} {café:?} {jalapeño} {jalapeño:?} {公開} {公開:?}")]
+    #[error("{café} {café:?} {jalapeño} {jalapeño} {公開} {公開:?}")]
     Value {
         #[sensitive(redactable::Secret)]
         café: String,
+        #[not_sensitive]
         jalapeño: String,
         #[not_sensitive]
         公開: String,

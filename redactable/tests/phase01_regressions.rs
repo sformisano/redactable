@@ -1,6 +1,12 @@
 //! Runtime regressions for trait-directed traversal and complete-type bounds.
 
-use std::{cell::Cell, collections::HashMap, hash::BuildHasherDefault, rc::Rc, sync::Arc};
+use std::{
+    cell::Cell,
+    collections::{HashMap, hash_map::DefaultHasher},
+    hash::BuildHasherDefault,
+    rc::Rc,
+    sync::Arc,
+};
 
 use redactable::{Redactable, Secret, Sensitive};
 
@@ -23,7 +29,7 @@ struct PhantomData<T> {
 #[cfg_attr(feature = "slog", derive(serde::Serialize))]
 struct Key(u8);
 
-type Hasher = BuildHasherDefault<std::collections::hash_map::DefaultHasher>;
+type Hasher = BuildHasherDefault<DefaultHasher>;
 
 #[derive(Clone, Sensitive)]
 #[cfg_attr(feature = "slog", derive(serde::Serialize))]
@@ -33,6 +39,7 @@ struct CompleteBounds {
     arc: Arc<SecretLeaf>,
     #[cfg_attr(feature = "slog", serde(skip))]
     rc: Rc<SecretLeaf>,
+    #[not_sensitive]
     cell: Cell<u8>,
     map: HashMap<Key, SecretLeaf, Hasher>,
 }

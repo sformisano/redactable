@@ -4,6 +4,8 @@ use std::{
     cell::RefCell,
     collections::{BTreeMap, BTreeSet},
     panic::{AssertUnwindSafe, catch_unwind},
+    rc::Rc,
+    sync::Arc,
 };
 
 #[cfg(feature = "ip-address")]
@@ -19,9 +21,12 @@ use redactable::tracing::{IntoTracingRedactedValuableExt, TracingValuableExt};
 #[cfg(feature = "json")]
 use redactable::{IntoRedactedJsonExt, RedactedJsonExt};
 use redactable::{
-    IntoRedactedOutputExt, Redactable, RedactableWithFormatter, RedactedOutput, RedactedOutputExt,
-    Secret, Sensitive, SensitiveDisplay, ToRedactedOutput,
+    IntoRedactedOutputExt, Redactable, RedactableWithFormatter, RedactedOutputExt,
+    RedactedOutputView, Secret, Sensitive, SensitiveDisplay, ToRedactedOutput,
 };
+use redactable_test_fixtures::PublicRedactedEvent;
+#[cfg(feature = "tracing-valuable")]
+use valuable::{Valuable, Value as ValuableValue, Visit};
 
 #[derive(Clone, Sensitive, serde::Serialize)]
 struct BorrowEvent {
@@ -30,13 +35,13 @@ struct BorrowEvent {
 }
 
 #[cfg(feature = "tracing-valuable")]
-impl valuable::Valuable for BorrowEvent {
-    fn as_value(&self) -> valuable::Value<'_> {
-        valuable::Value::Unit
+impl Valuable for BorrowEvent {
+    fn as_value(&self) -> ValuableValue<'_> {
+        ValuableValue::Unit
     }
 
-    fn visit(&self, visitor: &mut dyn valuable::Visit) {
-        visitor.visit_value(valuable::Value::Unit);
+    fn visit(&self, visitor: &mut dyn Visit) {
+        visitor.visit_value(ValuableValue::Unit);
     }
 }
 
@@ -56,8 +61,9 @@ fn borrow_conflicted_event() -> BorrowEvent {
 #[test]
 fn consuming_output_redacts_without_clone() {
     let output = borrow_conflicted_event().into_redacted_output();
-    let output = match output {
-        RedactedOutput::Text(output) => output,
+    let selected = output;
+    let output = match selected.view() {
+        RedactedOutputView::Text(output) => output,
         _ => panic!("structural output should be text"),
     };
     assert!(output.contains("[REDACTED]"));
@@ -80,8 +86,8 @@ fn consuming_json_redacts_without_clone() {
     let output = borrow_conflicted_event()
         .into_redacted_json()
         .to_redacted_output();
-    let output = match output {
-        RedactedOutput::Json(output) => output,
+    let output = match output.view() {
+        RedactedOutputView::Json(output) => output,
         _ => panic!("JSON adapter should produce JSON output"),
     };
     let rendered = output.to_string();
@@ -106,8 +112,8 @@ fn consuming_slog_json_redacts_without_clone() {
     let output = borrow_conflicted_event()
         .slog_redacted_json()
         .to_redacted_output();
-    let output = match output {
-        RedactedOutput::Json(output) => output,
+    let output = match output.view() {
+        RedactedOutputView::Json(output) => output,
         _ => panic!("slog JSON adapter should produce JSON output"),
     };
     let rendered = output.to_string();
@@ -164,7 +170,7 @@ fn borrowed_tracing_valuable_documents_live_refcell_borrow_panic() {
 // container the capability the adapters required, so `into_redacted_output` and
 // `slog_redacted_json` failed to compile even though `.redact()` worked. The
 // adapters now route through `.redact()`, so the shape cannot diverge from the
-// borrowed path again. These tests pin all three routes.
+// structural traversal again. These tests pin all three routes.
 #[derive(Clone, Sensitive, serde::Serialize)]
 struct ScalarEvent {
     #[sensitive(Secret)]
@@ -186,9 +192,9 @@ fn scalar_event() -> ScalarEvent {
 }
 
 #[test]
-fn sensitive_scalar_still_redacts_by_clone() {
+fn sensitive_scalar_still_redacts_structurally() {
     // Baseline path (`.redact()`) was never broken; assert it still holds so the
-    // consuming-route fix cannot silently regress the borrowed structural route.
+    // consuming-adapter fix cannot silently regress structural traversal.
     let redacted = scalar_event().redact();
     assert_eq!(redacted.account_number, 0);
     assert_eq!(redacted.note, "[REDACTED]");
@@ -197,8 +203,9 @@ fn sensitive_scalar_still_redacts_by_clone() {
 #[test]
 fn sensitive_scalar_consuming_output_redacts_without_clone() {
     // `into_redacted_output` did not compile for this shape before the fix.
-    let output = match scalar_event().into_redacted_output() {
-        RedactedOutput::Text(output) => output,
+    let selected = scalar_event().into_redacted_output();
+    let output = match selected.view() {
+        RedactedOutputView::Text(output) => output,
         other => panic!("structural output should be text, got {other:?}"),
     };
     assert!(output.contains("[REDACTED]"));
@@ -212,8 +219,12 @@ fn sensitive_scalar_consuming_slog_json_redacts_without_clone() {
     // `slog_redacted_json` is the pre-existing public API whose rebinding to the
     // owned capability caused the regression; prove the scalar redacts to 0 in
     // the serialized JSON and the sentinel/canary never leak.
-    let rendered = match scalar_event().slog_redacted_json().to_redacted_output() {
-        RedactedOutput::Json(output) => output.to_string(),
+    let rendered = match scalar_event()
+        .slog_redacted_json()
+        .to_redacted_output()
+        .view()
+    {
+        RedactedOutputView::Json(output) => output.to_string(),
         other => panic!("slog JSON adapter should produce JSON output, got {other:?}"),
     };
     assert!(rendered.contains("[REDACTED]"));
@@ -229,9 +240,9 @@ fn sensitive_scalar_consuming_slog_json_redacts_without_clone() {
 // consuming adapters now redact through `.redact()`, which has always honored
 // the override, so recursive types work on the consuming route as well.
 //
-// These tests pin both directions for one shape: the borrowed route
-// (`.redact()`, `SensitiveDisplay`) that always worked must not regress, and
-// the consuming route that used to be a compile error must now redact.
+// These tests pin structural `.redact()` and borrowed `SensitiveDisplay`
+// formatting, which already worked. Consuming adapters that previously failed
+// to compile must use the same structural traversal.
 #[derive(Clone, Sensitive, serde::Serialize)]
 struct RecursiveSecretNode {
     #[sensitive(Secret)]
@@ -254,7 +265,7 @@ fn recursive_secret_node() -> RecursiveSecretNode {
 }
 
 #[test]
-fn recursive_derive_still_redacts_by_clone() {
+fn recursive_derive_still_redacts_structurally() {
     let redacted = format!("{:?}", recursive_secret_node().redact());
     assert!(redacted.contains("[REDACTED]"));
     assert!(!redacted.contains(RECURSIVE_SECRET_CANARY));
@@ -266,8 +277,9 @@ fn recursive_derive_still_redacts_by_clone() {
 // DirectRedactableOwned`). It must now redact the whole recursive graph.
 #[test]
 fn recursive_derive_redacts_through_consuming_output() {
-    let output = match recursive_secret_node().into_redacted_output() {
-        RedactedOutput::Text(output) => output,
+    let selected = recursive_secret_node().into_redacted_output();
+    let output = match selected.view() {
+        RedactedOutputView::Text(output) => output,
         other => panic!("structural output should be text, got {other:?}"),
     };
     // Positive first, so a structurally broken output cannot let the negative
@@ -288,8 +300,9 @@ fn recursive_derive_redacts_through_consuming_json() {
     let rendered = match recursive_secret_node()
         .into_redacted_json()
         .to_redacted_output()
+        .view()
     {
-        RedactedOutput::Json(output) => output.to_string(),
+        RedactedOutputView::Json(output) => output.to_string(),
         other => panic!("json adapter should produce JSON output, got {other:?}"),
     };
     assert!(rendered.contains("[REDACTED]"));
@@ -303,8 +316,9 @@ fn recursive_derive_redacts_through_consuming_slog_json() {
     let rendered = match recursive_secret_node()
         .slog_redacted_json()
         .to_redacted_output()
+        .view()
     {
-        RedactedOutput::Json(output) => output.to_string(),
+        RedactedOutputView::Json(output) => output.to_string(),
         other => panic!("slog JSON adapter should produce JSON output, got {other:?}"),
     };
     assert!(
@@ -379,13 +393,23 @@ fn collection_event() -> CollectionEvent {
 
 #[test]
 fn sensitive_map_and_set_consuming_output_redacts_without_clone() {
-    let output = match collection_event().into_redacted_output() {
-        RedactedOutput::Text(output) => output,
+    let selected = collection_event().into_redacted_output();
+    let output = match selected.view() {
+        RedactedOutputView::Text(output) => output,
         other => panic!("structural output should be text, got {other:?}"),
     };
     assert!(output.contains("[REDACTED]"));
-    // Map keys are deliberately preserved; only values redact.
-    assert!(output.contains("api"));
+    // Debug fully suppresses annotated containers; structural traversal still preserves keys.
+    assert_eq!(
+        output,
+        "CollectionEvent { tokens: \"[REDACTED]\", tags: \"[REDACTED]\" }"
+    );
+    let redacted = collection_event().redact();
+    assert_eq!(
+        redacted.tokens,
+        BTreeMap::from([("api".to_owned(), "[REDACTED]".to_owned())])
+    );
+    assert_eq!(redacted.tags, BTreeSet::from(["[REDACTED]".to_owned()]));
     assert!(!output.contains(MAP_VALUE_CANARY));
     assert!(!output.contains(SET_VALUE_CANARY));
 }
@@ -393,8 +417,12 @@ fn sensitive_map_and_set_consuming_output_redacts_without_clone() {
 #[cfg(feature = "json")]
 #[test]
 fn sensitive_map_and_set_consuming_json_redacts_without_clone() {
-    let rendered = match collection_event().into_redacted_json().to_redacted_output() {
-        RedactedOutput::Json(output) => output.to_string(),
+    let rendered = match collection_event()
+        .into_redacted_json()
+        .to_redacted_output()
+        .view()
+    {
+        RedactedOutputView::Json(output) => output.to_string(),
         other => panic!("json adapter should produce JSON output, got {other:?}"),
     };
     assert!(rendered.contains("[REDACTED]"));
@@ -405,8 +433,12 @@ fn sensitive_map_and_set_consuming_json_redacts_without_clone() {
 #[cfg(feature = "slog")]
 #[test]
 fn sensitive_map_and_set_consuming_slog_json_redacts_without_clone() {
-    let rendered = match collection_event().slog_redacted_json().to_redacted_output() {
-        RedactedOutput::Json(output) => output.to_string(),
+    let rendered = match collection_event()
+        .slog_redacted_json()
+        .to_redacted_output()
+        .view()
+    {
+        RedactedOutputView::Json(output) => output.to_string(),
         other => panic!("slog JSON adapter should produce JSON output, got {other:?}"),
     };
     assert!(rendered.contains("[REDACTED]"));
@@ -444,8 +476,9 @@ fn ip_collection_event() -> IpCollectionEvent {
 #[cfg(feature = "ip-address")]
 #[test]
 fn ip_policy_bare_map_and_set_consuming_output_redacts_without_clone() {
-    let output = match ip_collection_event().into_redacted_output() {
-        RedactedOutput::Text(output) => output,
+    let selected = ip_collection_event().into_redacted_output();
+    let output = match selected.view() {
+        RedactedOutputView::Text(output) => output,
         other => panic!("structural output should be text, got {other:?}"),
     };
     // Positive first, so an empty or structurally broken output cannot let the
@@ -454,9 +487,14 @@ fn ip_policy_bare_map_and_set_consuming_output_redacts_without_clone() {
         output.contains("client_ip"),
         "output should be structural: {output}"
     );
-    assert!(output.contains('*'), "IP policy should mask: {output}");
-    // Map keys are deliberately preserved; only values redact.
-    assert!(output.contains('1'), "map key should survive: {output}");
+    assert_eq!(
+        output,
+        "IpCollectionEvent { client_ip: \"[REDACTED]\", peer_ips: \"[REDACTED]\", seen_ips: \"[REDACTED]\" }"
+    );
+    let redacted = ip_collection_event().redact();
+    assert_eq!(redacted.client_ip, "********3.42");
+    assert_eq!(redacted.peer_ips[&1], "********00.7");
+    assert_eq!(redacted.seen_ips, BTreeSet::from(["******2.55".to_owned()]));
     // The IP policy masks the leading octets; no raw address may survive on any
     // of the bare, map-value, or set-element routes.
     assert!(!output.contains(IP_CANARY));
@@ -470,8 +508,9 @@ fn ip_policy_bare_map_and_set_consuming_slog_json_redacts_without_clone() {
     let rendered = match ip_collection_event()
         .slog_redacted_json()
         .to_redacted_output()
+        .view()
     {
-        RedactedOutput::Json(output) => output.to_string(),
+        RedactedOutputView::Json(output) => output.to_string(),
         other => panic!("slog JSON adapter should produce JSON output, got {other:?}"),
     };
     assert!(
@@ -507,13 +546,13 @@ fn ip_policy_bare_map_and_set_consuming_slog_json_redacts_without_clone() {
 #[derive(Clone, Sensitive)]
 struct SharedOwnerEvent {
     #[sensitive(Secret)]
-    secret: std::sync::Arc<RefCell<String>>,
+    secret: Arc<RefCell<String>>,
 }
 
 #[derive(Clone, Sensitive)]
 struct RcOwnerEvent {
     #[sensitive(Secret)]
-    secret: std::rc::Rc<RefCell<String>>,
+    secret: Rc<RefCell<String>>,
 }
 
 const SHARED_OWNER_CANARY: &str = "round3-shared-owner-canary";
@@ -526,7 +565,7 @@ const SHARED_OWNER_CANARY: &str = "round3-shared-owner-canary";
 #[allow(clippy::arc_with_non_send_sync)]
 fn consuming_arc_refcell_still_panics_under_a_live_mutable_borrow() {
     let event = SharedOwnerEvent {
-        secret: std::sync::Arc::new(RefCell::new(SHARED_OWNER_CANARY.to_owned())),
+        secret: Arc::new(RefCell::new(SHARED_OWNER_CANARY.to_owned())),
     };
     let _borrow = event.secret.borrow_mut();
     let result = catch_unwind(AssertUnwindSafe(|| event.clone().into_redacted_output()));
@@ -539,7 +578,7 @@ fn consuming_arc_refcell_still_panics_under_a_live_mutable_borrow() {
 #[test]
 fn consuming_rc_refcell_still_panics_under_a_live_mutable_borrow() {
     let event = RcOwnerEvent {
-        secret: std::rc::Rc::new(RefCell::new(SHARED_OWNER_CANARY.to_owned())),
+        secret: Rc::new(RefCell::new(SHARED_OWNER_CANARY.to_owned())),
     };
     let _borrow = event.secret.borrow_mut();
     let result = catch_unwind(AssertUnwindSafe(|| event.clone().into_redacted_output()));
@@ -555,10 +594,11 @@ fn consuming_rc_refcell_still_panics_under_a_live_mutable_borrow() {
 #[allow(clippy::arc_with_non_send_sync)] // Same anti-pattern under test; see above.
 fn consuming_arc_refcell_redacts_when_unborrowed() {
     let event = SharedOwnerEvent {
-        secret: std::sync::Arc::new(RefCell::new(SHARED_OWNER_CANARY.to_owned())),
+        secret: Arc::new(RefCell::new(SHARED_OWNER_CANARY.to_owned())),
     };
-    let output = match event.into_redacted_output() {
-        RedactedOutput::Text(output) => output,
+    let selected = event.into_redacted_output();
+    let output = match selected.view() {
+        RedactedOutputView::Text(output) => output,
         other => panic!("structural output should be text, got {other:?}"),
     };
     assert!(output.contains("[REDACTED]"));
@@ -583,10 +623,7 @@ fn consuming_arc_refcell_redacts_when_unborrowed() {
 // trybuild counterpart.
 #[test]
 fn public_struct_with_private_field_type_compiles_and_redacts() {
-    let event = redactable_test_fixtures::PublicRedactedEvent::new(
-        "e0446-token-canary",
-        "e0446-note-canary",
-    );
+    let event = PublicRedactedEvent::new("e0446-token-canary", "e0446-note-canary");
     assert_eq!(event.detail_note(), "e0446-note-canary");
 
     let redacted = event.redact();
@@ -597,12 +634,10 @@ fn public_struct_with_private_field_type_compiles_and_redacts() {
 
 #[test]
 fn public_struct_with_private_field_type_redacts_through_consuming_output() {
-    let event = redactable_test_fixtures::PublicRedactedEvent::new(
-        "e0446-token-canary",
-        "e0446-note-canary",
-    );
-    let output = match event.into_redacted_output() {
-        RedactedOutput::Text(output) => output,
+    let event = PublicRedactedEvent::new("e0446-token-canary", "e0446-note-canary");
+    let selected = event.into_redacted_output();
+    let output = match selected.view() {
+        RedactedOutputView::Text(output) => output,
         other => panic!("structural output should be text, got {other:?}"),
     };
     assert!(output.contains("[REDACTED]"));

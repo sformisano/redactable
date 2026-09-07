@@ -18,10 +18,13 @@
 //! - [`NotSensitiveDebugExt`]: Provides `.not_sensitive_debug()`
 //! - [`NotSensitiveJsonExt`]: Provides `.not_sensitive_json()`
 
-use std::ops::{Deref, DerefMut};
+use std::{
+    fmt::{Debug, Display, Formatter, Result as FmtResult},
+    ops::{Deref, DerefMut},
+};
 
 #[cfg(feature = "json")]
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 #[cfg(feature = "json")]
 use super::output::serialize_redacted_json;
@@ -59,21 +62,21 @@ impl<T> DerefMut for NotSensitive<T> {
     }
 }
 
-impl<T> std::fmt::Display for NotSensitive<T>
+impl<T> Display for NotSensitive<T>
 where
-    T: std::fmt::Display,
+    T: Display,
 {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        std::fmt::Display::fmt(&self.0, f)
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
+        Display::fmt(&self.0, f)
     }
 }
 
-impl<T> std::fmt::Debug for NotSensitive<T>
+impl<T> Debug for NotSensitive<T>
 where
-    T: std::fmt::Debug,
+    T: Debug,
 {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        std::fmt::Debug::fmt(&self.0, f)
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
+        Debug::fmt(&self.0, f)
     }
 }
 
@@ -98,12 +101,12 @@ where
 /// [`crate::NotSensitiveValue`] when no logging format should be selected.
 ///
 /// ```
-/// use redactable::{NotSensitiveDisplay, ToRedactedOutput};
+/// use redactable::{NotSensitiveDisplay, RedactedOutputView, ToRedactedOutput};
 ///
 /// let count = NotSensitiveDisplay(42_u64);
 /// assert_eq!(
-///     count.to_redacted_output(),
-///     redactable::RedactedOutput::Text("42".to_owned())
+///     count.to_redacted_output().view(),
+///     RedactedOutputView::Text("42")
 /// );
 /// assert_eq!(count.into_inner(), 42);
 /// ```
@@ -126,28 +129,28 @@ impl<T> NotSensitiveDisplay<T> {
 
 impl<T> ToRedactedOutput for NotSensitiveDisplay<T>
 where
-    T: std::fmt::Display,
+    T: Display,
 {
     fn to_redacted_output(&self) -> RedactedOutput {
-        RedactedOutput::Text(self.0.to_string())
+        RedactedOutput::text(self.0.to_string())
     }
 }
 
-impl<T> std::fmt::Display for NotSensitiveDisplay<T>
+impl<T> Display for NotSensitiveDisplay<T>
 where
-    T: std::fmt::Display,
+    T: Display,
 {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        std::fmt::Display::fmt(&self.0, f)
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
+        Display::fmt(&self.0, f)
     }
 }
 
-impl<T> std::fmt::Debug for NotSensitiveDisplay<T>
+impl<T> Debug for NotSensitiveDisplay<T>
 where
-    T: std::fmt::Display,
+    T: Display,
 {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        std::fmt::Display::fmt(&self.0, f)
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
+        Display::fmt(&self.0, f)
     }
 }
 
@@ -155,7 +158,7 @@ where
 impl<T: Serialize> Serialize for NotSensitiveDisplay<T> {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
-        S: serde::Serializer,
+        S: Serializer,
     {
         self.0.serialize(serializer)
     }
@@ -165,7 +168,7 @@ impl<T: Serialize> Serialize for NotSensitiveDisplay<T> {
 impl<'de, T: Deserialize<'de>> Deserialize<'de> for NotSensitiveDisplay<T> {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
-        D: serde::Deserializer<'de>,
+        D: Deserializer<'de>,
     {
         T::deserialize(deserializer).map(Self)
     }
@@ -192,12 +195,12 @@ impl<'de, T: Deserialize<'de>> Deserialize<'de> for NotSensitiveDisplay<T> {
 /// [`crate::NotSensitiveValue`] when no logging format should be selected.
 ///
 /// ```
-/// use redactable::{NotSensitiveDebug, RedactedOutput, ToRedactedOutput};
+/// use redactable::{NotSensitiveDebug, RedactedOutputView, ToRedactedOutput};
 ///
 /// let id = NotSensitiveDebug(("public", 7_u64));
 /// assert_eq!(
-///     id.to_redacted_output(),
-///     RedactedOutput::Text("(\"public\", 7)".to_owned())
+///     id.to_redacted_output().view(),
+///     RedactedOutputView::Text("(\"public\", 7)")
 /// );
 /// assert_eq!(id.into_inner(), ("public", 7));
 /// ```
@@ -220,19 +223,19 @@ impl<T> NotSensitiveDebug<T> {
 
 impl<T> ToRedactedOutput for NotSensitiveDebug<T>
 where
-    T: std::fmt::Debug,
+    T: Debug,
 {
     fn to_redacted_output(&self) -> RedactedOutput {
-        RedactedOutput::Text(format!("{:?}", self.0))
+        RedactedOutput::text(format!("{:?}", self.0))
     }
 }
 
-impl<T> std::fmt::Debug for NotSensitiveDebug<T>
+impl<T> Debug for NotSensitiveDebug<T>
 where
-    T: std::fmt::Debug,
+    T: Debug,
 {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        std::fmt::Debug::fmt(&self.0, f)
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
+        Debug::fmt(&self.0, f)
     }
 }
 
@@ -240,7 +243,7 @@ where
 impl<T: Serialize> Serialize for NotSensitiveDebug<T> {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
-        S: serde::Serializer,
+        S: Serializer,
     {
         self.0.serialize(serializer)
     }
@@ -250,7 +253,7 @@ impl<T: Serialize> Serialize for NotSensitiveDebug<T> {
 impl<'de, T: Deserialize<'de>> Deserialize<'de> for NotSensitiveDebug<T> {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
-        D: serde::Deserializer<'de>,
+        D: Deserializer<'de>,
     {
         T::deserialize(deserializer).map(Self)
     }
@@ -281,16 +284,16 @@ where
     T: Serialize + ?Sized,
 {
     fn to_redacted_output(&self) -> RedactedOutput {
-        RedactedOutput::Json(serialize_redacted_json(self.0))
+        RedactedOutput::json(serialize_redacted_json(self.0))
     }
 }
 
 #[cfg(feature = "json")]
-impl<T> std::fmt::Debug for NotSensitiveJson<'_, T>
+impl<T> Debug for NotSensitiveJson<'_, T>
 where
     T: Serialize + ?Sized,
 {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         f.debug_tuple("NotSensitiveJson")
             .field(&self.to_redacted_output())
             .finish()
@@ -323,24 +326,24 @@ impl<T: Sized> NotSensitiveExt for T {}
 ///     let _ = value.not_sensitive_display();
 /// }
 /// ```
-pub trait NotSensitiveDisplayExt: Sized + std::fmt::Display {
+pub trait NotSensitiveDisplayExt: Sized + Display {
     /// Wraps a reference to the value as explicitly non-sensitive using `Display`.
     fn not_sensitive_display(&self) -> NotSensitiveDisplay<&Self> {
         NotSensitiveDisplay(self)
     }
 }
 
-impl<T> NotSensitiveDisplayExt for T where T: std::fmt::Display {}
+impl<T> NotSensitiveDisplayExt for T where T: Display {}
 
 /// Extension trait to mark values as explicitly non-sensitive using `Debug`.
-pub trait NotSensitiveDebugExt: Sized + std::fmt::Debug {
+pub trait NotSensitiveDebugExt: Sized + Debug {
     /// Wraps a reference to the value as explicitly non-sensitive using `Debug`.
     fn not_sensitive_debug(&self) -> NotSensitiveDebug<&Self> {
         NotSensitiveDebug(self)
     }
 }
 
-impl<T> NotSensitiveDebugExt for T where T: std::fmt::Debug {}
+impl<T> NotSensitiveDebugExt for T where T: Debug {}
 
 /// Extension trait to mark values as explicitly non-sensitive using JSON.
 #[cfg(feature = "json")]
@@ -358,5 +361,27 @@ where
 {
     fn not_sensitive_json(&self) -> NotSensitiveJson<'_, Self> {
         NotSensitiveJson(self)
+    }
+}
+
+/// Deliberately selected summary text for a logging boundary.
+///
+/// The caller chooses and reviews the text. This wrapper performs no redaction
+/// and makes no promise that the summary includes every field. Empty summaries
+/// are allowed; assert the intended summary separately in logging tests.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct UncheckedRedactedSummary(String);
+
+impl UncheckedRedactedSummary {
+    /// Declares the supplied text to be the intended logging summary.
+    #[must_use]
+    pub fn new(text: String) -> Self {
+        Self(text)
+    }
+}
+
+impl ToRedactedOutput for UncheckedRedactedSummary {
+    fn to_redacted_output(&self) -> RedactedOutput {
+        RedactedOutput::text(self.0.clone())
     }
 }

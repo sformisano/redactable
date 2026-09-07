@@ -5,10 +5,14 @@
 //! - [`SensitiveValue<T, P>`]: Wraps a value and applies a redaction policy
 //! - [`NotSensitiveValue<T>`]: Wraps a value that should pass through unchanged
 
-use std::marker::PhantomData;
+use std::{
+    fmt::{Debug, Formatter, Result as FmtResult},
+    marker::PhantomData,
+    ops::{Deref, DerefMut},
+};
 
 #[cfg(feature = "json")]
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use super::{
     redact::RedactableMapper,
@@ -39,9 +43,10 @@ use crate::{
 /// value unchanged. This is intentional because application storage and wire
 /// formats usually need the real value. Logging integrations redact before
 /// serializing the log value; direct `serde` serialization does not. If you
-/// need redacted JSON, use `.redacted()`, `.to_redacted_output()`, or
-/// `redacted_json()` (from `RedactedJsonExt`) at the logging/serialization
-/// boundary instead of serializing the wrapper directly.
+/// need redacted JSON, use `.redacted_json()` from `RedactedJsonExt`, which
+/// requires `Clone` and `Serialize`. `.redacted()` returns policy-selected
+/// text, and `.to_redacted_output()` selects Text output. These are distinct
+/// logging representations; direct transport serialization remains raw.
 ///
 /// Leaf values are **atomic**: `SensitiveValue` treats `T` as an opaque unit
 /// and does not traverse its fields.
@@ -77,6 +82,16 @@ where
     T: SensitiveWithPolicy<P>,
     P: RedactionPolicy,
 {
+}
+
+impl<T, P> RedactableWithFormatter for SensitiveValue<T, P>
+where
+    T: SensitiveWithPolicy<P>,
+    P: RedactionPolicy,
+{
+    fn fmt_redacted(&self, formatter: &mut Formatter<'_>) -> FmtResult {
+        formatter.write_str(&self.redacted())
+    }
 }
 
 impl<T, P> PolicyApplicableRefForGeneratedFormatting for SensitiveValue<T, P>
@@ -121,7 +136,7 @@ where
     T: SensitiveWithPolicy<P>,
     P: RedactionPolicy,
 {
-    fn fmt_policy_display<Q>(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result
+    fn fmt_policy_display<Q>(&self, formatter: &mut Formatter<'_>) -> FmtResult
     where
         Q: RedactionPolicy,
         Q::Kind: RecursivePolicyKind,
@@ -132,14 +147,14 @@ where
             .fmt_redacted(formatter)
     }
 
-    fn fmt_policy_debug<Q>(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result
+    fn fmt_policy_debug<Q>(&self, formatter: &mut Formatter<'_>) -> FmtResult
     where
         Q: RedactionPolicy,
         Q::Kind: RecursivePolicyKind,
         Self: PolicyApplicableRef,
-        <Self as PolicyApplicableRef>::Output: std::fmt::Debug,
+        <Self as PolicyApplicableRef>::Output: Debug,
     {
-        std::fmt::Debug::fmt(
+        Debug::fmt(
             &self.apply_policy_ref_for_generated_formatting::<Q, _>(&PolicyMapper),
             formatter,
         )
@@ -177,12 +192,12 @@ impl<T, P> SensitiveValue<T, P> {
     }
 }
 
-impl<T, P> std::fmt::Debug for SensitiveValue<T, P>
+impl<T, P> Debug for SensitiveValue<T, P>
 where
     T: SensitiveWithPolicy<P>,
     P: RedactionPolicy,
 {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         f.debug_tuple("SensitiveValue")
             .field(&self.redacted())
             .finish()
@@ -196,7 +211,7 @@ where
 {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
-        S: serde::Serializer,
+        S: Serializer,
     {
         self.0.serialize(serializer)
     }
@@ -209,7 +224,7 @@ where
 {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
-        D: serde::Deserializer<'de>,
+        D: Deserializer<'de>,
     {
         T::deserialize(deserializer).map(Self::from)
     }
@@ -236,12 +251,13 @@ where
 /// macro is for types you own; this wrapper is for foreign types you don't own.
 ///
 /// ```ignore
+/// use other_crate::ForeignConfig;
 /// use redactable::{NotSensitiveValue, Sensitive};
 ///
 /// #[derive(Clone, Sensitive)]
 /// struct Config {
 ///     // ForeignConfig doesn't implement RedactableWithMapper
-///     foreign: NotSensitiveValue<other_crate::ForeignConfig>,
+///     foreign: NotSensitiveValue<ForeignConfig>,
 /// }
 /// ```
 #[derive(Clone, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -263,7 +279,7 @@ impl<T> From<T> for NotSensitiveValue<T> {
     }
 }
 
-impl<T> std::ops::Deref for NotSensitiveValue<T> {
+impl<T> Deref for NotSensitiveValue<T> {
     type Target = T;
 
     fn deref(&self) -> &Self::Target {
@@ -271,14 +287,14 @@ impl<T> std::ops::Deref for NotSensitiveValue<T> {
     }
 }
 
-impl<T> std::ops::DerefMut for NotSensitiveValue<T> {
+impl<T> DerefMut for NotSensitiveValue<T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.0
     }
 }
 
-impl<T: std::fmt::Debug> std::fmt::Debug for NotSensitiveValue<T> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl<T: Debug> Debug for NotSensitiveValue<T> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         f.debug_tuple("NotSensitiveValue").field(&self.0).finish()
     }
 }
@@ -287,7 +303,7 @@ impl<T: std::fmt::Debug> std::fmt::Debug for NotSensitiveValue<T> {
 impl<T: Serialize> Serialize for NotSensitiveValue<T> {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
-        S: serde::Serializer,
+        S: Serializer,
     {
         self.0.serialize(serializer)
     }
@@ -300,7 +316,7 @@ where
 {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
-        D: serde::Deserializer<'de>,
+        D: Deserializer<'de>,
     {
         T::deserialize(deserializer).map(Self::from)
     }

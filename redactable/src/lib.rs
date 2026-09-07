@@ -4,12 +4,13 @@
 //! - **Policy markers**: what kind of sensitive data this is (e.g., `Pii`, `Token`, `Email`).
 //! - **Redaction policies**: how that data should be redacted.
 //!
-//! The derive macro walks your data and applies the policy at the boundary when
-//! you call `redact()` or `Redactable::redact()`.
+//! `Redactable::redact()` transforms a declared structural input. The free
+//! `redact()` function uses lower-level mapper support and can leave raw leaves
+//! unchanged. Use `ToRedactedOutput` for a selected logging boundary.
 //!
 //! What this crate does:
 //! - defines policy marker types (e.g., `Pii`, `Token`, `Email`)
-//! - defines redaction policies and the `redact` entrypoint
+//! - defines redaction policies and structural traversal operations
 //! - provides integrations behind feature flags (e.g. `slog`)
 //!
 //! What it does not do:
@@ -20,9 +21,11 @@
 //! `NotSensitiveDebug` or `NotSensitiveDisplay` only when the complete formatted
 //! value is safe to log. With the `json` feature, those wrappers serialize the
 //! raw inner value for transport or storage; Serde output is not redaction.
-//! Sensitive values should use `SensitiveValue` or a custom `ToRedactedOutput`
-//! projection instead. These APIs are available when the `redaction` feature is
-//! enabled.
+//! Use `SensitiveValue` for a leaf policy. Structured output can use `Sensitive`
+//! or `SensitiveDual` with `#[redactable(output = json)]`, or `.redacted_json()`.
+//! Both JSON routes require `json`, `Clone`, and `Serialize`. Custom
+//! `ToRedactedOutput` implementations can select a different projection or summary.
+//! The output APIs require `redaction`; JSON bridges additionally require `json`.
 //!
 //! The `Sensitive` derive macro lives in `redactable-derive` and is re-exported
 //! from this crate.
@@ -71,18 +74,6 @@ pub use redactable_derive::{
     NotSensitive, NotSensitiveDisplay, Sensitive, SensitiveDisplay, SensitiveDual,
 };
 
-/// Whether `redactable` itself was compiled with the `testing` feature.
-///
-/// Derive-generated `Debug` impls branch on `cfg!(test) || redactable::__TESTING`
-/// to decide between raw and redacted output. `cfg!(test)` is evaluated in the
-/// consumer crate, so a consumer's own tests still see raw values. This constant
-/// reflects `redactable`'s feature, so enabling `redactable/testing` reveals raw
-/// `Debug` output regardless of the consumer's own feature names.
-///
-/// Not part of the public API; used only by generated code.
-#[doc(hidden)]
-pub const __TESTING: bool = cfg!(feature = "testing");
-
 #[allow(unused_extern_crates)]
 extern crate self as redactable;
 
@@ -96,6 +87,8 @@ pub mod policy;
 mod redaction;
 #[cfg(feature = "slog")]
 pub mod slog;
+#[cfg(all(feature = "testing", feature = "json"))]
+pub mod testing;
 #[cfg(feature = "tracing")]
 pub mod tracing;
 
@@ -110,14 +103,15 @@ pub use policy::{
 #[cfg(feature = "json")]
 pub use redaction::{
     IntoRedactedJsonExt, NotSensitiveJson, NotSensitiveJsonExt, RedactedJson, RedactedJsonExt,
-    RedactedJsonRef,
+    RedactedJsonRef, RedactedList,
 };
 #[cfg(feature = "redaction")]
 pub use redaction::{
     IntoRedactedOutputExt, NotSensitive, NotSensitiveDebug, NotSensitiveDebugExt,
     NotSensitiveDisplay, NotSensitiveDisplayExt, NotSensitiveExt, NotSensitiveValue, Redactable,
     RedactableWithFormatter, RedactedFormatterRef, RedactedOutput, RedactedOutputExt,
-    RedactedOutputRef, SensitiveValue, SensitiveWithPolicy, ToRedactedOutput,
+    RedactedOutputRef, RedactedOutputView, SensitiveValue, SensitiveWithPolicy, ToRedactedOutput,
+    UncheckedRedactedSummary,
 };
 // Re-exports from redaction module: internal machinery (used by derive-generated code)
 #[doc(hidden)]

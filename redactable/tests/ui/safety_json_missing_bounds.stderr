@@ -1,0 +1,50 @@
+error[E0277]: the trait bound `MissingClone: Clone` is not satisfied
+ --> tests/ui/safety_json_missing_bounds.rs:2:10
+  |
+2 | #[derive(Sensitive, serde::Serialize)]
+  |          ^^^^^^^^^ the trait `Clone` is not implemented for `MissingClone`
+  |
+  = note: this error originates in the derive macro `Sensitive` (in Nightly builds, run with -Z macro-backtrace for more info)
+help: consider annotating `MissingClone` with `#[derive(Clone)]`
+  |
+4 + #[derive(Clone)]
+5 | struct MissingClone {
+  |
+
+error[E0277]: the trait bound `MissingSerialize: serde::Serialize` is not satisfied
+  --> tests/ui/safety_json_missing_bounds.rs:8:17
+   |
+ 8 | #[derive(Clone, Sensitive)]
+   |                 ^^^^^^^^^ unsatisfied trait bound
+   |
+help: the trait `Serialize` is not implemented for `MissingSerialize`
+  --> tests/ui/safety_json_missing_bounds.rs:10:1
+   |
+10 | struct MissingSerialize {
+   | ^^^^^^^^^^^^^^^^^^^^^^^
+   = note: for local types consider adding `#[derive(serde::Serialize)]` to your `MissingSerialize` type
+   = note: for types from other crates check whether the crate offers a `serde` feature flag
+   = help: the following other types implement trait `Serialize`:
+             &'a T
+             &'a mut T
+             ()
+             (T,)
+             (T0, T1)
+             (T0, T1, T2)
+             (T0, T1, T2, T3)
+             (T0, T1, T2, T3, T4)
+           and $N others
+   = note: this error originates in the derive macro `Sensitive` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0277]: the trait bound `DualMissingClone: Clone` is not satisfied
+  --> tests/ui/safety_json_missing_bounds.rs:14:10
+   |
+14 | #[derive(SensitiveDual, serde::Serialize)]
+   |          ^^^^^^^^^^^^^ the trait `Clone` is not implemented for `DualMissingClone`
+   |
+   = note: this error originates in the derive macro `SensitiveDual` (in Nightly builds, run with -Z macro-backtrace for more info)
+help: consider annotating `DualMissingClone` with `#[derive(Clone)]`
+   |
+17 + #[derive(Clone)]
+18 | struct DualMissingClone {
+   |

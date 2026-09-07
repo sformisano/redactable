@@ -1,4 +1,4 @@
-use std::fmt;
+use std::fmt::{Display, Formatter, Result as FmtResult};
 
 use safe::{NotSensitive, NotSensitiveDisplay, Sensitive, SensitiveDisplay};
 
@@ -23,8 +23,8 @@ pub struct PublicEvent {
 #[derive(NotSensitiveDisplay)]
 pub struct PublicDisplayEvent;
 
-impl fmt::Display for PublicDisplayEvent {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl Display for PublicDisplayEvent {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
         formatter.write_str("public")
     }
 }

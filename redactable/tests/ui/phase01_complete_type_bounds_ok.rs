@@ -1,7 +1,7 @@
 use std::{
     cell::Cell,
-    collections::{BTreeMap, HashMap},
-    fmt,
+    collections::{BTreeMap, HashMap, hash_map::DefaultHasher},
+    fmt::{Debug, Display, Formatter, Result as FmtResult},
     hash::BuildHasherDefault,
     marker::PhantomData,
     rc::Rc,
@@ -22,12 +22,13 @@ struct Leaf {
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 struct Key(u8);
 
-type Hasher = BuildHasherDefault<std::collections::hash_map::DefaultHasher>;
+type Hasher = BuildHasherDefault<DefaultHasher>;
 
 #[derive(Clone, Sensitive)]
 struct Complete<K, V, S> {
     arc: Arc<V>,
     rc: Rc<V>,
+    #[not_sensitive]
     cell: Cell<u8>,
     hash: HashMap<K, V, S>,
     tree: BTreeMap<K, V>,
@@ -35,11 +36,7 @@ struct Complete<K, V, S> {
 }
 
 #[derive(Clone, Sensitive)]
-struct Tuple<K, V, S>(
-    Arc<V>,
-    HashMap<K, V, S>,
-    NotSensitiveValue<K>,
-);
+struct Tuple<K, V, S>(Arc<V>, HashMap<K, V, S>, NotSensitiveValue<K>);
 
 #[derive(Clone, Sensitive)]
 enum Shapes<K, V, S> {
@@ -58,21 +55,35 @@ struct PolicyOutput<T> {
 #[derive(NotSensitiveDisplay)]
 struct DebugDisplay<T>(T);
 
-impl<T: fmt::Debug> fmt::Display for DebugDisplay<T> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl<T: Debug> Display for DebugDisplay<T> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         write!(f, "{:?}", self.0)
     }
 }
 
 fn main() {
     let mut hash = HashMap::with_hasher(Hasher::default());
-    hash.insert(Key(1), Leaf { value: "secret".into() });
+    hash.insert(
+        Key(1),
+        Leaf {
+            value: "secret".into(),
+        },
+    );
     let mut tree = BTreeMap::new();
-    tree.insert(Key(2), Leaf { value: "secret".into() });
+    tree.insert(
+        Key(2),
+        Leaf {
+            value: "secret".into(),
+        },
+    );
 
     let value = Complete {
-        arc: Arc::new(Leaf { value: "secret".into() }),
-        rc: Rc::new(Leaf { value: "secret".into() }),
+        arc: Arc::new(Leaf {
+            value: "secret".into(),
+        }),
+        rc: Rc::new(Leaf {
+            value: "secret".into(),
+        }),
         cell: Cell::new(7),
         hash,
         tree,
@@ -83,14 +94,18 @@ fn main() {
     assert_eq!(value.hash[&Key(1)].value, "[REDACTED]");
 
     let _: Tuple<Key, Leaf, Hasher> = Tuple(
-        Arc::new(Leaf { value: "secret".into() }),
+        Arc::new(Leaf {
+            value: "secret".into(),
+        }),
         HashMap::with_hasher(Hasher::default()),
         NotSensitiveValue(Key(3)),
     )
     .redact();
     let _: Shapes<Key, Leaf, Hasher> = Shapes::Unit.redact();
-    let _ = PolicyOutput { email: String::from("alice@example.com") }
-        .redacted_display()
-        .to_string();
+    let _ = PolicyOutput {
+        email: String::from("alice@example.com"),
+    }
+    .redacted_display()
+    .to_string();
     let _ = DebugDisplay(vec![1_u8, 2, 3]).to_string();
 }

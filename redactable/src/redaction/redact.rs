@@ -4,7 +4,7 @@
 //!
 //! - [`RedactableMapper`]: Internal trait for mapping values during traversal
 //! - [`PolicyApplicable`]: Types that can have policies applied recursively
-//! - [`redact`]: The entry point function for redacting a value
+//! - [`redact`]: Low-level mapper entry point; raw leaves may pass through unchanged
 //! - [`ScalarRedaction`]: Helper trait for scalar default values
 //!
 //! ## How `PolicyApplicable` Works

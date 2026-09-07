@@ -5,7 +5,7 @@
 // fixture is a real downstream consumer, so the public/private boundary here is
 // the one a library author actually hits.
 use redactable::{
-    IntoRedactedOutputExt, Redactable, RedactableMapper, RedactableWithMapper, RedactedOutput,
+    IntoRedactedOutputExt, Redactable, RedactableMapper, RedactableWithMapper, RedactedOutputView,
     Secret, Sensitive,
 };
 use serde::Serialize;
@@ -20,6 +20,8 @@ impl RedactableWithMapper for PrivateDetail {
         self
     }
 }
+
+impl Redactable for PrivateDetail {}
 
 /// Public named struct holding a private field type.
 #[derive(Clone, Sensitive, Serialize)]
@@ -36,6 +38,7 @@ pub struct PublicTuple(#[sensitive(Secret)] pub String, PrivateDetail);
 /// Public generic struct holding a private field type.
 #[derive(Clone, Sensitive)]
 pub struct PublicGeneric<T> {
+    #[not_sensitive]
     pub label: T,
     detail: PrivateDetail,
 }
@@ -57,8 +60,9 @@ pub fn exercise() {
     assert_eq!(redacted.detail.note, "note-canary");
 
     // The same shape through the consuming adapter.
-    let output = match event.into_redacted_output() {
-        RedactedOutput::Text(output) => output,
+    let selected = event.into_redacted_output();
+    let output = match selected.view() {
+        RedactedOutputView::Text(output) => output,
         other => panic!("structural output should be text, got {other:?}"),
     };
     assert!(output.contains("[REDACTED]"));

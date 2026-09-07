@@ -29,6 +29,8 @@ pub mod api {
         }
     }
 
+    impl Redactable for PrivateDetail {}
+
     /// Public named struct holding a private field type.
     #[derive(Clone, Sensitive)]
     pub struct PublicEvent {
@@ -44,6 +46,7 @@ pub mod api {
     /// Public generic struct holding a private field type.
     #[derive(Clone, Sensitive)]
     pub struct PublicGeneric<T> {
+        #[not_sensitive]
         pub label: T,
         detail: PrivateDetail,
     }

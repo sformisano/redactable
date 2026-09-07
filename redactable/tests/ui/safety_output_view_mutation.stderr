@@ -1,0 +1,19 @@
+error[E0599]: no method named `view_mut` found for struct `RedactedOutput` in the current scope
+ --> tests/ui/safety_output_view_mutation.rs:4:20
+  |
+4 |     let _ = output.view_mut();
+  |                    ^^^^^^^^
+  |
+help: there is a method `view` with a similar name
+  |
+4 -     let _ = output.view_mut();
+4 +     let _ = output.view();
+  |
+
+error[E0277]: the trait bound `RedactedOutput: From<RedactedOutputView<'_>>` is not satisfied
+ --> tests/ui/safety_output_view_mutation.rs:5:43
+  |
+5 |     let _: RedactedOutput = output.view().into();
+  |                                           ^^^^ the trait `From<RedactedOutputView<'_>>` is not implemented for `RedactedOutput`
+  |
+  = note: required for `RedactedOutputView<'_>` to implement `Into<RedactedOutput>`

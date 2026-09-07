@@ -1,4 +1,4 @@
-use super::*;
+use redactable::{NotSensitive, Redactable, Secret, Sensitive};
 
 #[test]
 fn passes_through_all_fields_unchanged() {

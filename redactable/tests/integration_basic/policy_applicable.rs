@@ -1,4 +1,5 @@
-use super::*;
+use redactable::{Redactable, Secret, Sensitive};
+use std::collections::HashMap;
 
 #[test]
 fn applies_policy_to_option_vec() {

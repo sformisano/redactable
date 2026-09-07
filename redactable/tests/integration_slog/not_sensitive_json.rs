@@ -1,4 +1,7 @@
-use super::*;
+use crate::log_redacted;
+use crate::slog_capture::{CapturedValue, CapturingSerializer, serialize_to_capture};
+use redactable::{NotSensitiveJsonExt, RedactedOutputView};
+use serde::Serialize;
 
 #[test]
 fn emits_structured_json() {
@@ -39,7 +42,7 @@ fn works_with_to_redacted_output() {
     };
 
     let output = log_redacted(&value.not_sensitive_json());
-    if let RedactedOutput::Json(json) = output {
+    if let RedactedOutputView::Json(json) = output.view() {
         assert_eq!(json["id"], 99);
         assert_eq!(json["label"], "ok");
     } else {

@@ -1,4 +1,6 @@
-use super::*;
+use crate::log_redacted;
+use redactable::{RedactedJsonExt, RedactedOutputView, Secret, Sensitive};
+use serde::Serialize;
 
 #[test]
 fn produces_json_output() {
@@ -6,6 +8,7 @@ fn produces_json_output() {
     struct Event {
         #[sensitive(Secret)]
         token: String,
+        #[not_sensitive]
         user: String,
     }
 
@@ -15,7 +18,7 @@ fn produces_json_output() {
     };
 
     let output = log_redacted(&event.redacted_json());
-    if let RedactedOutput::Json(json) = output {
+    if let RedactedOutputView::Json(json) = output.view() {
         assert_eq!(json["token"], "[REDACTED]");
         assert_eq!(json["user"], "alice");
     } else {

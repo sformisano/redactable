@@ -1,4 +1,8 @@
-use super::*;
+use crate::log_redacted;
+use redactable::{
+    NotSensitiveDebugExt, NotSensitiveDisplayExt, RedactedOutputExt, RedactedOutputView, Secret,
+    Sensitive, SensitiveValue, SensitiveWithPolicy, TextRedactionPolicy,
+};
 
 #[test]
 fn accepts_escape_hatches() {
@@ -20,6 +24,7 @@ fn accepts_escape_hatches() {
     #[cfg_attr(feature = "json", derive(serde::Serialize))]
     struct Event {
         id: SensitiveValue<ExternalId, Secret>,
+        #[not_sensitive]
         status: String,
     }
 
@@ -29,23 +34,21 @@ fn accepts_escape_hatches() {
     };
 
     assert_eq!(
-        log_redacted(&event.id),
-        RedactedOutput::Text("[REDACTED]".to_string())
+        log_redacted(&event.id).view(),
+        RedactedOutputView::Text("[REDACTED]")
     );
     assert_eq!(
-        log_redacted(&event.status.not_sensitive_display()),
-        RedactedOutput::Text("ok".to_string())
+        log_redacted(&event.status.not_sensitive_display()).view(),
+        RedactedOutputView::Text("ok")
     );
 
     let debug_output = log_redacted(&event.status.not_sensitive_debug());
-    assert_eq!(debug_output, RedactedOutput::Text("\"ok\"".to_string()));
+    assert_eq!(debug_output.view(), RedactedOutputView::Text("\"ok\""));
 
     let structured = log_redacted(&event.redacted_output());
     assert_eq!(
-        structured,
-        RedactedOutput::Text(
-            "Event { id: SensitiveValue(\"[REDACTED]\"), status: \"ok\" }".to_string()
-        )
+        structured.view(),
+        RedactedOutputView::Text("Event { id: SensitiveValue(\"[REDACTED]\"), status: \"ok\" }")
     );
 }
 
@@ -56,6 +59,7 @@ fn produces_debug_formatted_output() {
     struct Event {
         #[sensitive(Secret)]
         token: String,
+        #[not_sensitive]
         name: String,
     }
 
@@ -66,8 +70,8 @@ fn produces_debug_formatted_output() {
 
     let redacted_output = log_redacted(&event.redacted_output());
     assert_eq!(
-        redacted_output,
-        RedactedOutput::Text("Event { token: \"[REDACTED]\", name: \"alpha\" }".to_string())
+        redacted_output.view(),
+        RedactedOutputView::Text("Event { token: \"[REDACTED]\", name: \"alpha\" }")
     );
 }
 
@@ -87,15 +91,15 @@ fn containers_of_derived_types_stay_certified() {
         token: "secret".into(),
     }];
     assert_eq!(
-        log_redacted(&events.redacted_output()),
-        RedactedOutput::Text("[Event { token: \"[REDACTED]\" }]".to_string())
+        log_redacted(&events.redacted_output()).view(),
+        RedactedOutputView::Text("[Event { token: \"[REDACTED]\" }]")
     );
 
     let maybe_event = Some(Event {
         token: "secret".into(),
     });
     assert_eq!(
-        log_redacted(&maybe_event.redacted_output()),
-        RedactedOutput::Text("Some(Event { token: \"[REDACTED]\" })".to_string())
+        log_redacted(&maybe_event.redacted_output()).view(),
+        RedactedOutputView::Text("Some(Event { token: \"[REDACTED]\" })")
     );
 }

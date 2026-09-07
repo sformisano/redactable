@@ -1,4 +1,4 @@
-use super::*;
+use redactable::{Redactable, RedactionPolicy, Sensitive, TextPolicyKind, TextRedactionPolicy};
 
 #[test]
 fn applies_user_defined_policy() {
@@ -18,6 +18,7 @@ fn applies_user_defined_policy() {
     struct Record {
         #[sensitive(InternalId)]
         id: String,
+        #[not_sensitive]
         name: String,
     }
 

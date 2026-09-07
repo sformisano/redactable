@@ -1,3 +1,5 @@
+use std::fmt::{Display, Formatter, Result as FmtResult};
+
 use redactable::{NotSensitiveDisplay, RedactableWithFormatter};
 
 // Test basic struct with Display impl
@@ -7,8 +9,8 @@ struct PublicStatus {
     message: String,
 }
 
-impl std::fmt::Display for PublicStatus {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl Display for PublicStatus {
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         write!(f, "{}: {}", self.code, self.message)
     }
 }
@@ -32,8 +34,8 @@ enum RetryDecision {
     Abort,
 }
 
-impl std::fmt::Display for RetryDecision {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl Display for RetryDecision {
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         match self {
             Self::Retry { delay_ms } => write!(f, "Retry after {}ms", delay_ms),
             Self::Abort => write!(f, "Abort"),
@@ -56,8 +58,8 @@ fn generates_redactable_display_for_enum() {
 #[derive(Clone, NotSensitiveDisplay)]
 struct Marker;
 
-impl std::fmt::Display for Marker {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl Display for Marker {
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         write!(f, "Marker")
     }
 }
@@ -73,8 +75,8 @@ fn generates_redactable_display_for_unit_struct() {
 #[derive(Clone, NotSensitiveDisplay)]
 struct StatusCode(u16);
 
-impl std::fmt::Display for StatusCode {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl Display for StatusCode {
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         write!(f, "Status({})", self.0)
     }
 }
@@ -92,8 +94,8 @@ struct WithOwnDebug {
     value: String,
 }
 
-impl std::fmt::Display for WithOwnDebug {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl Display for WithOwnDebug {
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         write!(f, "WithOwnDebug({})", self.value)
     }
 }
@@ -119,8 +121,8 @@ struct Wrapper<T> {
     inner: T,
 }
 
-impl<T: std::fmt::Display> std::fmt::Display for Wrapper<T> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl<T: Display> Display for Wrapper<T> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         write!(f, "Wrapper({})", self.inner)
     }
 }
@@ -136,6 +138,7 @@ fn works_with_generic_types() {
 // This works because NotSensitiveDisplay also generates RedactableWithMapper
 mod inside_sensitive_container {
     use redactable::{NotSensitiveDisplay, Redactable, RedactableWithFormatter, Secret, Sensitive};
+    use std::fmt::{Debug, Display, Formatter, Result as FmtResult};
 
     // A simple enum with NotSensitiveDisplay that has a Display impl
     #[derive(Clone, NotSensitiveDisplay, PartialEq)]
@@ -145,8 +148,8 @@ mod inside_sensitive_container {
         Abort,
     }
 
-    impl std::fmt::Debug for RetryDecision {
-        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    impl Debug for RetryDecision {
+        fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
             match self {
                 Self::Retry => write!(f, "RetryDecision::Retry"),
                 Self::Abort => write!(f, "RetryDecision::Abort"),
@@ -154,8 +157,8 @@ mod inside_sensitive_container {
         }
     }
 
-    impl std::fmt::Display for RetryDecision {
-        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    impl Display for RetryDecision {
+        fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
             match self {
                 Self::Retry => write!(f, "Retry"),
                 Self::Abort => write!(f, "Abort"),
@@ -197,8 +200,8 @@ mod inside_sensitive_container {
             message: String,
         }
 
-        impl std::fmt::Debug for StatusInfo {
-            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        impl Debug for StatusInfo {
+            fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
                 f.debug_struct("StatusInfo")
                     .field("code", &self.code)
                     .field("message", &self.message)
@@ -206,8 +209,8 @@ mod inside_sensitive_container {
             }
         }
 
-        impl std::fmt::Display for StatusInfo {
-            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        impl Display for StatusInfo {
+            fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
                 write!(f, "{}: {}", self.code, self.message)
             }
         }

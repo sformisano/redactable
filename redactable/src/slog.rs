@@ -1,22 +1,24 @@
 //! Adapters for emitting redacted values through `slog`.
 //!
-//! This module exists to connect `crate::redaction::Redactable` with `slog` by
-//! providing `slog::Value` implementations that serialize redacted outputs as
-//! structured JSON via `slog`'s nested-value support.
+//! This module connects redacting adapters and explicit output declarations
+//! with `slog`. JSON adapters use nested-value support; the display adapter
+//! renders the representation selected by `ToRedactedOutput` as text.
 //!
 //! It is responsible for:
-//! - Ensuring the logged representation is derived from `Redactable::redact()`,
-//!   not from the original value.
+//! - Applying the operation selected by each adapter or named declaration.
 //! - Avoiding fallible logging APIs: serialization failures are represented as
 //!   placeholder strings rather than propagated as errors.
 //!
 //! It does not configure `slog`, define redaction policy, or attempt to validate
 //! that a `Redactable` implementation performs correct redaction.
 
-use std::fmt;
+use std::fmt::{Debug, Display};
+
+#[cfg(feature = "tracing")]
+use crate::tracing::TracingRedacted;
 
 use serde::Serialize;
-use slog::{Key, Record, Result as SlogResult, Serializer, Value as SlogValue};
+use slog::{Key, Record, Result as SlogResult, Serde, Serializer, Value as SlogValue};
 
 pub use crate::redaction::RedactedJson;
 use crate::{
@@ -24,7 +26,8 @@ use crate::{
     redaction::{
         NotSensitive, NotSensitiveDebug, NotSensitiveDisplay, NotSensitiveJson, Redactable,
         RedactableWithFormatter, RedactedJsonRef, RedactedOutput, RedactedOutputRef,
-        SensitiveValue, SensitiveWithPolicy, ToRedactedOutput, serialize_redacted_json,
+        RedactedOutputView, SensitiveValue, SensitiveWithPolicy, ToRedactedOutput,
+        serialize_redacted_json,
     },
 };
 
@@ -55,7 +58,7 @@ impl SlogValue for RedactedJson {
         key: Key,
         serializer: &mut dyn Serializer,
     ) -> SlogResult {
-        let nested = slog::Serde(self.value().clone());
+        let nested = Serde(self.value().clone());
         SlogValue::serialize(&nested, record, key, serializer)
     }
 }
@@ -68,11 +71,11 @@ fn emit_output(
     key: Key,
     serializer: &mut dyn Serializer,
 ) -> SlogResult {
-    match output {
-        RedactedOutput::Text(text) => serializer.emit_str(key, text),
+    match output.view() {
+        RedactedOutputView::Text(text) => serializer.emit_str(key, text),
         #[cfg(feature = "json")]
-        RedactedOutput::Json(json) => {
-            let nested = slog::Serde(json.clone());
+        RedactedOutputView::Json(json) => {
+            let nested = Serde(json.clone());
             SlogValue::serialize(&nested, record, key, serializer)
         }
     }
@@ -121,10 +124,10 @@ macro_rules! impl_slog_redacted {
 
 impl_slog_redacted!(RedactedOutput);
 impl_slog_redacted!(@ [T, P] SensitiveValue<T, P> where T: SensitiveWithPolicy<P>, P: RedactionPolicy);
-impl_slog_redacted!(@ [T] NotSensitiveDisplay<T> where T: fmt::Display);
-impl_slog_redacted!(@ [T] NotSensitiveDebug<T> where T: fmt::Debug);
+impl_slog_redacted!(@ [T] NotSensitiveDisplay<T> where T: Display);
+impl_slog_redacted!(@ [T] NotSensitiveDebug<T> where T: Debug);
 impl_slog_redacted!(@ [T] NotSensitiveJson<'_, T> where T: Serialize + ?Sized);
-impl_slog_redacted!(@ [T] RedactedOutputRef<'_, T> where T: Redactable + Clone + fmt::Debug);
+impl_slog_redacted!(@ [T] RedactedOutputRef<'_, T> where T: Redactable + Clone + Debug);
 impl_slog_redacted!(@ [T] RedactedJsonRef<'_, T> where T: Redactable + Clone + Serialize);
 
 /// Extension trait for ergonomic slog logging of redacted values as JSON.
@@ -149,10 +152,20 @@ impl_slog_redacted!(@ [T] RedactedJsonRef<'_, T> where T: Redactable + Clone + S
 /// anti-pattern regardless.)
 ///
 /// ## Example
-/// ```ignore
+/// ```
+/// # #![allow(hidden_glob_reexports)]
+/// # pub use redactable::*;
 /// use redactable::slog::SlogRedactedExt;
+/// use redactable::{Secret, Sensitive};
 ///
-/// info!(logger, "event"; "data" => event.slog_redacted_json());
+/// #[derive(serde::Serialize, Sensitive)]
+/// struct Event { #[sensitive(Secret)] token: String }
+/// # fn main() {
+/// use ::slog::{Discard, Logger};
+/// let event = Event { token: "secret".into() };
+/// let logger = Logger::root(Discard, ::slog::o!());
+/// ::slog::info!(logger, "event"; "data" => event.slog_redacted_json());
+/// # }
 /// ```
 pub trait SlogRedactedExt: Redactable + Serialize + Sized {
     /// Redacts `self` and returns a `slog::Value` that serializes as structured JSON.
@@ -198,7 +211,7 @@ pub fn __slog_serialize_not_sensitive<T: Serialize>(
     serializer: &mut dyn Serializer,
 ) -> SlogResult {
     let json_value = serialize_redacted_json(value);
-    let nested = slog::Serde(json_value);
+    let nested = Serde(json_value);
     SlogValue::serialize(&nested, record, key, serializer)
 }
 
@@ -215,11 +228,8 @@ impl<'a, T: ?Sized> RedactedDisplayValue<'a, T> {
     }
 }
 
-// Special case: formats directly through RedactableWithFormatter. The
-// ToRedactedOutput bound keeps raw formatter passthroughs (String, scalars)
-// from being certified: `RedactedDisplayValue::new(&raw)` would otherwise emit
-// the raw value while carrying the SlogRedacted marker. SensitiveDisplay and
-// NotSensitiveDisplay derives generate ToRedactedOutput; passthroughs do not.
+// Keep the existing formatter and producer admission bounds. The producer
+// selects the content; its JSON representation is emitted as compact text.
 impl<T> SlogValue for RedactedDisplayValue<'_, T>
 where
     T: RedactableWithFormatter + ToRedactedOutput,
@@ -230,8 +240,8 @@ where
         key: Key,
         serializer: &mut dyn Serializer,
     ) -> SlogResult {
-        let redacted = self.0.redacted_display();
-        serializer.emit_arguments(key, &format_args!("{redacted}"))
+        let text = self.0.to_redacted_output().into_text();
+        serializer.emit_str(key, &text)
     }
 }
 
@@ -243,7 +253,8 @@ impl<T> SlogRedacted for RedactedDisplayValue<'_, T> where
 /// Extension trait for logging `RedactableWithFormatter` types through slog.
 ///
 /// This is the display-string counterpart to [`SlogRedactedExt::slog_redacted_json`].
-/// Use this when you want redacted display output without JSON serialization overhead.
+/// Text output is emitted verbatim. Selected JSON output becomes compact JSON
+/// text, as with tracing's display adapter. The producer runs once per emission.
 ///
 /// Requires [`ToRedactedOutput`]: scalar formatter passthroughs like `String`
 /// format unchanged, which would let raw values be certified as redacted slog
@@ -251,13 +262,23 @@ impl<T> SlogRedacted for RedactedDisplayValue<'_, T> where
 /// `ToRedactedOutput`; raw values never implement it.
 ///
 /// ## Example
-/// ```ignore
+/// ```
+/// # #![allow(hidden_glob_reexports)]
+/// # pub use redactable::*;
 /// use redactable::slog::SlogRedactedDisplayExt;
+/// use redactable::SensitiveDisplay;
 ///
-/// info!(logger, "event"; "data" => event.slog_redacted_display());
+/// #[derive(SensitiveDisplay)]
+/// #[error("declined")]
+/// struct Event;
+/// # fn main() {
+/// use ::slog::{Discard, Logger};
+/// let logger = Logger::root(Discard, ::slog::o!());
+/// ::slog::info!(logger, "event"; "data" => Event.slog_redacted_display());
+/// # }
 /// ```
 pub trait SlogRedactedDisplayExt: RedactableWithFormatter {
-    /// Wraps `&self` for slog logging using `RedactableWithFormatter` formatting.
+    /// Wraps `&self` for slog logging of its selected output as text.
     fn slog_redacted_display(&self) -> RedactedDisplayValue<'_, Self>
     where
         Self: Sized,
@@ -269,7 +290,7 @@ pub trait SlogRedactedDisplayExt: RedactableWithFormatter {
 impl<T> SlogRedactedDisplayExt for T where T: RedactableWithFormatter + ToRedactedOutput {}
 
 #[cfg(feature = "tracing")]
-impl<T> crate::tracing::TracingRedacted for RedactedDisplayValue<'_, T> where
+impl<T> TracingRedacted for RedactedDisplayValue<'_, T> where
     T: RedactableWithFormatter + ToRedactedOutput
 {
 }

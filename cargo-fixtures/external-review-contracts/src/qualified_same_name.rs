@@ -1,7 +1,9 @@
-use redactable::{Redactable, RedactableMapper, RedactableWithMapper, Sensitive};
+// Qualified type paths intentionally exercise derive name resolution.
+use redactable::{Redactable, Sensitive};
+use redactable::{Secret, SensitiveValue};
 
 pub mod other {
-    use super::{RedactableMapper, RedactableWithMapper};
+    use redactable::{Redactable, RedactableMapper, RedactableWithMapper};
 
     pub struct Node<T>(pub T);
 
@@ -10,6 +12,7 @@ pub mod other {
             Self(self.0.redact_with(mapper))
         }
     }
+    impl<T: Redactable> Redactable for Node<T> {}
 }
 
 #[derive(Sensitive)]
@@ -18,8 +21,12 @@ struct Node<T> {
 }
 
 pub fn exercise() {
+    use self::other::Node as OtherNode;
+
     let _ = Node {
-        child: other::Node(String::from("secret")),
+        child: OtherNode(SensitiveValue::<String, Secret>::from(String::from(
+            "secret",
+        ))),
     }
     .redact();
 }

@@ -1,24 +1,19 @@
 //! Downstream compile proof for a Rust-keyword Cargo dependency alias.
 
-use std::{
-    fs,
-    process::Command,
-    time::{SystemTime, UNIX_EPOCH},
-};
+use std::{fs, path::Path, process::Command};
+
+use tempfile::Builder;
 
 #[test]
 fn keyword_alias_builds_default_slog_and_tracing_generated_paths() {
-    let workspace = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+    let workspace = Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent()
         .expect("runtime crate is in the workspace root");
-    let unique = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .expect("clock is after epoch")
-        .as_nanos();
-    let fixture = std::env::temp_dir().join(format!(
-        "redactable-keyword-alias-{}-{unique}",
-        std::process::id()
-    ));
+    let fixture_owner = Builder::new()
+        .prefix("rd-keyword-")
+        .tempdir()
+        .expect("create owned keyword alias fixture under TMPDIR");
+    let fixture = fixture_owner.path();
     fs::create_dir_all(fixture.join("src")).expect("create keyword alias fixture");
 
     let manifest = format!(
@@ -43,7 +38,11 @@ features = ["slog", "tracing"]
         fixture.join("src/main.rs"),
         r#"#![allow(dead_code)]
 
-use r#type::{NotSensitiveDisplay, Sensitive, SensitiveDisplay};
+use core::fmt::{Display, Formatter, Result as FmtResult};
+use r#type::{
+    NotSensitiveDisplay, Sensitive, SensitiveDisplay,
+    slog::SlogRedacted, tracing::TracingRedacted,
+};
 
 #[derive(Clone, serde::Serialize, Sensitive)]
 struct SecretValue(#[sensitive(r#type::Secret)] String);
@@ -58,15 +57,15 @@ struct DisplaySecret {
 #[derive(NotSensitiveDisplay)]
 struct PublicValue;
 
-impl core::fmt::Display for PublicValue {
-    fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+impl Display for PublicValue {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
         formatter.write_str("public")
     }
 }
 
 fn main() {
-    fn slog<T: r#type::slog::SlogRedacted>() {}
-    fn tracing<T: r#type::tracing::TracingRedacted>() {}
+    fn slog<T: SlogRedacted>() {}
+    fn tracing<T: TracingRedacted>() {}
     slog::<SecretValue>();
     slog::<DisplaySecret>();
     tracing::<SecretValue>();
@@ -85,7 +84,9 @@ fn main() {
         .output()
         .expect("run keyword alias cargo check");
 
-    let _ = fs::remove_dir_all(&fixture);
+    fixture_owner
+        .close()
+        .expect("remove owned keyword alias fixture");
     assert!(
         output.status.success(),
         "keyword dependency alias did not compile:\n{}",
