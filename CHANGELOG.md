@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.12.1 - 2026-09-11
+
+### Changed
+
+- Refreshed repository automation dependencies.
+
+### Documentation
+
+- Includes the revised README in the crates.io package.
+
 ## 0.12.0 - 2026-09-07
 
 ### Breaking

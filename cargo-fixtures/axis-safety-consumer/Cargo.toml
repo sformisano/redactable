@@ -6,7 +6,7 @@ rust-version = "1.97"
 publish = false
 
 [dependencies]
-redactable = { path = "../../redactable", version = "=0.12.0", default-features = false, features = ["json"] }
+redactable = { path = "../../redactable", version = "=0.12.1", default-features = false, features = ["json"] }
 serde = { version = "1", features = ["derive"] }
 # Keep the default sorted object representation: selected JSON text has exact bytes.
 serde_json = { version = "1", default-features = false, features = ["std"] }

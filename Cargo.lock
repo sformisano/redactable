@@ -384,7 +384,7 @@ dependencies = [
 
 [[package]]
 name = "redactable"
-version = "0.12.0"
+version = "0.12.1"
 dependencies = [
  "chrono",
  "proptest",
@@ -403,7 +403,7 @@ dependencies = [
 
 [[package]]
 name = "redactable-derive"
-version = "0.12.0"
+version = "0.12.1"
 dependencies = [
  "proc-macro-crate",
  "proc-macro2",
