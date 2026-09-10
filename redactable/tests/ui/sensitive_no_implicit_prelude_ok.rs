@@ -1,7 +1,6 @@
 #![no_implicit_prelude]
 
 extern crate redactable;
-#[cfg(feature = "slog")]
 extern crate serde;
 
 #[derive(redactable::SensitiveDisplay)]
@@ -21,15 +20,15 @@ impl ::core::fmt::Display for PublicValue {
 }
 
 #[derive(::core::clone::Clone, redactable::Sensitive)]
-#[cfg_attr(feature = "slog", derive(serde::Serialize))]
+#[derive(serde::Serialize)]
 struct StructuralSecret(#[sensitive(redactable::Secret)] ::std::string::String);
 
 fn main() {
     let display = DisplaySecret {
         value: <::std::string::String as ::core::convert::From<&str>>::from("secret-canary"),
     };
-    let _ = redactable::ToRedactedOutput::to_redacted_output(&display);
-    let _ = redactable::ToRedactedOutput::to_redacted_output(&PublicValue);
+    let _ = redactable::ToRedacted::to_redacted(&display);
+    let _ = redactable::ToRedacted::to_redacted(&PublicValue);
     let structural = StructuralSecret(
         <::std::string::String as ::core::convert::From<&str>>::from("secret-canary"),
     );

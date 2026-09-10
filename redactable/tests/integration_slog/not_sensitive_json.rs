@@ -1,4 +1,7 @@
-use super::*;
+use crate::log_redacted;
+use crate::slog_capture::{CapturedValue, CapturingSerializer, serialize_to_capture};
+use redactable::BypassJsonRedaction;
+use serde::Serialize;
 
 #[test]
 fn emits_structured_json() {
@@ -13,7 +16,7 @@ fn emits_structured_json() {
         label: "ok".into(),
     };
 
-    let wrapped = value.not_sensitive_json();
+    let wrapped = BypassJsonRedaction(&value);
     let mut serializer = CapturingSerializer::new();
     serialize_to_capture(&wrapped, "meta", &mut serializer);
 
@@ -26,7 +29,7 @@ fn emits_structured_json() {
 }
 
 #[test]
-fn works_with_to_redacted_output() {
+fn works_with_to_redacted() {
     #[derive(Serialize)]
     struct Metadata {
         id: u64,
@@ -38,11 +41,7 @@ fn works_with_to_redacted_output() {
         label: "ok".into(),
     };
 
-    let output = log_redacted(&value.not_sensitive_json());
-    if let RedactedOutput::Json(json) = output {
-        assert_eq!(json["id"], 99);
-        assert_eq!(json["label"], "ok");
-    } else {
-        panic!("Expected Json output");
-    }
+    let json = log_redacted(&BypassJsonRedaction(&value)).json();
+    assert_eq!(json["id"], 99);
+    assert_eq!(json["label"], "ok");
 }

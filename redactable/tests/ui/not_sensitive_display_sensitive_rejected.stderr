@@ -1,4 +1,4 @@
-error: `#[sensitive]` attributes are not allowed on `NotSensitiveDisplay` types
+error: `#[sensitive]` attributes are not allowed on `NotSensitiveDisplay` types; derive `Sensitive` and declare its fields when traversal is needed
  --> tests/ui/not_sensitive_display_sensitive_rejected.rs:8:5
   |
 8 |     #[sensitive(redactable::Secret)]

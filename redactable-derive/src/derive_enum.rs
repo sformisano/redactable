@@ -6,6 +6,7 @@
 use proc_macro2::{Ident, TokenStream};
 use quote::{quote, quote_spanned};
 use syn::{DataEnum, Fields, Result, spanned::Spanned};
+use syn::{FieldsNamed, FieldsUnnamed, Generics};
 
 use crate::{
     DeriveOutput, crate_path,
@@ -23,7 +24,6 @@ struct VariantContext<'a> {
     variant_ident: &'a Ident,
     arms: &'a mut Vec<TokenStream>,
     debug_redacted_arms: &'a mut Vec<TokenStream>,
-    debug_unredacted_arms: &'a mut Vec<TokenStream>,
     formatter: &'a Ident,
     fresh: &'a mut FreshIdentAllocator,
 }
@@ -31,7 +31,7 @@ struct VariantContext<'a> {
 pub(crate) fn derive_enum(
     name: &Ident,
     data: DataEnum,
-    _generics: &syn::Generics,
+    _generics: &Generics,
     formatter: &Ident,
     mapper: &Ident,
     fresh: &mut FreshIdentAllocator,
@@ -41,8 +41,7 @@ pub(crate) fn derive_enum(
     let mut used_generics = Vec::new();
     let mut policy_applicable_generics = Vec::new();
     let mut debug_redacted_arms = Vec::new();
-    let mut debug_unredacted_arms = Vec::new();
-    let mut debug_unredacted_generics = Vec::new();
+    let mut debug_generics = Vec::new();
 
     for variant in data.variants {
         reject_variant_sensitivity_attrs(&variant.attrs)?;
@@ -52,7 +51,6 @@ pub(crate) fn derive_enum(
             variant_ident,
             arms: &mut arms,
             debug_redacted_arms: &mut debug_redacted_arms,
-            debug_unredacted_arms: &mut debug_unredacted_arms,
             formatter,
             fresh,
         };
@@ -60,7 +58,7 @@ pub(crate) fn derive_enum(
             container_path: &container_path,
             container_predicates: &mut used_generics,
             policy_predicates: &mut policy_applicable_generics,
-            debug_unredacted_predicates: &mut debug_unredacted_generics,
+            debug_predicates: &mut debug_generics,
             mapper,
         };
 
@@ -92,23 +90,12 @@ pub(crate) fn derive_enum(
         }
     };
 
-    let debug_unredacted_body = if debug_unredacted_arms.is_empty() {
-        quote! { match *self {} }
-    } else {
-        quote! {
-            match self {
-                #(#debug_unredacted_arms),*
-            }
-        }
-    };
-
     Ok(DeriveOutput {
         redaction_body: body,
         used_generics,
         policy_applicable_generics,
         debug_redacted_body,
-        debug_unredacted_body,
-        debug_unredacted_generics,
+        debug_generics,
     })
 }
 
@@ -123,15 +110,12 @@ fn derive_unit_variant(ctx: &mut VariantContext<'_>) {
     ctx.debug_redacted_arms.push(quote! {
         #name::#variant_ident => #formatter.write_str(#debug_name)
     });
-    ctx.debug_unredacted_arms.push(quote! {
-        #name::#variant_ident => #formatter.write_str(#debug_name)
-    });
 }
 
 fn derive_named_variant(
     variant_ctx: &mut VariantContext<'_>,
     derive_ctx: &mut DeriveContext<'_>,
-    fields: syn::FieldsNamed,
+    fields: FieldsNamed,
 ) -> Result<()> {
     let formatter = variant_ctx.formatter;
     let debug = variant_ctx.fresh.fresh("__redactable_debug");
@@ -144,7 +128,6 @@ fn derive_named_variant(
     let mut transforms = Vec::new();
     let mut debug_redacted_fields = Vec::new();
     let mut debug_redacted_patterns = Vec::new();
-    let mut debug_unredacted_fields = Vec::new();
 
     for field in fields.named {
         let span = field.span();
@@ -180,13 +163,9 @@ fn derive_named_variant(
                 #debug.field(stringify!(#ident), #binding);
             }
         };
-        let debug_unredacted_field = quote_spanned! { span =>
-            #debug.field(stringify!(#ident), #binding);
-        };
 
         transforms.push(transform);
         debug_redacted_fields.push(debug_redacted_field);
-        debug_unredacted_fields.push(debug_unredacted_field);
     }
 
     let pattern = quote! { { #(#patterns),* } };
@@ -205,20 +184,13 @@ fn derive_named_variant(
             #debug.finish()
         }
     });
-    variant_ctx.debug_unredacted_arms.push(quote! {
-        #name::#variant_ident #pattern => {
-            let mut #debug = #formatter.debug_struct(#debug_name);
-            #(#debug_unredacted_fields)*
-            #debug.finish()
-        }
-    });
     Ok(())
 }
 
 fn derive_unnamed_variant(
     variant_ctx: &mut VariantContext<'_>,
     derive_ctx: &mut DeriveContext<'_>,
-    fields: syn::FieldsUnnamed,
+    fields: FieldsUnnamed,
 ) -> Result<()> {
     let formatter = variant_ctx.formatter;
     let debug = variant_ctx.fresh.fresh("__redactable_debug");
@@ -230,7 +202,6 @@ fn derive_unnamed_variant(
     let mut transforms = Vec::new();
     let mut debug_redacted_fields = Vec::new();
     let mut debug_redacted_patterns = Vec::new();
-    let mut debug_unredacted_fields = Vec::new();
 
     for (index, field) in fields.unnamed.into_iter().enumerate() {
         let ident = variant_ctx.fresh.fresh(&format!("field_{index}"));
@@ -263,13 +234,9 @@ fn derive_unnamed_variant(
                 #debug.field(#binding);
             }
         };
-        let debug_unredacted_field = quote_spanned! { span =>
-            #debug.field(#binding);
-        };
 
         transforms.push(transform);
         debug_redacted_fields.push(debug_redacted_field);
-        debug_unredacted_fields.push(debug_unredacted_field);
     }
 
     variant_ctx.arms.push(quote! {
@@ -282,13 +249,6 @@ fn derive_unnamed_variant(
         #name::#variant_ident ( #(#debug_redacted_patterns),* ) => {
             let mut #debug = #formatter.debug_tuple(#debug_name);
             #(#debug_redacted_fields)*
-            #debug.finish()
-        }
-    });
-    variant_ctx.debug_unredacted_arms.push(quote! {
-        #name::#variant_ident ( #(#bindings),* ) => {
-            let mut #debug = #formatter.debug_tuple(#debug_name);
-            #(#debug_unredacted_fields)*
             #debug.finish()
         }
     });

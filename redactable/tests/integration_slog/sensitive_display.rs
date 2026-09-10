@@ -1,4 +1,12 @@
-use super::*;
+use std::fmt::{Debug, Display, Formatter, Result as FmtResult};
+
+use crate::log_redacted;
+use crate::slog_capture::{CapturedValue, CapturingSerializer, serialize_to_capture};
+use redactable::{
+    Pii, Redactable, RedactableMapper, RedactableWithFormatter, RedactableWithMapper, Secret,
+    Sensitive, SensitiveDisplay, Token,
+};
+use serde::Serialize;
 
 #[test]
 fn emits_redacted_string() {
@@ -51,7 +59,7 @@ fn emits_redacted_string() {
 }
 
 #[test]
-fn works_with_to_redacted_output() {
+fn works_with_to_redacted() {
     #[derive(SensitiveDisplay)]
     enum LoginError {
         #[error("login failed for {user} {password}")]
@@ -69,10 +77,7 @@ fn works_with_to_redacted_output() {
     };
 
     let output = log_redacted(&err);
-    assert_eq!(
-        output,
-        RedactedOutput::Text("login failed for alice [REDACTED]".to_string())
-    );
+    assert_eq!(output.text(), "login failed for alice [REDACTED]");
 }
 
 #[test]
@@ -86,8 +91,8 @@ fn handles_nested_errors() {
         },
     }
 
-    impl fmt::Display for InnerError {
-        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    impl Display for InnerError {
+        fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
             self.fmt_redacted(f)
         }
     }
@@ -125,8 +130,8 @@ fn handles_raw_opt_out() {
     #[derive(Debug)]
     struct RawContext;
 
-    impl fmt::Display for RawContext {
-        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    impl Display for RawContext {
+        fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
             f.write_str("raw-context")
         }
     }
@@ -186,14 +191,14 @@ fn handles_doc_comment_template() {
 fn handles_debug_specifiers() {
     struct ModeValue;
 
-    impl fmt::Display for ModeValue {
-        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    impl Display for ModeValue {
+        fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
             f.write_str("display")
         }
     }
 
-    impl fmt::Debug for ModeValue {
-        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    impl Debug for ModeValue {
+        fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
             f.write_str("debug")
         }
     }

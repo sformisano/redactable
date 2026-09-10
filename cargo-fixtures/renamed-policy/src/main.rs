@@ -5,7 +5,7 @@ use safe::{Redactable, Sensitive};
 
 type Amount = u64;
 
-#[derive(Clone, Sensitive)]
+#[derive(serde::Serialize, Clone, Sensitive)]
 struct RenamedPolicies {
     #[sensitive(safe::Secret)]
     amount: Amount,

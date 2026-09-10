@@ -1,6 +1,6 @@
 use redactable::{Redactable, RedactableWithFormatter, Secret, SensitiveDual};
 
-#[derive(SensitiveDual)]
+#[derive(Clone, serde::Serialize, SensitiveDual)]
 #[error("{value}")]
 struct Combined {
     #[sensitive(Secret)]

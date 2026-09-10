@@ -17,7 +17,8 @@ use rustc_json::compiler_error_lines;
 
 #[test]
 fn direct_only_policy_leaf_matrix_rejects_every_recursive_cell() {
-    let directory = fixture_dir();
+    let owner = fixture_dir();
+    let directory = owner.path();
     let (negative, cells) = negative_source();
     let identities: HashSet<_> = cells.iter().map(|cell| cell.id.as_str()).collect();
     assert_eq!(cells.len(), EXPECTED_NEGATIVE_CELLS);
@@ -30,16 +31,16 @@ fn direct_only_policy_leaf_matrix_rejects_every_recursive_cell() {
 
     let positive_source = positive_source();
     validate_positive_source(&positive_source).expect("positive source contract must be intact");
-    write_fixture(&directory, &positive_source);
-    let positive = cargo_run(&directory);
+    write_fixture(directory, &positive_source);
+    let positive = cargo_run(directory);
     assert!(
         positive.status.success(),
         "positive/custom/generic controls failed:\n{}",
         String::from_utf8_lossy(&positive.stderr)
     );
 
-    write_fixture(&directory, &negative);
-    let output = cargo_check(&directory, true);
+    write_fixture(directory, &negative);
+    let output = cargo_check(directory, true);
     assert!(
         !output.status.success(),
         "negative matrix unexpectedly compiled"
@@ -60,6 +61,9 @@ fn direct_only_policy_leaf_matrix_rejects_every_recursive_cell() {
             cell.last_line
         );
     }
+    owner
+        .close()
+        .expect("remove owned matrix after child exits");
 }
 
 #[test]

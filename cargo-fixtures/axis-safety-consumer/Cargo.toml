@@ -1,0 +1,18 @@
+[package]
+name = "redactable-axis-safety-consumer"
+version = "0.0.0"
+edition = "2024"
+rust-version = "1.97"
+publish = false
+
+[dependencies]
+redactable = { path = "../../redactable", version = "=0.12.0", default-features = false, features = ["json"] }
+serde = { version = "1", features = ["derive"] }
+# Keep the default sorted object representation: selected JSON text has exact bytes.
+serde_json = { version = "1", default-features = false, features = ["std"] }
+tracing = "0.1"
+
+[patch.crates-io]
+redactable-derive = { path = "../../redactable-derive" }
+
+[workspace]

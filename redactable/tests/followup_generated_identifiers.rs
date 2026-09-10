@@ -38,7 +38,7 @@ struct CallerFieldCollision {
     value: String,
 }
 
-#[derive(Clone, Sensitive)]
+#[derive(serde::Serialize, Clone, Sensitive)]
 struct SensitiveCollision<__RedactableMapper> {
     #[sensitive(redactable::Secret)]
     value: String,
@@ -46,7 +46,7 @@ struct SensitiveCollision<__RedactableMapper> {
     marker: PhantomData<__RedactableMapper>,
 }
 
-#[derive(NotSensitive)]
+#[derive(serde::Serialize, NotSensitive)]
 struct NotSensitiveCollision<__RedactableMapper>(PhantomData<__RedactableMapper>);
 
 #[derive(NotSensitiveDisplay)]

@@ -1,4 +1,5 @@
-use redactable::{Secret, SensitiveDisplay};
+use redactable::__private::{PolicyApplicableRefForGeneratedFormatting, PolicyKindDebugFormatting};
+use redactable::{Secret, SecretPolicyKind, SensitiveDisplay};
 
 #[derive(SensitiveDisplay)]
 #[error("{value}")]
@@ -11,9 +12,8 @@ pub struct GenericLibraryFormatting<T> {
 #[error("{value:?}")]
 pub struct GenericGenerated<T>
 where
-    T: redactable::__private::PolicyApplicableRefForGeneratedFormatting,
-    redactable::SecretPolicyKind:
-        redactable::__private::PolicyKindDebugFormatting<redactable::Secret, T>,
+    T: PolicyApplicableRefForGeneratedFormatting,
+    SecretPolicyKind: PolicyKindDebugFormatting<Secret, T>,
 {
     #[sensitive(Secret)]
     pub value: T,

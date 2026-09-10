@@ -9,6 +9,7 @@
 //! bounds in `bounds`.
 
 use std::collections::BTreeMap;
+use syn::{Error, Generics};
 
 use proc_macro2::{Ident, TokenStream};
 use quote::{quote, quote_spanned};
@@ -33,7 +34,7 @@ pub(super) fn derive_struct_display(
     name: &Ident,
     data: &DataStruct,
     attrs: &[Attribute],
-    generics: &syn::Generics,
+    generics: &Generics,
     formatter: &Ident,
     fresh: &mut FreshIdentAllocator,
 ) -> Result<RedactedDisplayOutput> {
@@ -76,7 +77,7 @@ pub(super) fn derive_struct_display(
 pub(super) fn derive_enum_display(
     name: &Ident,
     data: &DataEnum,
-    generics: &syn::Generics,
+    generics: &Generics,
     formatter: &Ident,
     fresh: &mut FreshIdentAllocator,
 ) -> Result<RedactedDisplayOutput> {
@@ -147,7 +148,7 @@ pub(super) fn derive_enum_display(
 fn build_format_args(
     template: &LitStr,
     fields: &[FieldInfo<'_>],
-    generics: &syn::Generics,
+    generics: &Generics,
     formatter: &Ident,
     fresh: &mut FreshIdentAllocator,
 ) -> Result<FormatArgsOutput> {
@@ -168,7 +169,7 @@ fn build_format_args(
                     .iter()
                     .find(|field| canonical_name(&field.ident) == canonical_name(&name))
                     .ok_or_else(|| {
-                        syn::Error::new(
+                        Error::new(
                             placeholder.span,
                             format!("unknown field `{name}` in format string"),
                         )
@@ -188,7 +189,7 @@ fn build_format_args(
                     positional_args.resize_with(index + 1, || None);
                 }
                 let field = fields.get(index).ok_or_else(|| {
-                    syn::Error::new(
+                    Error::new(
                         placeholder.span,
                         format!("unknown positional field index {index} in format string"),
                     )
@@ -270,7 +271,10 @@ fn redacted_expr_for_field(field: &FieldInfo<'_>) -> TokenStream {
     let field_ty = field.ty;
     match &field.strategy {
         Strategy::WalkDefault => quote_spanned! { span =>
-            <#field_ty as #redacted_display_path>::redacted_display(&#ident)
+            {
+                #crate_root::__private::require_declared_formatting::<#field_ty>(#ident);
+                <#field_ty as #redacted_display_path>::redacted_display(&#ident)
+            }
         },
         Strategy::NotSensitive => quote_spanned! { span =>
             #ident

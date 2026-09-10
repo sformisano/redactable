@@ -1,14 +1,20 @@
 use std::{
     fs,
-    path::{Path, PathBuf},
-    process::Command,
+    path::Path,
+    process::{Command, Output},
 };
+
+use tempfile::{Builder, TempDir};
 
 pub(crate) const EXPECTED_NEGATIVE_CELLS: usize = 938;
 pub(crate) const EXPECTED_GRID_FINGERPRINT: u64 = 0x5fc6_befe_c3d9_4865;
 const EXPECTED_POSITIVE_CONTROLS: usize = 8;
 const EXPECTED_POSITIVE_FINGERPRINT: u64 = 0xa393_7d01_0e4c_a5c1;
-const EXPECTED_POSITIVE_SOURCE_FINGERPRINT: u64 = 0xa3fc_8a96_1984_42ed;
+// Audited update for the 0.12 escape-family rename: the only change in the
+// canonical positive source is `safe::NotSensitiveValue<String>` becoming
+// `safe::BypassRedaction<String>` on `WrappedNestedIp`. No cell, policy, derive
+// or exercise axis moved.
+const EXPECTED_POSITIVE_SOURCE_FINGERPRINT: u64 = 0x6adb_4b28_dc51_e90f;
 
 pub(crate) const REQUIRED_POSITIVE_CONTROLS: &[(&str, &str, &str)] = &[
     (
@@ -464,10 +470,12 @@ pub(crate) fn positive_source() -> String {
     source.push_str(
         r#"
 mod custom {
+    use safe::{RedactionPolicy, TextPolicyKind, TextRedactionPolicy};
+
     pub struct IpAddress;
-    impl safe::RedactionPolicy for IpAddress {
-        type Kind = safe::TextPolicyKind;
-        fn policy() -> safe::TextRedactionPolicy { safe::TextRedactionPolicy::keep_last(2) }
+    impl RedactionPolicy for IpAddress {
+        type Kind = TextPolicyKind;
+        fn policy() -> TextRedactionPolicy { TextRedactionPolicy::keep_last(2) }
     }
 }
 #[derive(Clone, Sensitive, serde::Serialize)]
@@ -494,11 +502,13 @@ struct CustomBTreeMapShortDisplay { #[sensitive(CustomIpAddress)] value: std::co
 #[derive(Clone, Sensitive, serde::Serialize)]
 struct WrappedIp { #[serde(skip)] value: Option<safe::SensitiveValue<std::net::IpAddr, safe::IpAddress>> }
 #[derive(Clone, Sensitive, serde::Serialize)]
-struct WrappedNestedIp { #[serde(skip)] value: std::collections::HashMap<String, Result<safe::SensitiveValue<std::net::IpAddr, safe::IpAddress>, String>> }
+struct WrappedNestedIp { #[serde(skip)] value: std::collections::HashMap<String, Result<safe::SensitiveValue<std::net::IpAddr, safe::IpAddress>, safe::BypassRedaction<String>>> }
 fn main() {
+    use std::{collections::{BTreeMap, HashMap}, net::IpAddr};
+
     const CANARY: &str = "sensitive";
-    let hash_key: std::net::IpAddr = "192.0.2.7".parse().unwrap();
-    let values = std::collections::HashMap::from([(hash_key, CANARY.to_owned())]);
+    let hash_key: IpAddr = "192.0.2.7".parse().unwrap();
+    let values = HashMap::from([(hash_key, CANARY.to_owned())]);
     let custom = CustomMap { value: values.clone() }.redact();
     assert!(custom.value.contains_key(&hash_key));
     assert_eq!(custom.value[&hash_key], "*******ve");
@@ -512,8 +522,8 @@ fn main() {
     assert_eq!(rendered, "{192.0.2.7: \"*******ve\"}");
     assert!(!rendered.contains(CANARY));
 
-    let btree_key: std::net::IpAddr = "192.0.2.8".parse().unwrap();
-    let btree_values = std::collections::BTreeMap::from([(btree_key, CANARY.to_owned())]);
+    let btree_key: IpAddr = "192.0.2.8".parse().unwrap();
+    let btree_values = BTreeMap::from([(btree_key, CANARY.to_owned())]);
     let custom_btree = CustomBTreeMap { value: btree_values.clone() }.redact();
     assert!(custom_btree.value.contains_key(&btree_key));
     assert_eq!(custom_btree.value[&btree_key], "*******ve");
@@ -532,33 +542,46 @@ fn main() {
     source
 }
 
-pub(crate) fn fixture_dir() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .expect("crate has workspace parent")
-        .join("target/phase02-policy-matrix")
+pub(crate) fn fixture_dir() -> TempDir {
+    Builder::new()
+        .prefix("rd-policy-")
+        .tempdir()
+        .expect("owned policy matrix directory")
 }
 
 pub(crate) fn write_fixture(directory: &Path, source: &str) {
-    fs::create_dir_all(directory.join("src")).unwrap();
     let dependency = Path::new(env!("CARGO_MANIFEST_DIR"));
-    fs::write(
-        directory.join("Cargo.toml"),
-        format!(
-            "[package]\nname='phase02-policy-matrix'\nversion='0.0.0'\nedition='2024'\npublish=false\n[workspace]\n[dependencies]\nserde={{version='1',features=['derive']}}\nsafe={{package='redactable',path='{}',features={}}}\n",
-            dependency.display(),
-            if cfg!(feature = "slog") {
-                "['ip-address','slog']"
-            } else {
-                "['ip-address']"
-            }
-        ),
-    )
-    .unwrap();
-    fs::write(directory.join("src/main.rs"), source).unwrap();
+    let manifest = format!(
+        "[package]\nname='phase02-policy-matrix'\nversion='0.0.0'\nedition='2024'\npublish=false\n[workspace]\n[dependencies]\nserde={{version='1',features=['derive']}}\nsafe={{package='redactable',path='{}',features={}}}\n",
+        dependency.display(),
+        if cfg!(feature = "slog") {
+            "['ip-address','slog']"
+        } else {
+            "['ip-address']"
+        }
+    );
+    let manifest_path = directory.join("Cargo.toml");
+    let source_path = directory.join("src/main.rs");
+    let previous_source = source_path
+        .exists()
+        .then(|| fs::read(&source_path).unwrap());
+    if manifest_path.exists() {
+        assert_eq!(fs::read_to_string(&manifest_path).unwrap(), manifest);
+    }
+    fs::create_dir_all(directory.join("src")).unwrap();
+    if !manifest_path.exists() {
+        fs::write(&manifest_path, manifest).unwrap();
+    }
+    if let Some(previous) = previous_source {
+        fs::write(directory.join("src/main.rs.previous"), previous).unwrap();
+    }
+    let next = directory.join("src/main.rs.next");
+    fs::write(&next, source).unwrap();
+    fs::rename(next, &source_path).unwrap();
+    assert_eq!(fs::read_to_string(source_path).unwrap(), source);
 }
 
-pub(crate) fn cargo_check(directory: &Path, json: bool) -> std::process::Output {
+pub(crate) fn cargo_check(directory: &Path, json: bool) -> Output {
     let mut command = Command::new(env!("CARGO"));
     command
         .args(["check", "--offline", "--manifest-path"])
@@ -570,7 +593,7 @@ pub(crate) fn cargo_check(directory: &Path, json: bool) -> std::process::Output 
     command.output().expect("matrix cargo check runs")
 }
 
-pub(crate) fn cargo_run(directory: &Path) -> std::process::Output {
+pub(crate) fn cargo_run(directory: &Path) -> Output {
     Command::new(env!("CARGO"))
         .args(["run", "--offline", "--manifest-path"])
         .arg(directory.join("Cargo.toml"))

@@ -2,22 +2,52 @@
 //!
 //! This module handles attributes on the struct/enum itself, not on fields.
 
-use syn::{Attribute, Meta, Result};
+use syn::{Attribute, Error, Meta, Result};
+
+/// The advice both surviving container branches give: `#[redactable(...)]`
+/// carries field options, so it belongs on the field it describes.
+const FIELD_PLACEMENT: &str = "`#[redactable(...)]` options belong on fields; annotate the specific recursive or legacy-formatted field";
+
+/// The migration message for the removed structured-output selection.
+const REMOVED_OUTPUT: &str = "`#[redactable(output = json)]` was removed; `Sensitive` and `SensitiveDual` always produce JSON";
+
+/// Rejects every container-level `#[redactable(...)]`, naming the valid fix.
+///
+/// Three branches survive, and they differ in span and in what the author
+/// actually wrote. A bare `#[redactable()]` never reaches `parse_nested_meta`
+/// (it iterates nothing for an empty token list), so dropping its check would
+/// silently accept the attribute. A non-`output` option and an empty list both
+/// name the field-placement fix, because their author never wrote `output`.
+/// Only an `output` option gets the removal message.
+pub(crate) fn reject_removed_output_option(attrs: &[Attribute]) -> Result<()> {
+    for attr in attrs {
+        if !attr.path().is_ident("redactable") {
+            continue;
+        }
+        if matches!(&attr.meta, Meta::List(list) if list.tokens.is_empty()) {
+            return Err(Error::new_spanned(attr, FIELD_PLACEMENT));
+        }
+        attr.parse_nested_meta(|meta| {
+            if meta.path.is_ident("output") {
+                return Err(meta.error(REMOVED_OUTPUT));
+            }
+            Err(meta.error(FIELD_PLACEMENT))
+        })?;
+    }
+    Ok(())
+}
 
 /// Rejects field-only helpers when they are attached to a derived container.
 pub(crate) fn reject_field_only_container_attrs(attrs: &[Attribute]) -> Result<()> {
     for attr in attrs {
         if attr.path().is_ident("not_sensitive") {
-            return Err(syn::Error::new_spanned(
+            return Err(Error::new_spanned(
                 attr,
                 "`#[not_sensitive]` is only supported on fields; derive `NotSensitive` or `NotSensitiveDisplay` to classify the complete type",
             ));
         }
         if attr.path().is_ident("redactable") {
-            return Err(syn::Error::new_spanned(
-                attr,
-                "`#[redactable(...)]` is only supported on fields; annotate the specific recursive or legacy-formatted field",
-            ));
+            return Err(Error::new_spanned(attr, FIELD_PLACEMENT));
         }
     }
     Ok(())
@@ -28,11 +58,8 @@ pub(crate) fn reject_field_only_container_attrs(attrs: &[Attribute]) -> Result<(
 /// Both `Sensitive` and `SensitiveDisplay` read these options.
 #[derive(Clone, Debug, Default)]
 pub(crate) struct ContainerOptions {
-    /// If true, this type derives both `Sensitive` and `SensitiveDisplay`.
-    ///
-    /// Each macro adjusts its output to avoid conflicting impls:
-    /// - `Sensitive` skips `Debug` (lets `SensitiveDisplay` provide it).
-    /// - `SensitiveDisplay` skips `slog` and `tracing` (lets `Sensitive` provide them).
+    /// Legacy user coordination, parsed only to issue its migration error.
+    /// Actual Dual coordination comes from the single SensitiveDual expansion.
     pub(crate) dual: bool,
 }
 
@@ -47,7 +74,7 @@ pub(crate) fn parse_container_options(attrs: &[Attribute]) -> Result<ContainerOp
 
         match &attr.meta {
             Meta::Path(_) => {
-                return Err(syn::Error::new_spanned(
+                return Err(Error::new_spanned(
                     attr,
                     "bare `#[sensitive]` on the container has no effect; \
                      use `#[derive(SensitiveDual)]` when structural and display redaction are both needed",
@@ -69,7 +96,7 @@ pub(crate) fn parse_container_options(attrs: &[Attribute]) -> Result<ContainerOp
                 })?;
             }
             Meta::NameValue(nv) => {
-                return Err(syn::Error::new_spanned(
+                return Err(Error::new_spanned(
                     nv,
                     "name-value syntax is not supported for container-level #[sensitive]",
                 ));
@@ -82,12 +109,13 @@ pub(crate) fn parse_container_options(attrs: &[Attribute]) -> Result<ContainerOp
 
 #[cfg(test)]
 mod tests {
+    use proc_macro2::TokenStream;
     use quote::quote;
-    use syn::DeriveInput;
+    use syn::{Attribute, DeriveInput};
 
     use super::*;
 
-    fn parse_attrs(tokens: proc_macro2::TokenStream) -> Vec<Attribute> {
+    fn parse_attrs(tokens: TokenStream) -> Vec<Attribute> {
         let input: DeriveInput = syn::parse2(quote! {
             #tokens
             struct Dummy;

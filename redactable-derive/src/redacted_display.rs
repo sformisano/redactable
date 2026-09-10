@@ -12,7 +12,7 @@ mod model;
 mod template;
 
 use proc_macro2::{Ident, TokenStream};
-use syn::{Attribute, Data, Result, spanned::Spanned};
+use syn::{Attribute, Data, Error, Generics, Result, WherePredicate, spanned::Spanned};
 
 use crate::fresh_ident::FreshIdentAllocator;
 
@@ -20,24 +20,24 @@ use self::codegen::{derive_enum_display, derive_struct_display};
 
 pub(crate) struct RedactedDisplayOutput {
     pub(crate) body: TokenStream,
-    pub(crate) display_generics: Vec<syn::WherePredicate>,
-    pub(crate) debug_generics: Vec<syn::WherePredicate>,
-    pub(crate) policy_ref_generics: Vec<syn::WherePredicate>,
-    pub(crate) nested_generics: Vec<syn::WherePredicate>,
+    pub(crate) display_generics: Vec<WherePredicate>,
+    pub(crate) debug_generics: Vec<WherePredicate>,
+    pub(crate) policy_ref_generics: Vec<WherePredicate>,
+    pub(crate) nested_generics: Vec<WherePredicate>,
 }
 
 pub(crate) fn derive_redacted_display(
     name: &Ident,
     data: &Data,
     attrs: &[Attribute],
-    generics: &syn::Generics,
+    generics: &Generics,
     formatter: &Ident,
     fresh: &mut FreshIdentAllocator,
 ) -> Result<RedactedDisplayOutput> {
     match data {
         Data::Struct(data) => derive_struct_display(name, data, attrs, generics, formatter, fresh),
         Data::Enum(data) => derive_enum_display(name, data, generics, formatter, fresh),
-        Data::Union(u) => Err(syn::Error::new(
+        Data::Union(u) => Err(Error::new(
             u.union_token.span(),
             "`SensitiveDisplay` cannot be derived for unions",
         )),

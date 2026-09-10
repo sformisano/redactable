@@ -2,6 +2,8 @@
 
 use std::{path::PathBuf, process::Command};
 
+use tempfile::Builder;
+
 #[test]
 fn cross_crate_ip_map_alias_fails_with_the_targeted_workaround() {
     const PROVIDER: &str =
@@ -14,8 +16,9 @@ fn cross_crate_ip_map_alias_fails_with_the_targeted_workaround() {
 
     let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("../cargo-fixtures/renamed-policy/Cargo.toml");
-    let target = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../target/cargo-fixtures/renamed-policy-alias-rejection");
+    // Nested Cargo needs its own target while the parent test holds a target lock.
+    let owner = Builder::new().prefix("rd-alias-").tempdir().unwrap();
+    let target = owner.path().join("target");
     let output = Command::new(env!("CARGO"))
         .args([
             "check",
@@ -39,4 +42,5 @@ fn cross_crate_ip_map_alias_fails_with_the_targeted_workaround() {
         stderr.contains("SensitiveValue<T, IpAddress>"),
         "missing targeted wrapper workaround:\n{stderr}"
     );
+    owner.close().expect("remove target after child exits");
 }

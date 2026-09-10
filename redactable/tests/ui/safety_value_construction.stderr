@@ -1,0 +1,139 @@
+error[E0599]: no associated function or constant named `Text` found for struct `RedactedValue` in the current scope
+ --> tests/ui/safety_value_construction.rs:5:28
+  |
+5 |     let _ = RedactedValue::Text(String::from("raw"));
+  |                            ^^^^ associated function or constant not found in `RedactedValue`
+  |
+help: there is a method `text` with a similar name, but with different arguments
+ --> src/redaction/output.rs
+  |
+  |     pub fn text(&self) -> String {
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error[E0599]: no associated function or constant named `Json` found for struct `RedactedValue` in the current scope
+ --> tests/ui/safety_value_construction.rs:6:28
+  |
+6 |     let _ = RedactedValue::Json(raw.clone());
+  |                            ^^^^ associated function or constant not found in `RedactedValue`
+  |
+help: there is a method `json` with a similar name, but with different arguments
+ --> src/redaction/output.rs
+  |
+  |     pub fn json(&self) -> JsonValue {
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error[E0308]: mismatched types
+ --> tests/ui/safety_value_construction.rs:7:33
+  |
+7 |     let _ = RedactedValue::text(String::from("raw"));
+  |             ------------------- ^^^^^^^^^^^^^^^^^^^ expected `&RedactedValue`, found `String`
+  |             |
+  |             arguments to this function are incorrect
+  |
+note: method defined here
+ --> src/redaction/output.rs
+  |
+  |     pub fn text(&self) -> String {
+  |            ^^^^
+
+error[E0308]: mismatched types
+ --> tests/ui/safety_value_construction.rs:8:33
+  |
+8 |     let _ = RedactedValue::json(raw.clone());
+  |             ------------------- ^^^^^^^^^^^ expected `&RedactedValue`, found `Value`
+  |             |
+  |             arguments to this function are incorrect
+  |
+note: method defined here
+ --> src/redaction/output.rs
+  |
+  |     pub fn json(&self) -> JsonValue {
+  |            ^^^^
+
+error[E0624]: associated function `from_text` is private
+ --> tests/ui/safety_value_construction.rs:9:28
+  |
+9 |     let _ = RedactedValue::from_text(String::from("raw"));
+  |                            ^^^^^^^^^ private associated function
+  |
+ ::: src/redaction/output.rs
+  |
+  |     pub(crate) fn from_text(text: String) -> Self {
+  |     --------------------------------------------- private associated function defined here
+
+error[E0277]: the trait bound `RedactedValue: From<std::string::String>` is not satisfied
+  --> tests/ui/safety_value_construction.rs:11:48
+   |
+11 |     let _: RedactedValue = String::from("raw").into();
+   |                                                ^^^^ the trait `From<std::string::String>` is not implemented for `RedactedValue`
+   |
+   = note: required for `std::string::String` to implement `Into<RedactedValue>`
+
+error[E0277]: the trait bound `RedactedValue: From<Value>` is not satisfied
+  --> tests/ui/safety_value_construction.rs:12:40
+   |
+12 |     let _: RedactedValue = raw.clone().into();
+   |                                        ^^^^ the trait `From<Value>` is not implemented for `RedactedValue`
+   |
+   = note: required for `Value` to implement `Into<RedactedValue>`
+
+error[E0277]: the trait bound `RedactedValue: serde::Deserialize<'de>` is not satisfied
+  --> tests/ui/safety_value_construction.rs:13:28
+   |
+13 |     let _: RedactedValue = serde_json::from_str("{\"raw\":true}").unwrap();
+   |                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ the trait `serde_core::de::Deserialize<'_>` is not implemented for `RedactedValue`
+   |
+   = note: for local types consider adding `#[derive(serde::Deserialize)]` to your `RedactedValue` type
+   = note: for types from other crates check whether the crate offers a `serde` feature flag
+   = help: the following other types implement trait `serde_core::de::Deserialize<'de>`:
+             &'a Path
+             &'a [u8]
+             &'a str
+             ()
+             (T,)
+             (T0, T1)
+             (T0, T1, T2)
+             (T0, T1, T2, T3)
+           and $N others
+note: required by a bound in `serde_json::from_str`
+  --> $CARGO/serde_json-$VERSION/src/de.rs
+   |
+   | pub fn from_str<'a, T>(s: &'a str) -> Result<T>
+   |        -------- required by a bound in this function
+   | where
+   |     T: de::Deserialize<'a>,
+   |        ^^^^^^^^^^^^^^^^^^^ required by this bound in `from_str`
+
+error[E0616]: field `text` of struct `RedactedValue` is private
+  --> tests/ui/safety_value_construction.rs:16:22
+   |
+16 |     let _ = declared.text;
+   |                      ^^^^ private field
+   |
+help: a method `text` also exists, call it with parentheses
+   |
+16 |     let _ = declared.text();
+   |                          ++
+
+error[E0616]: field `json` of struct `RedactedValue` is private
+  --> tests/ui/safety_value_construction.rs:17:22
+   |
+17 |     let _ = declared.json;
+   |                      ^^^^ private field
+   |
+help: a method `json` also exists, call it with parentheses
+   |
+17 |     let _ = declared.json();
+   |                          ++
+
+error[E0599]: no method named `view` found for struct `RedactedValue` in the current scope
+  --> tests/ui/safety_value_construction.rs:19:22
+   |
+19 |     let _ = selected.view();
+   |                      ^^^^ method not found in `RedactedValue`
+
+error[E0599]: no method named `view_mut` found for struct `RedactedValue` in the current scope
+  --> tests/ui/safety_value_construction.rs:20:22
+   |
+20 |     let _ = selected.view_mut();
+   |                      ^^^^^^^^ method not found in `RedactedValue`

@@ -2,12 +2,15 @@
 
 use std::{path::PathBuf, process::Command};
 
+use tempfile::Builder;
+
 #[test]
 fn secret_and_ip_generic_refcell_aliases_are_conflict_safe_with_panic_abort() {
     let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("../cargo-fixtures/panic-abort-refcell/Cargo.toml");
-    let target = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../target/cargo-fixtures/panic-abort-refcell");
+    // Nested Cargo needs its own target while the parent test holds a target lock.
+    let owner = Builder::new().prefix("rd-abort-").tempdir().unwrap();
+    let target = owner.path().join("target");
     let output = Command::new(env!("CARGO"))
         .args([
             "run",
@@ -26,14 +29,16 @@ fn secret_and_ip_generic_refcell_aliases_are_conflict_safe_with_panic_abort() {
         String::from_utf8_lossy(&output.stdout),
         String::from_utf8_lossy(&output.stderr),
     );
+    owner.close().expect("remove target after child exits");
 }
 
 #[test]
 fn documented_clone_backed_adapter_panics_abort_without_emitting_the_canary() {
     let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("../cargo-fixtures/panic-abort-refcell/Cargo.toml");
-    let target = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../target/cargo-fixtures/panic-abort-refcell");
+    // Nested Cargo needs its own target while the parent test holds a target lock.
+    let owner = Builder::new().prefix("rd-abort-").tempdir().unwrap();
+    let target = owner.path().join("target");
     let build = Command::new(env!("CARGO"))
         .args([
             "build",
@@ -76,14 +81,17 @@ fn documented_clone_backed_adapter_panics_abort_without_emitting_the_canary() {
             "{mode} emitted the raw canary: {combined}"
         );
     }
+    owner.close().expect("remove target after child exits");
 }
 
 #[test]
-fn consuming_adapters_survive_a_stuck_refcell_borrow_flag_without_emitting_the_canary() {
+fn the_consuming_tracing_adapter_survives_a_stuck_refcell_borrow_flag_without_emitting_the_canary()
+{
     let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("../cargo-fixtures/panic-abort-refcell/Cargo.toml");
-    let target = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../target/cargo-fixtures/panic-abort-refcell");
+    // Nested Cargo needs its own target while the parent test holds a target lock.
+    let owner = Builder::new().prefix("rd-abort-").tempdir().unwrap();
+    let target = owner.path().join("target");
     let build = Command::new(env!("CARGO"))
         .args([
             "build",
@@ -104,24 +112,22 @@ fn consuming_adapters_survive_a_stuck_refcell_borrow_flag_without_emitting_the_c
     let binary = target
         .join("debug")
         .join("redactable-panic-abort-refcell-fixture");
-    for mode in [
-        "consuming-output",
-        "consuming-json",
-        "consuming-tracing-debug",
-    ] {
-        let output = Command::new(&binary)
-            .arg(mode)
-            .output()
-            .expect("panic-abort consuming adapter mode executes");
-        assert!(output.status.success(), "{mode} must not abort");
-        let combined = format!(
-            "{}{}",
-            String::from_utf8_lossy(&output.stdout),
-            String::from_utf8_lossy(&output.stderr)
-        );
-        assert!(
-            !combined.contains("borrowed-adapter-panic-abort-canary"),
-            "{mode} emitted the raw canary: {combined}"
-        );
-    }
+    // `into_tracing_redacted_debug` is the only consuming adapter left: the sink
+    // value always clones (D9), so its routes now abort like the borrowed ones.
+    let mode = "consuming-tracing-debug";
+    let output = Command::new(&binary)
+        .arg(mode)
+        .output()
+        .expect("panic-abort consuming adapter mode executes");
+    assert!(output.status.success(), "{mode} must not abort");
+    let combined = format!(
+        "{}{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(
+        !combined.contains("borrowed-adapter-panic-abort-canary"),
+        "{mode} emitted the raw canary: {combined}"
+    );
+    owner.close().expect("remove target after child exits");
 }

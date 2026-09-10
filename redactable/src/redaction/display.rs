@@ -19,15 +19,21 @@
 //!
 //! Feature-gated types: `chrono` date/time types, `time` crate types, `Uuid`.
 
+use serde_json::Value;
+
 use std::{
     borrow::Cow,
+    cell::{Cell, RefCell},
     cmp::Ordering,
+    collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque},
+    fmt::{Debug, Display, Formatter, Result as FmtResult},
     marker::PhantomData,
     num::{
         NonZeroI8, NonZeroI16, NonZeroI32, NonZeroI64, NonZeroI128, NonZeroIsize, NonZeroU8,
         NonZeroU16, NonZeroU32, NonZeroU64, NonZeroU128, NonZeroUsize,
     },
-    sync::{Mutex, RwLock, TryLockError},
+    rc::Rc,
+    sync::{Arc, Mutex, RwLock, TryLockError},
     time::{Duration, Instant, SystemTime},
 };
 
@@ -43,10 +49,13 @@ use std::{
 /// deriving `SensitiveDisplay`.
 ///
 /// Common scalars (`String`, `bool`, integers, etc.) implement this as passthrough,
-/// while types deriving `SensitiveDisplay` implement it with redaction logic.
+/// while types deriving `SensitiveDisplay` or `SensitiveDual` implement it with
+/// redaction logic. This trait alone does not admit undecided raw fields in
+/// sensitive templates; default referenced fields also need the declaration
+/// capability. Policy fields and explicit `#[not_sensitive]` use their own routes.
 pub trait RedactableWithFormatter {
     /// Formats a redacted representation of `self`.
-    fn fmt_redacted(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result;
+    fn fmt_redacted(&self, f: &mut Formatter<'_>) -> FmtResult;
 
     /// Returns a wrapper that implements `Display` using `fmt_redacted`.
     fn redacted_display(&self) -> RedactedFormatterRef<'_, Self>
@@ -68,14 +77,24 @@ pub trait RedactableWithFormatter {
 /// formatted directly or converted with `.to_string()`.
 pub struct RedactedFormatterRef<'a, T: ?Sized>(&'a T);
 
-impl<T: RedactableWithFormatter + ?Sized> std::fmt::Display for RedactedFormatterRef<'_, T> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl<'a, T: ?Sized> RedactedFormatterRef<'a, T> {
+    /// Wraps a borrowed value, including an unsized one.
+    ///
+    /// [`RedactableWithFormatter::redacted_display`] needs `Self: Sized`, so
+    /// the crate's own generated-producer channel builds the wrapper directly.
+    pub(crate) fn new(value: &'a T) -> Self {
+        Self(value)
+    }
+}
+
+impl<T: RedactableWithFormatter + ?Sized> Display for RedactedFormatterRef<'_, T> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         self.0.fmt_redacted(f)
     }
 }
 
-impl<T: RedactableWithFormatter + ?Sized> std::fmt::Debug for RedactedFormatterRef<'_, T> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl<T: RedactableWithFormatter + ?Sized> Debug for RedactedFormatterRef<'_, T> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         self.0.fmt_redacted(f)
     }
 }
@@ -94,15 +113,15 @@ impl<'a, T: ?Sized> PolicyRedactedFormatterRef<'a, T> {
     }
 }
 
-impl<T: RedactableWithFormatter + ?Sized> std::fmt::Display for PolicyRedactedFormatterRef<'_, T> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl<T: RedactableWithFormatter + ?Sized> Display for PolicyRedactedFormatterRef<'_, T> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         self.0.fmt_redacted(f)
     }
 }
 
-impl<T: std::fmt::Debug + ?Sized> std::fmt::Debug for PolicyRedactedFormatterRef<'_, T> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        std::fmt::Debug::fmt(self.0, f)
+impl<T: Debug + ?Sized> Debug for PolicyRedactedFormatterRef<'_, T> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
+        Debug::fmt(self.0, f)
     }
 }
 
@@ -131,7 +150,7 @@ macro_rules! impl_redactable_display_passthrough_debug {
 }
 
 impl<T: ?Sized + RedactableWithFormatter> RedactableWithFormatter for &T {
-    fn fmt_redacted(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt_redacted(&self, f: &mut Formatter<'_>) -> FmtResult {
         (*self).fmt_redacted(f)
     }
 }
@@ -177,14 +196,14 @@ impl_redactable_display_passthrough_debug!(SystemTime);
 impl_redactable_display_passthrough_debug!(Ordering);
 
 impl RedactableWithFormatter for () {
-    fn fmt_redacted(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt_redacted(&self, f: &mut Formatter<'_>) -> FmtResult {
         f.write_str("()")
     }
 }
 
 impl<T> RedactableWithFormatter for PhantomData<T> {
-    fn fmt_redacted(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        std::fmt::Debug::fmt(self, f)
+    fn fmt_redacted(&self, f: &mut Formatter<'_>) -> FmtResult {
+        Debug::fmt(self, f)
     }
 }
 
@@ -235,7 +254,7 @@ mod uuid_passthrough {
 // =============================================================================
 
 impl<T: RedactableWithFormatter> RedactableWithFormatter for Option<T> {
-    fn fmt_redacted(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt_redacted(&self, f: &mut Formatter<'_>) -> FmtResult {
         match self {
             Some(value) => f
                 .debug_tuple("Some")
@@ -247,7 +266,7 @@ impl<T: RedactableWithFormatter> RedactableWithFormatter for Option<T> {
 }
 
 impl<T: RedactableWithFormatter> RedactableWithFormatter for Vec<T> {
-    fn fmt_redacted(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt_redacted(&self, f: &mut Formatter<'_>) -> FmtResult {
         let mut list = f.debug_list();
         for item in self {
             list.entry(&item.redacted_display());
@@ -257,7 +276,7 @@ impl<T: RedactableWithFormatter> RedactableWithFormatter for Vec<T> {
 }
 
 impl<T: RedactableWithFormatter> RedactableWithFormatter for [T] {
-    fn fmt_redacted(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt_redacted(&self, f: &mut Formatter<'_>) -> FmtResult {
         let mut list = f.debug_list();
         for item in self {
             list.entry(&item.redacted_display());
@@ -267,13 +286,13 @@ impl<T: RedactableWithFormatter> RedactableWithFormatter for [T] {
 }
 
 impl<T: RedactableWithFormatter, const N: usize> RedactableWithFormatter for [T; N] {
-    fn fmt_redacted(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt_redacted(&self, f: &mut Formatter<'_>) -> FmtResult {
         self.as_slice().fmt_redacted(f)
     }
 }
 
-impl<T: RedactableWithFormatter> RedactableWithFormatter for std::collections::VecDeque<T> {
-    fn fmt_redacted(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl<T: RedactableWithFormatter> RedactableWithFormatter for VecDeque<T> {
+    fn fmt_redacted(&self, f: &mut Formatter<'_>) -> FmtResult {
         let mut list = f.debug_list();
         for item in self {
             list.entry(&item.redacted_display());
@@ -283,7 +302,7 @@ impl<T: RedactableWithFormatter> RedactableWithFormatter for std::collections::V
 }
 
 impl<T0: RedactableWithFormatter> RedactableWithFormatter for (T0,) {
-    fn fmt_redacted(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt_redacted(&self, f: &mut Formatter<'_>) -> FmtResult {
         f.write_str("(")?;
         self.0.fmt_redacted(f)?;
         f.write_str(",)")
@@ -293,7 +312,7 @@ impl<T0: RedactableWithFormatter> RedactableWithFormatter for (T0,) {
 impl<T0: RedactableWithFormatter, T1: RedactableWithFormatter> RedactableWithFormatter
     for (T0, T1)
 {
-    fn fmt_redacted(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt_redacted(&self, f: &mut Formatter<'_>) -> FmtResult {
         f.write_str("(")?;
         self.0.fmt_redacted(f)?;
         f.write_str(", ")?;
@@ -305,7 +324,7 @@ impl<T0: RedactableWithFormatter, T1: RedactableWithFormatter> RedactableWithFor
 impl<T0: RedactableWithFormatter, T1: RedactableWithFormatter, T2: RedactableWithFormatter>
     RedactableWithFormatter for (T0, T1, T2)
 {
-    fn fmt_redacted(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt_redacted(&self, f: &mut Formatter<'_>) -> FmtResult {
         f.write_str("(")?;
         self.0.fmt_redacted(f)?;
         f.write_str(", ")?;
@@ -323,7 +342,7 @@ impl<
     T3: RedactableWithFormatter,
 > RedactableWithFormatter for (T0, T1, T2, T3)
 {
-    fn fmt_redacted(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt_redacted(&self, f: &mut Formatter<'_>) -> FmtResult {
         f.write_str("(")?;
         self.0.fmt_redacted(f)?;
         f.write_str(", ")?;
@@ -337,19 +356,19 @@ impl<
 }
 
 impl<T: RedactableWithFormatter + ?Sized> RedactableWithFormatter for Box<T> {
-    fn fmt_redacted(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt_redacted(&self, f: &mut Formatter<'_>) -> FmtResult {
         (**self).fmt_redacted(f)
     }
 }
 
-impl<T: RedactableWithFormatter + ?Sized> RedactableWithFormatter for std::sync::Arc<T> {
-    fn fmt_redacted(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl<T: RedactableWithFormatter + ?Sized> RedactableWithFormatter for Arc<T> {
+    fn fmt_redacted(&self, f: &mut Formatter<'_>) -> FmtResult {
         (**self).fmt_redacted(f)
     }
 }
 
-impl<T: RedactableWithFormatter + ?Sized> RedactableWithFormatter for std::rc::Rc<T> {
-    fn fmt_redacted(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl<T: RedactableWithFormatter + ?Sized> RedactableWithFormatter for Rc<T> {
+    fn fmt_redacted(&self, f: &mut Formatter<'_>) -> FmtResult {
         (**self).fmt_redacted(f)
     }
 }
@@ -357,7 +376,7 @@ impl<T: RedactableWithFormatter + ?Sized> RedactableWithFormatter for std::rc::R
 impl<T: RedactableWithFormatter, E: RedactableWithFormatter> RedactableWithFormatter
     for Result<T, E>
 {
-    fn fmt_redacted(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt_redacted(&self, f: &mut Formatter<'_>) -> FmtResult {
         match self {
             Ok(value) => f
                 .debug_tuple("Ok")
@@ -368,12 +387,12 @@ impl<T: RedactableWithFormatter, E: RedactableWithFormatter> RedactableWithForma
     }
 }
 
-impl<K, V, S> RedactableWithFormatter for std::collections::HashMap<K, V, S>
+impl<K, V, S> RedactableWithFormatter for HashMap<K, V, S>
 where
-    K: std::fmt::Debug,
+    K: Debug,
     V: RedactableWithFormatter,
 {
-    fn fmt_redacted(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt_redacted(&self, f: &mut Formatter<'_>) -> FmtResult {
         let mut map = f.debug_map();
         for (key, value) in self {
             map.entry(key, &value.redacted_display());
@@ -382,12 +401,12 @@ where
     }
 }
 
-impl<K, V> RedactableWithFormatter for std::collections::BTreeMap<K, V>
+impl<K, V> RedactableWithFormatter for BTreeMap<K, V>
 where
-    K: std::fmt::Debug,
+    K: Debug,
     V: RedactableWithFormatter,
 {
-    fn fmt_redacted(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt_redacted(&self, f: &mut Formatter<'_>) -> FmtResult {
         let mut map = f.debug_map();
         for (key, value) in self {
             map.entry(key, &value.redacted_display());
@@ -396,11 +415,11 @@ where
     }
 }
 
-impl<T, S> RedactableWithFormatter for std::collections::HashSet<T, S>
+impl<T, S> RedactableWithFormatter for HashSet<T, S>
 where
     T: RedactableWithFormatter,
 {
-    fn fmt_redacted(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt_redacted(&self, f: &mut Formatter<'_>) -> FmtResult {
         let mut set = f.debug_set();
         for item in self {
             set.entry(&item.redacted_display());
@@ -409,11 +428,11 @@ where
     }
 }
 
-impl<T> RedactableWithFormatter for std::collections::BTreeSet<T>
+impl<T> RedactableWithFormatter for BTreeSet<T>
 where
     T: RedactableWithFormatter,
 {
-    fn fmt_redacted(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt_redacted(&self, f: &mut Formatter<'_>) -> FmtResult {
         let mut set = f.debug_set();
         for item in self {
             set.entry(&item.redacted_display());
@@ -422,14 +441,14 @@ where
     }
 }
 
-impl<T: RedactableWithFormatter + Copy> RedactableWithFormatter for std::cell::Cell<T> {
-    fn fmt_redacted(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl<T: RedactableWithFormatter + Copy> RedactableWithFormatter for Cell<T> {
+    fn fmt_redacted(&self, f: &mut Formatter<'_>) -> FmtResult {
         self.get().fmt_redacted(f)
     }
 }
 
-impl<T: RedactableWithFormatter + ?Sized> RedactableWithFormatter for std::cell::RefCell<T> {
-    fn fmt_redacted(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl<T: RedactableWithFormatter + ?Sized> RedactableWithFormatter for RefCell<T> {
+    fn fmt_redacted(&self, f: &mut Formatter<'_>) -> FmtResult {
         match self.try_borrow() {
             Ok(value) => value.fmt_redacted(f),
             Err(_) => f.write_str("<borrowed>"),
@@ -438,7 +457,7 @@ impl<T: RedactableWithFormatter + ?Sized> RedactableWithFormatter for std::cell:
 }
 
 impl<T: RedactableWithFormatter + ?Sized> RedactableWithFormatter for Mutex<T> {
-    fn fmt_redacted(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt_redacted(&self, f: &mut Formatter<'_>) -> FmtResult {
         match self.try_lock() {
             Ok(value) => value.fmt_redacted(f),
             Err(TryLockError::WouldBlock) => f.write_str("<locked>"),
@@ -448,7 +467,7 @@ impl<T: RedactableWithFormatter + ?Sized> RedactableWithFormatter for Mutex<T> {
 }
 
 impl<T: RedactableWithFormatter + ?Sized> RedactableWithFormatter for RwLock<T> {
-    fn fmt_redacted(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt_redacted(&self, f: &mut Formatter<'_>) -> FmtResult {
         match self.try_read() {
             Ok(value) => value.fmt_redacted(f),
             Err(TryLockError::WouldBlock) => f.write_str("<locked>"),
@@ -464,9 +483,8 @@ impl<T: RedactableWithFormatter + ?Sized> RedactableWithFormatter for RwLock<T> 
 // serde_json::Value always displays as "[REDACTED]" since it's an opaque type
 // that could contain arbitrary sensitive data.
 
-#[cfg(feature = "json")]
-impl RedactableWithFormatter for serde_json::Value {
-    fn fmt_redacted(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl RedactableWithFormatter for Value {
+    fn fmt_redacted(&self, f: &mut Formatter<'_>) -> FmtResult {
         write!(f, "[REDACTED]")
     }
 }
@@ -484,20 +502,22 @@ mod tests {
         sync::{Arc, Mutex, RwLock},
     };
 
-    use super::RedactableWithFormatter;
+    use std::fmt::{Debug, Formatter, Result as FmtResult};
+
+    use super::{RedactableWithFormatter, RedactedFormatterRef};
     use crate::{Secret, SensitiveDisplay};
 
     #[derive(Eq, Hash, Ord, PartialEq, PartialOrd)]
     struct Key(&'static str);
 
-    impl std::fmt::Debug for Key {
-        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    impl Debug for Key {
+        fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
             f.write_str(self.0)
         }
     }
 
     impl RedactableWithFormatter for Key {
-        fn fmt_redacted(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        fn fmt_redacted(&self, f: &mut Formatter<'_>) -> FmtResult {
             f.write_str("[REDACTED]")
         }
     }
@@ -537,7 +557,7 @@ mod tests {
     fn slice_displays_elements() {
         let v = vec!["a".to_string(), "b".to_string()];
         let slice: &[String] = &v;
-        assert_eq!(format!("{}", super::RedactedFormatterRef(slice)), "[a, b]");
+        assert_eq!(format!("{}", RedactedFormatterRef(slice)), "[a, b]");
     }
 
     #[test]
@@ -797,18 +817,30 @@ mod tests {
 
     #[test]
     fn sensitive_display_containers_use_redacted_display() {
+        use crate::NotSensitiveDisplay;
+        use std::fmt::{Display, Formatter, Result as FmtResult};
+
+        #[derive(NotSensitiveDisplay)]
+        struct PublicText(String);
+        impl Display for PublicText {
+            fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
+                f.write_str(&self.0)
+            }
+        }
+
         #[derive(SensitiveDisplay)]
         #[error("err {message}")]
         struct MyErr {
+            #[not_sensitive]
             message: String,
         }
 
         #[derive(SensitiveDisplay)]
         #[error("opt={opt:?} vec={vec:?} res={res:?}")]
         struct Wrap {
-            opt: Option<String>,
-            vec: Vec<String>,
-            res: Result<String, String>,
+            opt: Option<PublicText>,
+            vec: Vec<PublicText>,
+            res: Result<PublicText, PublicText>,
         }
 
         let err = MyErr {
@@ -817,9 +849,9 @@ mod tests {
         assert_eq!(format!("{}", err.redacted_display()), "err boom");
 
         let wrap = Wrap {
-            opt: Some("opt".to_string()),
-            vec: vec!["v1".to_string(), "v2".to_string()],
-            res: Err("err".to_string()),
+            opt: Some(PublicText("opt".to_string())),
+            vec: vec![PublicText("v1".to_string()), PublicText("v2".to_string())],
+            res: Err(PublicText("err".to_string())),
         };
         assert_eq!(
             format!("{}", wrap.redacted_display()),

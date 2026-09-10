@@ -7,7 +7,7 @@
 use redactable::tracing::IntoTracingRedactedValuableExt;
 use redactable::{Secret, Sensitive};
 
-#[derive(Sensitive, valuable::Valuable)]
+#[derive(Clone, serde::Serialize, Sensitive, valuable::Valuable)]
 struct Event {
     #[sensitive(Secret)]
     secret: u32,

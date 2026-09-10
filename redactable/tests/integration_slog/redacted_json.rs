@@ -1,4 +1,8 @@
-use super::*;
+//! The derived producer carries the redacted JSON; there is no lazy bridge.
+
+use crate::log_redacted;
+use redactable::{Secret, Sensitive};
+use serde::Serialize;
 
 #[test]
 fn produces_json_output() {
@@ -6,6 +10,7 @@ fn produces_json_output() {
     struct Event {
         #[sensitive(Secret)]
         token: String,
+        #[not_sensitive]
         user: String,
     }
 
@@ -14,11 +19,7 @@ fn produces_json_output() {
         user: "alice".into(),
     };
 
-    let output = log_redacted(&event.redacted_json());
-    if let RedactedOutput::Json(json) = output {
-        assert_eq!(json["token"], "[REDACTED]");
-        assert_eq!(json["user"], "alice");
-    } else {
-        panic!("Expected Json output");
-    }
+    let json = log_redacted(&event).json();
+    assert_eq!(json["token"], "[REDACTED]");
+    assert_eq!(json["user"], "alice");
 }

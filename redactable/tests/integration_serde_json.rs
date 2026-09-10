@@ -1,20 +1,17 @@
 //! Integration tests for serde_json::Value support.
 //!
-//! serde_json::Value is treated as an opaque leaf type. Any policy application
+//! serde_json::Value is treated as an opaque leaf type. Supported recursive policy application
 //! fully redacts it to Value::String("[REDACTED]"). This is safe-by-default.
 
 #![cfg(feature = "json")]
 
-use redactable::{Redactable, RedactableWithFormatter, Secret, Sensitive, Token};
-use serde_json::{Value, json};
-
 mod policy_application {
-    use super::*;
+    use redactable::{Redactable, Secret, Sensitive, Token};
+    use serde_json::{Value, json};
 
     #[test]
     fn redacts_with_default_policy() {
-        #[derive(Clone, Sensitive)]
-        #[cfg_attr(feature = "slog", derive(serde::Serialize))]
+        #[derive(Clone, Sensitive, serde::Serialize)]
         struct Payload {
             #[sensitive(Secret)]
             data: Value,
@@ -30,8 +27,7 @@ mod policy_application {
 
     #[test]
     fn redacts_with_token_policy() {
-        #[derive(Clone, Sensitive)]
-        #[cfg_attr(feature = "slog", derive(serde::Serialize))]
+        #[derive(Clone, Sensitive, serde::Serialize)]
         struct Payload {
             #[sensitive(Token)]
             data: Value,
@@ -60,8 +56,7 @@ mod policy_application {
             }
         }
 
-        #[derive(Clone, Sensitive)]
-        #[cfg_attr(feature = "slog", derive(serde::Serialize))]
+        #[derive(Clone, Sensitive, serde::Serialize)]
         struct Payload {
             #[sensitive(CustomPolicy)]
             data: Value,
@@ -77,12 +72,12 @@ mod policy_application {
 }
 
 mod unannotated_fields {
-    use super::*;
+    use redactable::{Redactable, Secret, Sensitive};
+    use serde_json::{Value, json};
 
     #[test]
     fn redacts_by_default() {
-        #[derive(Clone, Sensitive)]
-        #[cfg_attr(feature = "slog", derive(serde::Serialize))]
+        #[derive(Clone, Sensitive, serde::Serialize)]
         struct Payload {
             data: Value,
         }
@@ -97,10 +92,11 @@ mod unannotated_fields {
 
     #[test]
     fn works_alongside_other_fields() {
-        #[derive(Clone, Sensitive)]
-        #[cfg_attr(feature = "slog", derive(serde::Serialize))]
+        #[derive(Clone, Sensitive, serde::Serialize)]
         struct Record {
+            #[not_sensitive]
             id: u64,
+            #[not_sensitive]
             name: String,
             metadata: Value,
             #[sensitive(Secret)]
@@ -123,12 +119,12 @@ mod unannotated_fields {
 }
 
 mod option_value {
-    use super::*;
+    use redactable::{Redactable, Secret, Sensitive};
+    use serde_json::{Value, json};
 
     #[test]
     fn redacts_some() {
-        #[derive(Clone, Sensitive)]
-        #[cfg_attr(feature = "slog", derive(serde::Serialize))]
+        #[derive(Clone, Sensitive, serde::Serialize)]
         struct Payload {
             #[sensitive(Secret)]
             data: Option<Value>,
@@ -144,8 +140,7 @@ mod option_value {
 
     #[test]
     fn preserves_none() {
-        #[derive(Clone, Sensitive)]
-        #[cfg_attr(feature = "slog", derive(serde::Serialize))]
+        #[derive(Clone, Sensitive, serde::Serialize)]
         struct Payload {
             #[sensitive(Secret)]
             data: Option<Value>,
@@ -159,8 +154,7 @@ mod option_value {
 
     #[test]
     fn redacts_unannotated() {
-        #[derive(Clone, Sensitive)]
-        #[cfg_attr(feature = "slog", derive(serde::Serialize))]
+        #[derive(Clone, Sensitive, serde::Serialize)]
         struct Payload {
             data: Option<Value>,
         }
@@ -175,12 +169,12 @@ mod option_value {
 }
 
 mod vec_value {
-    use super::*;
+    use redactable::{Redactable, Secret, Sensitive};
+    use serde_json::{Value, json};
 
     #[test]
     fn redacts_all_elements() {
-        #[derive(Clone, Sensitive)]
-        #[cfg_attr(feature = "slog", derive(serde::Serialize))]
+        #[derive(Clone, Sensitive, serde::Serialize)]
         struct Payload {
             #[sensitive(Secret)]
             items: Vec<Value>,
@@ -199,8 +193,7 @@ mod vec_value {
 
     #[test]
     fn preserves_empty() {
-        #[derive(Clone, Sensitive)]
-        #[cfg_attr(feature = "slog", derive(serde::Serialize))]
+        #[derive(Clone, Sensitive, serde::Serialize)]
         struct Payload {
             #[sensitive(Secret)]
             items: Vec<Value>,
@@ -214,12 +207,12 @@ mod vec_value {
 }
 
 mod deeply_nested {
-    use super::*;
+    use redactable::{Redactable, Secret, Sensitive};
+    use serde_json::{Value, json};
 
     #[test]
     fn redacts_option_vec_value() {
-        #[derive(Clone, Sensitive)]
-        #[cfg_attr(feature = "slog", derive(serde::Serialize))]
+        #[derive(Clone, Sensitive, serde::Serialize)]
         struct Payload {
             #[sensitive(Secret)]
             data: Option<Vec<Value>>,
@@ -238,8 +231,7 @@ mod deeply_nested {
 
     #[test]
     fn redacts_vec_option_value() {
-        #[derive(Clone, Sensitive)]
-        #[cfg_attr(feature = "slog", derive(serde::Serialize))]
+        #[derive(Clone, Sensitive, serde::Serialize)]
         struct Payload {
             #[sensitive(Secret)]
             data: Vec<Option<Value>>,
@@ -264,14 +256,14 @@ mod deeply_nested {
 }
 
 mod maps {
-    use super::*;
+    use redactable::{Redactable, Secret, Sensitive};
+    use serde_json::{Value, json};
 
     #[test]
     fn redacts_hashmap_values() {
         use std::collections::HashMap;
 
-        #[derive(Clone, Sensitive)]
-        #[cfg_attr(feature = "slog", derive(serde::Serialize))]
+        #[derive(Clone, Sensitive, serde::Serialize)]
         struct Payload {
             #[sensitive(Secret)]
             data: HashMap<String, Value>,
@@ -300,8 +292,7 @@ mod maps {
     fn redacts_btreemap_values() {
         use std::collections::BTreeMap;
 
-        #[derive(Clone, Sensitive)]
-        #[cfg_attr(feature = "slog", derive(serde::Serialize))]
+        #[derive(Clone, Sensitive, serde::Serialize)]
         struct Payload {
             #[sensitive(Secret)]
             data: BTreeMap<String, Value>,
@@ -326,7 +317,8 @@ mod maps {
 }
 
 mod redactable_display {
-    use super::*;
+    use redactable::RedactableWithFormatter;
+    use serde_json::json;
 
     #[test]
     fn always_shows_redacted() {
@@ -357,12 +349,12 @@ mod redactable_display {
 }
 
 mod enums {
-    use super::*;
+    use redactable::{Redactable, Secret, Sensitive};
+    use serde_json::{Value, json};
 
     #[test]
     fn redacts_struct_variant_field() {
-        #[derive(Clone, Sensitive)]
-        #[cfg_attr(feature = "slog", derive(serde::Serialize))]
+        #[derive(Clone, Sensitive, serde::Serialize)]
         #[allow(dead_code)]
         enum Event {
             Payload {
@@ -387,12 +379,11 @@ mod enums {
 
     #[test]
     fn redacts_tuple_variant_field() {
-        #[derive(Clone, Sensitive)]
-        #[cfg_attr(feature = "slog", derive(serde::Serialize))]
+        #[derive(Clone, Sensitive, serde::Serialize)]
         #[allow(dead_code)]
         enum Message {
             Json(#[sensitive(Secret)] Value),
-            Text(String),
+            Text(#[not_sensitive] String),
         }
 
         let msg = Message::Json(json!({"type": "notification"}));
@@ -408,12 +399,12 @@ mod enums {
 }
 
 mod box_value {
-    use super::*;
+    use redactable::{Redactable, Secret, Sensitive};
+    use serde_json::{Value, json};
 
     #[test]
     fn redacts_boxed_value() {
-        #[derive(Clone, Sensitive)]
-        #[cfg_attr(feature = "slog", derive(serde::Serialize))]
+        #[derive(Clone, Sensitive, serde::Serialize)]
         struct Payload {
             #[sensitive(Secret)]
             data: Box<Value>,
@@ -429,22 +420,23 @@ mod box_value {
 }
 
 mod nested_structs {
-    use super::*;
+    use redactable::{Redactable, Secret, Sensitive};
+    use serde_json::{Value, json};
 
     #[test]
     fn redacts_in_nested_struct() {
-        #[derive(Clone, Sensitive)]
-        #[cfg_attr(feature = "slog", derive(serde::Serialize))]
+        #[derive(Clone, Sensitive, serde::Serialize)]
         struct Inner {
             #[sensitive(Secret)]
             secret_data: Value,
+            #[not_sensitive]
             public_id: u64,
         }
 
-        #[derive(Clone, Sensitive)]
-        #[cfg_attr(feature = "slog", derive(serde::Serialize))]
+        #[derive(Clone, Sensitive, serde::Serialize)]
         struct Outer {
             inner: Inner,
+            #[not_sensitive]
             name: String,
         }
 
@@ -467,14 +459,16 @@ mod nested_structs {
 }
 
 mod real_world_scenarios {
-    use super::*;
+    use redactable::{Redactable, Secret, Sensitive, Token};
+    use serde_json::{Value, json};
 
     #[test]
     fn api_response_with_dynamic_payload() {
-        #[derive(Clone, Sensitive)]
-        #[cfg_attr(feature = "slog", derive(serde::Serialize))]
+        #[derive(Clone, Sensitive, serde::Serialize)]
         struct ApiResponse {
+            #[not_sensitive]
             status: u16,
+            #[not_sensitive]
             message: String,
             payload: Option<Value>,
             #[sensitive(Token)]
@@ -506,10 +500,11 @@ mod real_world_scenarios {
 
     #[test]
     fn webhook_event() {
-        #[derive(Clone, Sensitive)]
-        #[cfg_attr(feature = "slog", derive(serde::Serialize))]
+        #[derive(Clone, Sensitive, serde::Serialize)]
         struct WebhookEvent {
+            #[not_sensitive]
             event_type: String,
+            #[not_sensitive]
             timestamp: u64,
             #[sensitive(Secret)]
             payload: Value,

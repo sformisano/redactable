@@ -1,16 +1,12 @@
-//! Fixture types for asserting derive-generated `Debug` behavior outside
-//! test builds.
+//! Fixture types for comparing derive-generated `Debug` across build modes.
 //!
 //! This crate is compiled as a dependency, so `cfg!(test)` is false inside it.
-//! Derive-generated `Debug` impls on these types therefore take the production
-//! (redacted) branch unless `redactable`'s `testing` feature is enabled, which
-//! is exactly the behavior the integration tests in the `redactable` crate
-//! assert. Keep these types out of the main crate: types defined inside unit
-//! or integration tests always see `cfg!(test) == true` and can never exercise
-//! the production branch.
+//! Integration tests compare these dependency-built types with types defined
+//! inside a consumer test. Both must retain the same production redaction,
+//! including when the `testing` feature is enabled.
 
 use redactable::{
-    Email, RedactableMapper, RedactableWithMapper, Secret, Sensitive, SensitiveDisplay,
+    Email, Redactable, RedactableMapper, RedactableWithMapper, Secret, Sensitive, SensitiveDisplay,
     SensitiveDual, Token,
 };
 
@@ -21,12 +17,14 @@ pub struct AuthEvent {
     pub api_key: String,
     #[sensitive(Email)]
     pub user_email: String,
+    #[not_sensitive]
     pub action: String,
 }
 
 /// Structural fixture: `Sensitive` derive with one annotated leaf.
 #[derive(Clone, Sensitive, serde::Serialize)]
 pub struct FixtureUser {
+    #[not_sensitive]
     pub name: String,
     #[sensitive(Secret)]
     pub api_key: String,
@@ -36,6 +34,7 @@ pub struct FixtureUser {
 #[derive(Clone, Sensitive, serde::Serialize)]
 pub enum FixtureEvent {
     Login {
+        #[not_sensitive]
         user: String,
         #[sensitive(Secret)]
         token: String,
@@ -47,6 +46,7 @@ pub enum FixtureEvent {
 /// login failed for {user} with {password}
 #[derive(SensitiveDisplay)]
 pub struct FixtureError {
+    #[not_sensitive]
     pub user: String,
     #[sensitive(Secret)]
     pub password: String,
@@ -56,6 +56,7 @@ pub struct FixtureError {
 #[derive(Clone, SensitiveDual, serde::Serialize)]
 #[error("{label}: {secret}")]
 pub struct GenericDualFixture<T> {
+    #[not_sensitive]
     pub label: T,
     #[sensitive(Secret)]
     pub secret: String,
@@ -90,6 +91,8 @@ impl RedactableWithMapper for PrivateDetail {
         self
     }
 }
+
+impl Redactable for PrivateDetail {}
 
 /// Public type whose field type is private: must compile (see E0446 note above).
 #[derive(Clone, Sensitive, serde::Serialize)]

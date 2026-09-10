@@ -2,10 +2,8 @@
 
 #![cfg(feature = "slog")]
 
-use redactable::{
-    RedactedJsonExt, RedactedOutput, Secret, Sensitive, ToRedactedOutput, slog::SlogRedactedExt,
-};
-use serde::Serialize;
+use redactable::{Secret, Sensitive, ToRedacted, slog::SlogRedactedExt};
+use serde::{Serialize, Serializer, ser::Error};
 use serde_json::Value as JsonValue;
 
 mod support {
@@ -26,11 +24,9 @@ struct FailingEvent {
 impl Serialize for FailingEvent {
     fn serialize<S>(&self, _serializer: S) -> Result<S::Ok, S::Error>
     where
-        S: serde::Serializer,
+        S: Serializer,
     {
-        Err(<S::Error as serde::ser::Error>::custom(format!(
-            "{ERROR_MARKER}:{CANARY}"
-        )))
+        Err(S::Error::custom(format!("{ERROR_MARKER}:{CANARY}")))
     }
 }
 
@@ -48,13 +44,10 @@ fn serialization_errors_stay_json_and_omit_error_canary_across_slog_paths() {
         secret: CANARY.into(),
     };
 
-    let output = event.redacted_json().to_redacted_output();
-    let RedactedOutput::Json(json) = output else {
-        panic!("redacted_json failure must preserve the Json variant");
-    };
+    let json = event.to_redacted().json();
     assert_safe_json_string(&json);
 
-    let extension = event.clone().slog_redacted_json();
+    let extension = event.slog_redacted_json();
     let mut extension_capture = CapturingSerializer::new();
     serialize_to_capture(&extension, "extension", &mut extension_capture);
     let Some(CapturedValue::Serde(json)) = extension_capture.get("extension") else {

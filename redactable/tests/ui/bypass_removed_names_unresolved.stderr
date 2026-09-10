@@ -1,0 +1,47 @@
+error[E0432]: unresolved imports `redactable::NotSensitiveDebug`, `redactable::NotSensitiveDebugExt`, `redactable::NotSensitiveExt`, `redactable::NotSensitiveJson`, `redactable::NotSensitiveJsonExt`, `redactable::NotSensitiveValue`, `redactable::UncheckedRedactedSummary`
+ --> tests/ui/bypass_removed_names_unresolved.rs:2:5
+  |
+2 |     NotSensitiveDebug, NotSensitiveDebugExt, NotSensitiveExt, NotSensitiveJson,
+  |     ^^^^^^^^^^^^^^^^^  ^^^^^^^^^^^^^^^^^^^^  ^^^^^^^^^^^^^^^  ^^^^^^^^^^^^^^^^ no `NotSensitiveJson` in the root
+  |     |                  |                     |
+  |     |                  |                     no `NotSensitiveExt` in the root
+  |     |                  no `NotSensitiveDebugExt` in the root
+  |     no `NotSensitiveDebug` in the root
+3 |     NotSensitiveJsonExt, NotSensitiveValue, UncheckedRedactedSummary,
+  |     ^^^^^^^^^^^^^^^^^^^  ^^^^^^^^^^^^^^^^^  ^^^^^^^^^^^^^^^^^^^^^^^^ no `UncheckedRedactedSummary` in the root
+  |     |                    |
+  |     |                    no `NotSensitiveValue` in the root
+  |     no `NotSensitiveJsonExt` in the root
+  |
+help: a similar name exists in the module
+  |
+2 -     NotSensitiveDebug, NotSensitiveDebugExt, NotSensitiveExt, NotSensitiveJson,
+2 +     NotSensitive, NotSensitiveDebugExt, NotSensitiveExt, NotSensitiveJson,
+  |
+help: a similar name exists in the module
+  |
+2 -     NotSensitiveDebug, NotSensitiveDebugExt, NotSensitiveExt, NotSensitiveJson,
+2 +     NotSensitiveDebug, NotSensitiveDebugExt, NotSensitive, NotSensitiveJson,
+  |
+help: a similar name exists in the module
+  |
+2 -     NotSensitiveDebug, NotSensitiveDebugExt, NotSensitiveExt, NotSensitiveJson,
+2 +     NotSensitiveDebug, NotSensitiveDebugExt, NotSensitiveExt, NotSensitive,
+  |
+help: a similar name exists in the module
+  |
+3 -     NotSensitiveJsonExt, NotSensitiveValue, UncheckedRedactedSummary,
+3 +     NotSensitiveJsonExt, SensitiveValue, UncheckedRedactedSummary,
+  |
+
+error[E0432]: unresolved import `redactable::NotSensitiveDisplayExt`
+ --> tests/ui/bypass_removed_names_unresolved.rs:5:5
+  |
+5 | use redactable::NotSensitiveDisplayExt;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ no `NotSensitiveDisplayExt` in the root
+  |
+help: a similar name exists in the module
+  |
+5 - use redactable::NotSensitiveDisplayExt;
+5 + use redactable::NotSensitiveDisplay;
+  |

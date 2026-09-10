@@ -6,7 +6,15 @@
 //! - [`RedactableWithMapper`]: Types that participate in redaction traversal
 //! - [`Redactable`]: User-facing `.redact()` method
 
-use std::{borrow::Cow, collections::VecDeque};
+use std::{
+    borrow::Cow,
+    cell::{Cell, RefCell},
+    collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque},
+    hash::{BuildHasher, Hash},
+    marker::PhantomData,
+    rc::Rc,
+    sync::{Arc, Mutex, RwLock},
+};
 
 use super::redact::RedactableMapper;
 use crate::policy::{RedactionPolicy, TextRedactionPolicy};
@@ -70,10 +78,11 @@ impl<P: RedactionPolicy> SensitiveWithPolicy<P> for Cow<'_, str> {
 
 /// A type that participates in redaction traversal.
 ///
-/// This trait is implemented by types that derive `Sensitive` or `NotSensitive`,
+/// This trait is implemented by types that derive `Sensitive`, `SensitiveDual`, or a non-sensitive derive,
 /// as well as by standard library types (scalars, strings, collections) via
-/// blanket implementations. It walks the type's fields and applies redaction
-/// to any fields marked with `#[sensitive]` or `#[sensitive(Policy)]`.
+/// built-in implementations. It walks the type's fields and applies redaction
+/// to fields marked with `#[sensitive(Policy)]`. The mapper alone is not a
+/// declaration that a raw leaf is safe at a logging boundary.
 #[diagnostic::on_unimplemented(
     message = "`{Self}` does not implement `RedactableWithMapper`",
     label = "this type cannot be walked for sensitive data",
@@ -93,16 +102,16 @@ pub trait RedactableWithMapper: Sized {
 
 /// Public entrypoint for redaction on types with declared redaction behavior.
 ///
-/// `Redactable` is implemented by the `Sensitive`, `NotSensitive`, and
-/// `NotSensitiveDisplay` derives, by `SensitiveValue` / `NotSensitiveValue`,
-/// by `serde_json::Value` (with the `json` feature), and by std containers of
-/// such types. It provides the `redact()` method and certifies the type for
-/// the logging-boundary extension traits (`RedactedOutputExt`,
-/// `RedactedJsonExt`, `SlogRedactedExt`).
+/// `Redactable` is implemented by the `Sensitive`, `SensitiveDual`, `NotSensitive`, and
+/// `NotSensitiveDisplay` derives, by `SensitiveValue` / `BypassRedaction`,
+/// by `serde_json::Value`, and by std containers of such types. It provides the
+/// `redact()` method and is the structural half every generated `ToRedacted`
+/// producer builds on.
 ///
 /// Passthrough leaves like `String` and scalars deliberately do **not**
-/// implement it: they participate in traversal (so unannotated fields work
-/// inside derived containers), but nobody declared what redacting them means,
+/// implement it: they provide low-level mapper behavior, but default fields
+/// inside sensitive-derived containers also need this declaration. Nobody
+/// declared what redacting bare leaves means,
 /// so calling `redact()` on them - or certifying them as redacted output -
 /// must not compile.
 ///
@@ -126,9 +135,9 @@ pub trait RedactableWithMapper: Sized {
 /// marker types.
 #[diagnostic::on_unimplemented(
     message = "`{Self}` has no declared redaction behavior",
-    label = "raw values cannot be redacted or certified as redacted output",
-    note = "derive `Sensitive`, `NotSensitive`, or `NotSensitiveDisplay` on the type",
-    note = "or wrap the value in `SensitiveValue<T, P>` / `NotSensitiveValue<T>`"
+    label = "this value needs a redaction declaration",
+    note = "for a local container, derive `Sensitive` and select field policies or explicit `#[not_sensitive]` declarations",
+    note = "for a raw value, use `SensitiveValue<T, P>` or deliberately declare it public with `BypassRedaction<T>`"
 )]
 pub trait Redactable: RedactableWithMapper {
     /// Redacts the value using policy-bound redaction.
@@ -147,6 +156,9 @@ pub trait Redactable: RedactableWithMapper {
 
 impl<T: Redactable> Redactable for Option<T> {}
 
+// PhantomData carries no value to inspect or transform.
+impl<T> Redactable for PhantomData<T> {}
+
 impl<T: Redactable, E: Redactable> Redactable for Result<T, E> {}
 
 impl<T: Redactable> Redactable for Vec<T> {}
@@ -157,36 +169,36 @@ impl<T: Redactable, const N: usize> Redactable for [T; N] {}
 
 impl<T: Redactable> Redactable for Box<T> {}
 
-impl<T: Redactable + Clone> Redactable for std::sync::Arc<T> {}
+impl<T: Redactable + Clone> Redactable for Arc<T> {}
 
-impl<T: Redactable + Clone> Redactable for std::rc::Rc<T> {}
+impl<T: Redactable + Clone> Redactable for Rc<T> {}
 
-impl<T: Redactable> Redactable for std::cell::RefCell<T> {}
+impl<T: Redactable> Redactable for RefCell<T> {}
 
-impl<T: Redactable + Copy> Redactable for std::cell::Cell<T> {}
+impl<T: Redactable + Copy> Redactable for Cell<T> {}
 
-impl<T: Redactable> Redactable for std::sync::Mutex<T> {}
+impl<T: Redactable> Redactable for Mutex<T> {}
 
-impl<T: Redactable> Redactable for std::sync::RwLock<T> {}
+impl<T: Redactable> Redactable for RwLock<T> {}
 
-impl<K, V, S> Redactable for std::collections::HashMap<K, V, S>
+impl<K, V, S> Redactable for HashMap<K, V, S>
 where
-    K: std::hash::Hash + Eq,
+    K: Hash + Eq,
     V: Redactable,
-    S: std::hash::BuildHasher + Clone,
+    S: BuildHasher + Clone,
 {
 }
 
-impl<K: Ord, V: Redactable> Redactable for std::collections::BTreeMap<K, V> {}
+impl<K: Ord, V: Redactable> Redactable for BTreeMap<K, V> {}
 
-impl<T, S> Redactable for std::collections::HashSet<T, S>
+impl<T, S> Redactable for HashSet<T, S>
 where
-    T: Redactable + std::hash::Hash + Eq,
-    S: std::hash::BuildHasher + Clone,
+    T: Redactable + Hash + Eq,
+    S: BuildHasher + Clone,
 {
 }
 
-impl<T: Redactable + Ord> Redactable for std::collections::BTreeSet<T> {}
+impl<T: Redactable + Ord> Redactable for BTreeSet<T> {}
 
 macro_rules! impl_tuple_redactable {
     ($($name:ident),+ $(,)?) => {

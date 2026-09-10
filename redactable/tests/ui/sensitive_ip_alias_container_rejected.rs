@@ -4,7 +4,7 @@ use redactable::{IpAddress, Sensitive};
 
 type IpMap = HashMap<IpAddr, String>;
 
-#[derive(Clone, Sensitive)]
+#[derive(serde::Serialize, Clone, Sensitive)]
 struct Event {
     #[sensitive(IpAddress)]
     peers: IpMap,
