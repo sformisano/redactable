@@ -44,7 +44,7 @@ jobs:
           components: clippy, rustfmt
 
       - name: Cache cargo
-        uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+        uses: Swatinem/rust-cache@f0d9c3887740aee45f6153b24b3a6b815192ec16 # v2
 
       # Pinned to the reviewed versions that produced this repository's green
       # audit/deny results. Unpinned installs let a supply-chain gate change
@@ -154,7 +154,7 @@ jobs:
           toolchain: 1.97.0
 
       - name: Cache cargo
-        uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+        uses: Swatinem/rust-cache@f0d9c3887740aee45f6153b24b3a6b815192ec16 # v2
 
       - name: Verify checkout identity
         run: test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
