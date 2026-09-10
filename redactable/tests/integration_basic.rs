@@ -7,17 +7,10 @@
 
 #![allow(clippy::redundant_locals)]
 
-use std::collections::{BTreeMap, HashMap};
+use redactable::{RedactedValue, ToRedacted};
 
-use redactable::{
-    NotSensitive, NotSensitiveDebugExt, NotSensitiveDisplayExt, NotSensitiveExt, Redactable,
-    RedactedOutput, RedactedOutputExt, RedactionPolicy, Secret, Sensitive, SensitiveDisplay,
-    SensitiveValue, SensitiveWithPolicy, TextPolicyKind, TextRedactionPolicy, ToRedactedOutput,
-    Token,
-};
-
-fn log_redacted<T: ToRedactedOutput>(value: &T) -> RedactedOutput {
-    value.to_redacted_output()
+fn log_redacted<T: ToRedacted>(value: &T) -> RedactedValue {
+    value.to_redacted()
 }
 
 #[path = "integration_basic/container_traversal.rs"]
@@ -48,5 +41,5 @@ mod sensitive_derive;
 mod sensitive_display_derive;
 #[path = "integration_basic/text_policy.rs"]
 mod text_policy;
-#[path = "integration_basic/to_redacted_output.rs"]
-mod to_redacted_output;
+#[path = "integration_basic/to_redacted.rs"]
+mod to_redacted;

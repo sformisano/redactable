@@ -1,6 +1,6 @@
 use std::boxed::Box as RenamedBox;
 use std::{
-    cell::RefCell,
+    cell::{Cell, RefCell},
     collections::{BTreeMap, BTreeSet, HashMap, HashSet},
     marker::PhantomData,
     net::Ipv4Addr,
@@ -8,9 +8,12 @@ use std::{
 };
 
 use redactable::{
-    IntoRedactedOutputExt, IpAddress, NotSensitiveDebug, Redactable, RedactableWithFormatter,
-    Secret, ToRedactedOutput,
+    BypassDebugRedaction, BypassRedaction, IpAddress, Redactable, RedactableWithFormatter, Secret,
+    SensitiveValue, ToRedacted,
 };
+
+use redactable::slog::SlogRedactedExt;
+use slog::{Record, RecordStatic, Value as SlogValue};
 
 static RAW_SERIALIZATIONS: AtomicUsize = AtomicUsize::new(0);
 static RAW_CLONES: AtomicUsize = AtomicUsize::new(0);
@@ -45,6 +48,9 @@ use observed::*;
 use qualified_nodes::*;
 
 fn main() {
+    use crate::qualified::Node as QualifiedLeafNode;
+    use slog::Level;
+
     assert_eq!(
         GenericPolicyScalar::<Secret> {
             value: 42,
@@ -173,11 +179,10 @@ fn main() {
     let event = ObservedEvent {
         value: Observed(String::from("raw-canary")),
     };
-    static RECORD_STATIC: slog::RecordStatic<'static> =
-        slog::record_static!(slog::Level::Info, "msg");
+    static RECORD_STATIC: RecordStatic<'static> = slog::record_static!(Level::Info, "msg");
     let args = format_args!("msg");
-    let record = slog::Record::new(&RECORD_STATIC, &args, slog::b!());
-    slog::Value::serialize(&event, &record, "event", &mut CapturingSerializer).unwrap();
+    let record = Record::new(&RECORD_STATIC, &args, slog::b!());
+    SlogValue::serialize(&event, &record, "event", &mut CapturingSerializer).unwrap();
     assert_eq!(
         (
             RAW_CLONES.load(Ordering::SeqCst),
@@ -212,24 +217,17 @@ fn main() {
     assert!(!recursive_output.contains("recursive-secret-canary"));
     assert!(!recursive_output.contains("nested-recursive-secret-canary"));
 
-    // A `#[redactable(recursive)]` type through the consuming adapters. Both
-    // calls were compile errors (`E0275`) before the owned-capability hierarchy
-    // was deleted; the adapters now route through `.redact()`.
-    let recursive_consuming = match secret_recursive_node().into_redacted_output() {
-        redactable::RedactedOutput::Text(output) => output,
-        other => panic!("structural output should be text, got {other:?}"),
-    };
-    assert!(recursive_consuming.contains("[REDACTED]"));
-    assert!(!recursive_consuming.contains("recursive-secret-canary"));
-    assert!(!recursive_consuming.contains("nested-recursive-secret-canary"));
+    // A `#[redactable(recursive)]` type through the generated producer and the
+    // slog adapter. Both calls were compile errors (`E0275`) before the
+    // owned-capability hierarchy was deleted; both route through `.redact()`.
+    let recursive_producer = secret_recursive_node().to_redacted().json().to_string();
+    assert!(recursive_producer.contains("[REDACTED]"));
+    assert!(!recursive_producer.contains("recursive-secret-canary"));
+    assert!(!recursive_producer.contains("nested-recursive-secret-canary"));
 
-    let recursive_slog =
-        match redactable::slog::SlogRedactedExt::slog_redacted_json(secret_recursive_node())
-            .to_redacted_output()
-        {
-            redactable::RedactedOutput::Json(output) => output.to_string(),
-            other => panic!("slog JSON adapter should produce JSON output, got {other:?}"),
-        };
+    let recursive_slog = SlogRedactedExt::slog_redacted_json(&secret_recursive_node())
+        .json()
+        .to_string();
     assert!(recursive_slog.contains("[REDACTED]"));
     assert!(!recursive_slog.contains("recursive-secret-canary"));
     assert!(!recursive_slog.contains("nested-recursive-secret-canary"));
@@ -247,7 +245,7 @@ fn main() {
     }
     .redact();
     let _ = GenericNode {
-        value: String::from("value"),
+        value: BypassRedaction::from(String::from("value")),
         next: None,
     }
     .redact();
@@ -358,7 +356,7 @@ fn main() {
     exercise_legacy_btree_set();
     assert_eq!(
         LegacyCellDisplay {
-            value: std::cell::Cell::new(CopyManualLeaf(7)),
+            value: Cell::new(CopyManualLeaf(7)),
         }
         .redacted_display()
         .to_string(),
@@ -366,7 +364,7 @@ fn main() {
     );
     assert_eq!(
         LegacyCellDebug {
-            value: std::cell::Cell::new(CopyManualLeaf(7)),
+            value: Cell::new(CopyManualLeaf(7)),
         }
         .redacted_display()
         .to_string(),
@@ -397,11 +395,15 @@ fn main() {
     );
     let _ = combined_dual.redact();
     let _ = QualifiedNode {
-        child: qualified::Node(String::from("secret")),
+        child: QualifiedLeafNode(SensitiveValue::<String, Secret>::from(String::from(
+            "secret",
+        ))),
     }
     .redact();
     let _ = AliasQualifiedNode {
-        child: qualified::Node(String::from("secret")),
+        child: QualifiedLeafNode(SensitiveValue::<String, Secret>::from(String::from(
+            "secret",
+        ))),
     }
     .redact();
     qualified_same_name::exercise();
@@ -545,7 +547,7 @@ fn main() {
         redactable::apply_policy_ref::<Secret, _>(&borrowed_map);
     assert_eq!(borrowed_map_output["key"], "[REDACTED]");
 
-    assert_eq!(format!("{:?}", NotSensitiveDebug("public")), "\"public\"");
+    assert_eq!(format!("{:?}", BypassDebugRedaction("public")), "\"public\"");
 
     public_api_boundary::exercise();
 }

@@ -1,6 +1,6 @@
 use redactable::SensitiveDual;
 
-#[derive(SensitiveDual)]
+#[derive(Clone, serde::Serialize, SensitiveDual)]
 enum Event {
     #[error("{value}")]
     #[redactable(legacy_formatting)]

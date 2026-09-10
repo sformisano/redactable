@@ -1,0 +1,130 @@
+error[E0277]: `String` has no declared redaction behavior
+ --> tests/ui/safety_recursive_overrides.rs
+  |
+  |     raw: String,
+  |          ^^^^^^ this value needs a redaction declaration
+  |
+  = help: the trait `Redactable` is not implemented for `String`
+  = note: for a local container, derive `Sensitive` and select field policies or explicit `#[not_sensitive]` declarations
+  = note: for a raw value, use `SensitiveValue<T, P>` or deliberately declare it public with `BypassRedaction<T>`
+  = help: the following other types implement trait `Redactable`:
+            (T0, T1)
+            (T0, T1, T2)
+            (T0, T1, T2, T3)
+            (T0,)
+            Arc<T>
+            BTreeMap<K, V>
+            BTreeSet<T>
+            Box<T>
+          and $N others
+note: required by a bound in `redactable::__private::require_declared_redaction`
+ --> src/__private/declaration.rs
+  |
+  | pub fn require_declared_redaction<T: Redactable>(_: &T) {}
+  |                                      ^^^^^^^^^^ required by this bound in `require_declared_redaction`
+
+error[E0277]: `String` has no declared redacted formatting
+ --> tests/ui/safety_recursive_overrides.rs
+  |
+  |     pair: Option<(Box<RecursiveTuple>, String)>,
+  |           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ this formatted field needs a redaction declaration
+  |
+  = help: the trait `redactable::__private::DeclaredFormatting` is not implemented for `String`
+  = note: select `#[sensitive(Policy)]`, use a declared type, or explicitly mark the field `#[not_sensitive]`
+  = note: for a local container, derive `SensitiveDisplay` or `SensitiveDual` and declare its formatted fields; reviewed manual formatters may implement `redactable::__private::DeclaredFormatting`
+  = help: the following other types implement trait `redactable::__private::DeclaredFormatting`:
+            &T
+            (T0, T1)
+            (T0, T1, T2)
+            (T0, T1, T2, T3)
+            (T0,)
+            Arc<T>
+            BTreeMap<K, V>
+            BTreeSet<T>
+          and $N others
+  = note: required for `(Box<RecursiveTuple>, String)` to implement `redactable::__private::DeclaredFormatting`
+  = note: 1 redundant requirement hidden
+  = note: required for `std::option::Option<(Box<RecursiveTuple>, String)>` to implement `redactable::__private::DeclaredFormatting`
+note: required by a bound in `redactable::__private::require_declared_formatting`
+ --> src/__private/declaration.rs
+  |
+  | pub fn require_declared_formatting<T: DeclaredFormatting + ?Sized>(_: &T) {}
+  |                                       ^^^^^^^^^^^^^^^^^^ required by this bound in `require_declared_formatting`
+
+error[E0277]: `String` has no declared redaction behavior
+ --> tests/ui/safety_recursive_overrides.rs
+  |
+  |     pair: Option<(Box<StructuralTuple>, String)>,
+  |           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ this value needs a redaction declaration
+  |
+  = help: the trait `Redactable` is not implemented for `String`
+  = note: for a local container, derive `Sensitive` and select field policies or explicit `#[not_sensitive]` declarations
+  = note: for a raw value, use `SensitiveValue<T, P>` or deliberately declare it public with `BypassRedaction<T>`
+  = help: the following other types implement trait `Redactable`:
+            (T0, T1)
+            (T0, T1, T2)
+            (T0, T1, T2, T3)
+            (T0,)
+            Arc<T>
+            BTreeMap<K, V>
+            BTreeSet<T>
+            Box<T>
+          and $N others
+  = note: required for `(Box<StructuralTuple>, String)` to implement `Redactable`
+  = note: 1 redundant requirement hidden
+  = note: required for `std::option::Option<(Box<StructuralTuple>, String)>` to implement `Redactable`
+note: required by a bound in `redactable::__private::require_declared_redaction`
+ --> src/__private/declaration.rs
+  |
+  | pub fn require_declared_redaction<T: Redactable>(_: &T) {}
+  |                                      ^^^^^^^^^^ required by this bound in `require_declared_redaction`
+
+error[E0277]: `String` has no declared redacted formatting
+ --> tests/ui/safety_recursive_overrides.rs
+  |
+  |     raw: String,
+  |          ^^^^^^ this formatted field needs a redaction declaration
+  |
+  = help: the trait `redactable::__private::DeclaredFormatting` is not implemented for `String`
+  = note: select `#[sensitive(Policy)]`, use a declared type, or explicitly mark the field `#[not_sensitive]`
+  = note: for a local container, derive `SensitiveDisplay` or `SensitiveDual` and declare its formatted fields; reviewed manual formatters may implement `redactable::__private::DeclaredFormatting`
+  = help: the following other types implement trait `redactable::__private::DeclaredFormatting`:
+            &T
+            (T0, T1)
+            (T0, T1, T2)
+            (T0, T1, T2, T3)
+            (T0,)
+            Arc<T>
+            BTreeMap<K, V>
+            BTreeSet<T>
+          and $N others
+note: required by a bound in `redactable::__private::require_declared_formatting`
+ --> src/__private/declaration.rs
+  |
+  | pub fn require_declared_formatting<T: DeclaredFormatting + ?Sized>(_: &T) {}
+  |                                       ^^^^^^^^^^^^^^^^^^ required by this bound in `require_declared_formatting`
+
+error[E0277]: `String` has no declared redacted formatting
+ --> tests/ui/safety_recursive_overrides.rs
+  |
+  |     raw: String,
+  |          ^^^^^^ this formatted field needs a redaction declaration
+  |
+  = help: the trait `redactable::__private::DeclaredFormatting` is not implemented for `String`
+  = note: select `#[sensitive(Policy)]`, use a declared type, or explicitly mark the field `#[not_sensitive]`
+  = note: for a local container, derive `SensitiveDisplay` or `SensitiveDual` and declare its formatted fields; reviewed manual formatters may implement `redactable::__private::DeclaredFormatting`
+  = help: the following other types implement trait `redactable::__private::DeclaredFormatting`:
+            &T
+            (T0, T1)
+            (T0, T1, T2)
+            (T0, T1, T2, T3)
+            (T0,)
+            Arc<T>
+            BTreeMap<K, V>
+            BTreeSet<T>
+          and $N others
+note: required by a bound in `redactable::__private::require_declared_formatting`
+ --> src/__private/declaration.rs
+  |
+  | pub fn require_declared_formatting<T: DeclaredFormatting + ?Sized>(_: &T) {}
+  |                                       ^^^^^^^^^^^^^^^^^^ required by this bound in `require_declared_formatting`

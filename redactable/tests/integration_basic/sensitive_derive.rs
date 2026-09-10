@@ -1,12 +1,10 @@
-use super::*;
-
 mod structs {
-    use super::*;
+    use redactable::{Redactable, Secret, Sensitive, Token};
+    use std::collections::HashMap;
 
     #[test]
     fn redacts_classified_fields() {
-        #[derive(Clone, Sensitive)]
-        #[cfg_attr(feature = "slog", derive(serde::Serialize))]
+        #[derive(Clone, Sensitive, serde::Serialize)]
         struct Token {
             #[sensitive(Secret)]
             value: String,
@@ -21,8 +19,7 @@ mod structs {
 
     #[test]
     fn redacts_nested_maps() {
-        #[derive(Clone, Sensitive)]
-        #[cfg_attr(feature = "slog", derive(serde::Serialize))]
+        #[derive(Clone, Sensitive, serde::Serialize)]
         struct ApiKeyEntry {
             #[sensitive(Token)]
             key: String,
@@ -42,11 +39,11 @@ mod structs {
 
     #[test]
     fn leaves_non_sensitive_fields_unchanged() {
-        #[derive(Clone, Sensitive)]
-        #[cfg_attr(feature = "slog", derive(serde::Serialize))]
+        #[derive(Clone, Sensitive, serde::Serialize)]
         struct User {
             #[sensitive(Secret)]
             password: String,
+            #[not_sensitive]
             username: String,
         }
 
@@ -63,16 +60,15 @@ mod structs {
 
     #[test]
     fn walks_nested_structs_automatically() {
-        #[derive(Clone, Sensitive)]
-        #[cfg_attr(feature = "slog", derive(serde::Serialize))]
+        #[derive(Clone, Sensitive, serde::Serialize)]
         struct Address {
             #[sensitive(Secret)]
             street: String,
+            #[not_sensitive]
             city: String,
         }
 
-        #[derive(Clone, Sensitive)]
-        #[cfg_attr(feature = "slog", derive(serde::Serialize))]
+        #[derive(Clone, Sensitive, serde::Serialize)]
         struct Person {
             #[sensitive(Secret)]
             name: String,
@@ -96,8 +92,7 @@ mod structs {
 
     #[test]
     fn handles_unit_structs() {
-        #[derive(Clone, Sensitive)]
-        #[cfg_attr(feature = "slog", derive(serde::Serialize))]
+        #[derive(Clone, Sensitive, serde::Serialize)]
         struct UnitMarker;
 
         let marker = UnitMarker;
@@ -107,13 +102,12 @@ mod structs {
 }
 
 mod tuple_structs {
-    use super::*;
+    use redactable::{Redactable, Secret, Sensitive, Token};
 
     #[test]
     fn redacts_annotated_fields() {
-        #[derive(Clone, Sensitive)]
-        #[cfg_attr(feature = "slog", derive(serde::Serialize))]
-        struct TupleSensitive(#[sensitive(Secret)] String, String);
+        #[derive(Clone, Sensitive, serde::Serialize)]
+        struct TupleSensitive(#[sensitive(Secret)] String, #[not_sensitive] String);
 
         let tuple = TupleSensitive("secret_value".into(), "public_value".into());
         let redacted = tuple.redact();
@@ -124,12 +118,11 @@ mod tuple_structs {
 
     #[test]
     fn applies_different_policies_to_different_fields() {
-        #[derive(Clone, Sensitive)]
-        #[cfg_attr(feature = "slog", derive(serde::Serialize))]
+        #[derive(Clone, Sensitive, serde::Serialize)]
         struct AuthCredentials(
             #[sensitive(Secret)] String,
             #[sensitive(Token)] String,
-            String,
+            #[not_sensitive] String,
         );
 
         let creds = AuthCredentials("hunter2".into(), "sk_live_abc123def".into(), "alice".into());
@@ -142,12 +135,11 @@ mod tuple_structs {
 }
 
 mod enums {
-    use super::*;
+    use redactable::{Redactable, Secret, Sensitive, Token};
 
     #[test]
     fn redacts_struct_variant_fields() {
-        #[derive(Clone, Sensitive)]
-        #[cfg_attr(feature = "slog", derive(serde::Serialize))]
+        #[derive(Clone, Sensitive, serde::Serialize)]
         enum Credential {
             ApiKey {
                 #[sensitive(Token)]
@@ -185,11 +177,10 @@ mod enums {
 
     #[test]
     fn redacts_tuple_variant_fields() {
-        #[derive(Clone, Sensitive)]
-        #[cfg_attr(feature = "slog", derive(serde::Serialize))]
+        #[derive(Clone, Sensitive, serde::Serialize)]
         enum Auth {
             ApiKey(#[sensitive(Token)] String),
-            Basic(#[sensitive(Secret)] String, String),
+            Basic(#[sensitive(Secret)] String, #[not_sensitive] String),
             None,
         }
 
@@ -220,26 +211,24 @@ mod enums {
 }
 
 mod nested_fields {
-    use super::*;
+    use redactable::{Redactable, Secret, Sensitive};
 
     #[test]
     fn walks_nested_structs_without_annotation() {
-        #[derive(Clone, Sensitive, PartialEq)]
-        #[cfg_attr(feature = "slog", derive(serde::Serialize))]
+        #[derive(Clone, Sensitive, PartialEq, serde::Serialize)]
         struct Credentials {
             #[sensitive(Secret)]
             password: String,
+            #[not_sensitive]
             username: String,
         }
 
-        #[derive(Clone, Sensitive)]
-        #[cfg_attr(feature = "slog", derive(serde::Serialize))]
+        #[derive(Clone, Sensitive, serde::Serialize)]
         struct UserWithAnnotation {
             creds: Credentials,
         }
 
-        #[derive(Clone, Sensitive)]
-        #[cfg_attr(feature = "slog", derive(serde::Serialize))]
+        #[derive(Clone, Sensitive, serde::Serialize)]
         struct UserWithoutAnnotation {
             creds: Credentials,
         }
@@ -266,18 +255,18 @@ mod nested_fields {
 
     #[test]
     fn walks_nested_generics() {
-        #[derive(Clone, Sensitive)]
-        #[cfg_attr(feature = "slog", derive(serde::Serialize))]
+        #[derive(Clone, Sensitive, serde::Serialize)]
         struct Inner {
             #[sensitive(Secret)]
             secret: String,
+            #[not_sensitive]
             public: i32,
         }
 
-        #[derive(Clone, Sensitive)]
-        #[cfg_attr(feature = "slog", derive(serde::Serialize))]
+        #[derive(Clone, Sensitive, serde::Serialize)]
         struct Outer {
             inner: Inner,
+            #[not_sensitive]
             label: String,
         }
 

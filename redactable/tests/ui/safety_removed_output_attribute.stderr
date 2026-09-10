@@ -1,0 +1,41 @@
+error: `#[redactable(output = json)]` was removed; `Sensitive` and `SensitiveDual` always produce JSON
+ --> tests/ui/safety_removed_output_attribute.rs:3:14
+  |
+3 | #[redactable(output = json)]
+  |              ^^^^^^
+
+error: `#[redactable(output = json)]` was removed; `Sensitive` and `SensitiveDual` always produce JSON
+ --> tests/ui/safety_removed_output_attribute.rs:6:14
+  |
+6 | #[redactable(output = json)]
+  |              ^^^^^^
+
+error: `#[redactable(output = json)]` was removed; `Sensitive` and `SensitiveDual` always produce JSON
+  --> tests/ui/safety_removed_output_attribute.rs:10:14
+   |
+10 | #[redactable(output = json)]
+   |              ^^^^^^
+
+error: `#[redactable(...)]` is not supported on non-sensitive derives; annotate the specific recursive or legacy-formatted field of a `Sensitive` type
+  --> tests/ui/safety_removed_output_attribute.rs:14:1
+   |
+14 | #[redactable(output = json)]
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error: `#[redactable(...)]` is not supported on non-sensitive derives; annotate the specific recursive or legacy-formatted field of a `Sensitive` type
+  --> tests/ui/safety_removed_output_attribute.rs:17:1
+   |
+17 | #[redactable(output = json)]
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error: unknown redactable field option; expected `recursive`, `legacy_formatting`, or `generated_formatting`
+  --> tests/ui/safety_removed_output_attribute.rs:21:18
+   |
+21 |     #[redactable(output = json)]
+   |                  ^^^^^^
+
+error: `#[redactable(...)]` is not supported on enum variants; annotate the specific field
+  --> tests/ui/safety_removed_output_attribute.rs:27:5
+   |
+27 |     #[redactable(output = json)]
+   |     ^

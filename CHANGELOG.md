@@ -1,6 +1,177 @@
 # Changelog
 
-## Unreleased
+## 0.12.0 - 2026-09-07
+
+### Breaking
+
+- Sensitive derives now require declared redaction behavior on default fields.
+  Raw leaves need a policy or explicit `#[not_sensitive]`; supported containers
+  check their contents. `SensitiveDisplay` checks only template references,
+  while `SensitiveDual` checks every structural field. Manual formatters can
+  declare their formatting behavior with `__private::DeclaredFormatting`.
+- The derive decides the logging output and always generates it, so `Sensitive`
+  and `SensitiveDual` now require `Clone + Serialize` and `NotSensitive`
+  requires `Serialize` in every configuration. `Sensitive` produces redacted
+  JSON, `SensitiveDisplay` redacted template text, `SensitiveDual` both, and the
+  two non-sensitive derives the raw value their author declared public. A
+  derived type owns that implementation, so a handwritten one for the same type
+  now conflicts with the generated one; a projection that must select different
+  fields or summary text belongs on a dedicated log-view type.
+- `RedactedOutput` is renamed `RedactedValue`, and
+  `ToRedactedOutput::to_redacted_output` is renamed `ToRedacted::to_redacted`.
+  The value is opaque: the `Text` and `Json` variants are gone, along with every
+  raw construction route and the arbitrary hidden JSON factory. The derives
+  build their values through doc-hidden helpers that redact or serialize a
+  declared type themselves, and the borrowed slog route keeps its zero-argument
+  fixed placeholder. Read it through two accessors that always answer. `text()`
+  returns the redacted text, or the redacted JSON as compact text. `json()`
+  returns the redacted JSON, or `{"message": text}` for a text-only value, where
+  0.11 produced a bare JSON string. The producer's representation is built with
+  the value; the other accessor converts it on each call and never reruns a
+  policy.
+- No `RedactedValue` is lazy: `to_redacted()` builds an owned result and retains
+  no reference to the source. The lazy bridges `RedactedJson`,
+  `RedactedJsonRef`, `RedactedOutputRef` and the extension traits behind
+  `.redacted_output()`, `.into_redacted_output()`, `.redacted_json()` and
+  `.into_redacted_json()` are removed. JSON in hand is
+  `value.to_redacted().json()`. Two borrowed adapters remain by design:
+  `.slog_redacted()` holds a reference and runs the producer when slog
+  serializes the record, and `.redacted_display()` is still a borrowed
+  formatting view; `.slog_redacted_json()` runs the producer at the call and
+  returns an owned value.
+- Logging a structural value clones it. `to_redacted` borrows its receiver, and
+  the `Sensitive` and `SensitiveDual` implementations clone, redact, then
+  serialize, so 0.12 has no non-cloning route to a structural logging value: a
+  traversed `RefCell` with a live mutable borrow panics at the log call, as the
+  borrowing routes in 0.11 already did. The display derives format the borrowed
+  value without `Clone`: `SensitiveDisplay` renders a mutably borrowed `RefCell`
+  as `<borrowed>` through the crate's formatter, while `NotSensitiveDisplay`
+  inherits the type's own `Display`; `NotSensitive` serializes the borrowed
+  value. `.slog_redacted_json()` borrows
+  instead of consuming. The consuming `into_tracing_redacted_debug` and
+  `into_tracing_redacted_valuable` adapters are unchanged, and a borrowed
+  `Sensitive` value still fails closed to `"[REDACTED]"` through the directly
+  generated slog implementation.
+- Containers of derived types keep `.redact()` but implement no `ToRedacted`
+  of their own: a `Vec<T>` or `Option<T>` is not a logging value even when `T`
+  is. Log a slice of producers through `RedactedList`, or wrap the
+  already-redacted container in a `Bypass*` member.
+- `Sensitive` containers holding `Arc<T>` or `Rc<T>` need serde's `rc` feature
+  in the consuming crate, a handwritten `Serialize`, or `#[serde(skip)]` on that
+  field, because serde does not implement `Serialize` for shared pointers by
+  default and 0.12 requires `Serialize` on the container. This crate does not
+  enable `serde/rc` for you.
+- The explicit escapes are renamed for the redaction each one bypasses.
+  `NotSensitiveValue` becomes `BypassRedaction`, the `NotSensitiveDisplay<T>`,
+  `NotSensitiveDebug<T>` and `NotSensitiveJson<'_, T>` wrappers become
+  `BypassDisplayRedaction<T>`, `BypassDebugRedaction<T>` and
+  `BypassJsonRedaction<'_, T>`, and `NotSensitive<T>` becomes
+  `BypassRedactionMarker<T>`. Their extension traits are removed: every member is
+  built with tuple syntax, which is why `BypassJsonRedaction`'s field is now
+  public. `BypassRedaction<T>` still does not implement `ToRedacted`. Two of
+  these renames produce no unresolved import, because `NotSensitive` and
+  `NotSensitiveDisplay` are also derive-macro names: an existing
+  `use redactable::NotSensitiveDisplay;` still compiles, and the failure appears
+  at the use site as `E0423` in value position or `E0573` in type position.
+- `SlogRedactedDisplayExt::slog_redacted_display` is renamed
+  `SlogRedactedExt::slog_redacted`, and `SlogRedactedExt` is bounded on
+  `ToRedacted` instead of `Redactable + Serialize`. Both of its methods are
+  therefore available on every producer, including a plain `Sensitive` struct
+  that implements no formatter. `BypassRedaction<T>`, which deliberately
+  implements no producer, loses `.slog_redacted_json()`; log it with
+  `BypassJsonRedaction(&value)` instead.
+- Generated `Debug` keeps production redaction in consumer tests and with the
+  `testing` feature. The feature now enables test helpers without raw exposure.
+
+### Added
+
+- `RedactedValue::text()` and `RedactedValue::json()` read the logging value.
+  Neither can refuse: a sink chooses the representation it wants and the value
+  adapts, so custom pipelines no longer carry a branch for a representation they
+  did not ask for.
+- `BypassTextRedaction` records deliberately selected summary text, including
+  empty summaries. It does not validate the summary's disclosure or
+  completeness. With the renamed escapes listed under Migration it forms the
+  `Bypass*` family, each member named for the redaction it bypasses.
+- `RedactedList` produces item-limited JSON with an explicit `NonZeroUsize`
+  limit and visible omitted count. Each included item is its `json()`, so a text
+  item appears as `{"message": …}`. It runs only included producers and does
+  not bound total bytes, depth, or policy cost.
+- `testing::assert_json_shape`, with the `testing` feature, checks object keys,
+  array positions, and scalar kinds with strict JSON Pointer opaque paths. It
+  reads the value's `json()`, so a text-only producer is compared as
+  `{"message": …}` rather than rejected. Expected policy values must still be
+  checked independently.
+
+### Changed
+
+- The `redaction` feature now enables `serde` and `serde_json`, which the
+  generated outputs need in every configuration. `json` is kept as a
+  compatibility alias that enables `redaction`, so `--features json` selects
+  exactly what it selected in 0.11. `--features redaction` and the default
+  feature set now also link the serde stack; `--no-default-features` and
+  `--features policy` are unaffected.
+
+### Fixed
+
+- The slog display adapter now renders what the producer selected,
+  `to_redacted().text()`, instead of calling a potentially different formatter.
+  Direct generated slog placeholders remain unchanged.
+
+### Documentation
+
+- Rewrote the README derive guide, wrapper guidance, and custom-pipeline section
+  for the automatic outputs, the `Bypass*` family, and the mandatory `Clone` and
+  `Serialize` bounds. Corrected the foreign-field guidance: a foreign field in a
+  struct you own is declared with `#[not_sensitive]`, and `BypassRedaction<T>` is
+  for a boundary that bounds the foreign value itself.
+- Updated field-declaration migrations, output-boundary examples, Debug behavior,
+  clone requirements, policy exceptions, and explicit public passthrough guidance.
+
+### Migration from 0.11
+
+Every public item this release removes or renames:
+
+| 0.11 | 0.12 | Note |
+|---|---|---|
+| `RedactedOutput` | `RedactedValue` | Opaque: no `Text`/`Json` variants, no public construction, no `Deserialize` |
+| `ToRedactedOutput` | `ToRedacted` | |
+| `.to_redacted_output()` | `.to_redacted()` | Still borrows `&self` |
+| `RedactedOutputExt::redacted_output()` | `.to_redacted()` | |
+| `IntoRedactedOutputExt::into_redacted_output()` | `.to_redacted()` | No consuming route remains |
+| `RedactedJsonExt::redacted_json()` | `.to_redacted().json()` | |
+| `IntoRedactedJsonExt::into_redacted_json()` | `.to_redacted().json()` | No consuming route remains |
+| `RedactedJson`, `RedactedJsonRef`, `RedactedOutputRef` | Removed | `RedactedValue` is the only logging value |
+| `NotSensitiveValue<T>` | `BypassRedaction<T>` | For a field of a struct you own, prefer `#[not_sensitive]` on the field |
+| `NotSensitiveDisplay<T>` (wrapper) | `BypassDisplayRedaction<T>` | The old name still resolves, to the derive macro: `E0423` or `E0573` at the use site, not an unresolved import |
+| `NotSensitiveDebug<T>` | `BypassDebugRedaction<T>` | |
+| `NotSensitiveJson<'_, T>` | `BypassJsonRedaction<'_, T>` | Field is now public; construct it as `BypassJsonRedaction(&value)` |
+| `NotSensitive<T>` (wrapper) | `BypassRedactionMarker<T>` | Same derive-macro shadowing as `NotSensitiveDisplay` |
+| `.not_sensitive()`, `.not_sensitive_display()`, `.not_sensitive_debug()`, `.not_sensitive_json()` | Tuple construction | The four extension traits are removed |
+| `SlogRedactedDisplayExt::slog_redacted_display()` | `SlogRedactedExt::slog_redacted()` | Renders `to_redacted().text()` |
+| `SlogRedactedExt::slog_redacted_json(self)` | `.slog_redacted_json(&self)` | Returns a JSON-only `RedactedValue`; the emitted bytes are unchanged |
+| `#[redactable(output = json)]` | Removed | The option existed only inside this unreleased line; `Sensitive` and `SensitiveDual` always produce JSON, and the derive rejects the attribute with a migration message |
+
+Behavior that changed without changing a name:
+
+- `Sensitive` and `SensitiveDual` require `Clone + Serialize`, and
+  `NotSensitive` requires `Serialize`, in every feature configuration.
+- `Sensitive` and `NotSensitive` now always implement `ToRedacted`.
+  `SensitiveDual` carries text and JSON in one value and builds both on every
+  call, where 0.11 built only the template.
+- `json()` on a text-only value yields `{"message": text}` instead of a bare
+  JSON string. This changes structured captures of a display-only producer and
+  the encoding of text items inside `RedactedList`.
+- `RedactedValue`'s `Debug` shows the stored redacted representations; it is no
+  longer the 0.11 enum-style output.
+- `redaction` now pulls in `serde` and `serde_json`, and `json` is a
+  compatibility alias of `redaction`.
+
+Unchanged: the five derive names, `#[not_sensitive]`, `#[sensitive(Policy)]`,
+`#[redactable(recursive)]`, `legacy_formatting`, `generated_formatting`,
+same-type `.redact()`, `.redacted_display()`, raw Serde transport, scalar
+defaults, map keys, set collapse, `PhantomData`, recursive support, the tracing
+representations, and the directly generated slog placeholder.
 
 ## 0.11.0 - 2026-07-19
 

@@ -18,7 +18,7 @@
 pub mod api {
     use redactable::{Redactable, RedactableMapper, RedactableWithMapper, Secret, Sensitive};
 
-    #[derive(Clone, Debug)]
+    #[derive(Clone, Debug, serde::Serialize)]
     struct PrivateDetail {
         note: String,
     }
@@ -29,8 +29,10 @@ pub mod api {
         }
     }
 
+    impl Redactable for PrivateDetail {}
+
     /// Public named struct holding a private field type.
-    #[derive(Clone, Sensitive)]
+    #[derive(serde::Serialize, Clone, Sensitive)]
     pub struct PublicEvent {
         #[sensitive(Secret)]
         pub token: String,
@@ -38,12 +40,13 @@ pub mod api {
     }
 
     /// Public tuple struct holding a private field type.
-    #[derive(Clone, Sensitive)]
+    #[derive(serde::Serialize, Clone, Sensitive)]
     pub struct PublicTuple(#[sensitive(Secret)] pub String, PrivateDetail);
 
     /// Public generic struct holding a private field type.
-    #[derive(Clone, Sensitive)]
+    #[derive(serde::Serialize, Clone, Sensitive)]
     pub struct PublicGeneric<T> {
+        #[not_sensitive]
         pub label: T,
         detail: PrivateDetail,
     }

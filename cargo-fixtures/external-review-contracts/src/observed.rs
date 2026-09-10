@@ -1,8 +1,9 @@
-use std::fmt;
+use std::fmt::{Arguments, Debug, Display, Formatter, Result as FmtResult};
 use std::sync::atomic::Ordering;
 
-use redactable::{RedactableMapper, RedactableWithMapper, Secret, Sensitive};
-use serde::Serialize;
+use redactable::{Redactable, RedactableMapper, RedactableWithMapper, Secret, Sensitive};
+use serde::{Serialize, Serializer};
+use slog::{Key, Result as SlogResult, SerdeValue, Serializer as SlogSerializer};
 
 use crate::{RAW_CLONES, RAW_DEBUGS, RAW_DISPLAYS, RAW_REDACTIONS, RAW_SERIALIZATIONS};
 
@@ -15,15 +16,15 @@ impl Clone for Observed {
     }
 }
 
-impl fmt::Debug for Observed {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl Debug for Observed {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
         RAW_DEBUGS.fetch_add(1, Ordering::SeqCst);
         formatter.debug_tuple("Observed").field(&self.0).finish()
     }
 }
 
-impl fmt::Display for Observed {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl Display for Observed {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
         RAW_DISPLAYS.fetch_add(1, Ordering::SeqCst);
         formatter.write_str(&self.0)
     }
@@ -32,7 +33,7 @@ impl fmt::Display for Observed {
 impl Serialize for Observed {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
-        S: serde::Serializer,
+        S: Serializer,
     {
         RAW_SERIALIZATIONS.fetch_add(1, Ordering::SeqCst);
         serializer.serialize_str(&self.0)
@@ -47,19 +48,21 @@ impl RedactableWithMapper for Observed {
     }
 }
 
-#[derive(Sensitive)]
+impl Redactable for Observed {}
+
+#[derive(Clone, serde::Serialize, Sensitive)]
 pub struct ObservedEvent {
     pub value: Observed,
 }
 
 pub struct CapturingSerializer;
 
-impl slog::Serializer for CapturingSerializer {
-    fn emit_arguments(&mut self, _key: slog::Key, _value: &fmt::Arguments<'_>) -> slog::Result {
+impl SlogSerializer for CapturingSerializer {
+    fn emit_arguments(&mut self, _key: Key, _value: &Arguments<'_>) -> SlogResult {
         Ok(())
     }
 
-    fn emit_serde(&mut self, _key: slog::Key, _value: &dyn slog::SerdeValue) -> slog::Result {
+    fn emit_serde(&mut self, _key: Key, _value: &dyn SerdeValue) -> SlogResult {
         Ok(())
     }
 }

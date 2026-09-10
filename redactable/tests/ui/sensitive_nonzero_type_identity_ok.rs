@@ -1,5 +1,7 @@
 use std::num::{NonZeroU8, NonZeroU16 as ImportedNonZero};
 
+use redactable::__private::PolicyApplicableRefForFormatting;
+use redactable::policy::RecursivePolicyKind;
 use redactable::{
     PolicyApplicable, PolicyApplicableRef, Redactable, RedactableMapper, RedactableWithFormatter,
     RedactionPolicy, Sensitive, SensitiveDisplay,
@@ -8,14 +10,14 @@ use redactable::{
 type NonZeroU32 = String;
 
 #[derive(Clone, Debug)]
-#[cfg_attr(feature = "slog", derive(serde::Serialize))]
+#[derive(serde::Serialize)]
 struct NonZeroU64(String);
 
 impl PolicyApplicable for NonZeroU64 {
     fn apply_policy<P, M>(self, _mapper: &M) -> Self
     where
         P: RedactionPolicy,
-        P::Kind: redactable::policy::RecursivePolicyKind,
+        P::Kind: RecursivePolicyKind,
         M: RedactableMapper,
     {
         self
@@ -28,31 +30,38 @@ impl PolicyApplicableRef for NonZeroU64 {
     fn apply_policy_ref<P, M>(&self, _mapper: &M) -> Self::Output
     where
         P: RedactionPolicy,
-        P::Kind: redactable::policy::RecursivePolicyKind,
+        P::Kind: RecursivePolicyKind,
         M: RedactableMapper,
     {
         "custom-nonzero".into()
     }
 }
 
-impl redactable::__private::PolicyApplicableRefForFormatting for NonZeroU64 {}
+impl PolicyApplicableRefForFormatting for NonZeroU64 {}
 
 #[derive(Clone, Sensitive)]
-#[cfg_attr(feature = "slog", derive(serde::Serialize))]
+#[derive(serde::Serialize)]
 struct Named {
     #[sensitive(redactable::Secret)]
     alias: NonZeroU32,
+    #[not_sensitive]
     real: NonZeroU8,
 }
 
 #[derive(Clone, Sensitive)]
-#[cfg_attr(feature = "slog", derive(serde::Serialize))]
-struct Tuple(#[sensitive(redactable::Secret)] NonZeroU64, ImportedNonZero);
+#[derive(serde::Serialize)]
+struct Tuple(
+    #[sensitive(redactable::Secret)] NonZeroU64,
+    #[not_sensitive] ImportedNonZero,
+);
 
 #[derive(Clone, Sensitive)]
-#[cfg_attr(feature = "slog", derive(serde::Serialize))]
+#[derive(serde::Serialize)]
 enum Enum {
-    Value(#[sensitive(redactable::Secret)] NonZeroU32, NonZeroU8),
+    Value(
+        #[sensitive(redactable::Secret)] NonZeroU32,
+        #[not_sensitive] NonZeroU8,
+    ),
 }
 
 #[derive(SensitiveDisplay)]
@@ -60,17 +69,24 @@ enum Enum {
 struct DisplayNamed {
     #[sensitive(redactable::Secret)]
     alias: NonZeroU32,
+    #[not_sensitive]
     real: ImportedNonZero,
 }
 
 #[derive(SensitiveDisplay)]
 #[error("{0} {1}")]
-struct DisplayTuple(#[sensitive(redactable::Secret)] NonZeroU64, NonZeroU8);
+struct DisplayTuple(
+    #[sensitive(redactable::Secret)] NonZeroU64,
+    #[not_sensitive] NonZeroU8,
+);
 
 #[derive(SensitiveDisplay)]
 enum DisplayEnum {
     #[error("{0} {1}")]
-    Value(#[sensitive(redactable::Secret)] NonZeroU32, ImportedNonZero),
+    Value(
+        #[sensitive(redactable::Secret)] NonZeroU32,
+        #[not_sensitive] ImportedNonZero,
+    ),
 }
 
 fn main() {

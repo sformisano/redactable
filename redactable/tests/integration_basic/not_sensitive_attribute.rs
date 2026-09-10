@@ -1,15 +1,13 @@
-use super::*;
+use redactable::{Redactable, Secret, Sensitive};
 
 #[test]
 fn passes_through_foreign_types_in_struct() {
-    #[derive(Clone, Debug, PartialEq)]
-    #[cfg_attr(feature = "slog", derive(serde::Serialize))]
+    #[derive(Clone, Debug, PartialEq, serde::Serialize)]
     struct ForeignType {
         data: String,
     }
 
-    #[derive(Clone, Sensitive)]
-    #[cfg_attr(feature = "slog", derive(serde::Serialize))]
+    #[derive(Clone, Sensitive, serde::Serialize)]
     struct Container {
         #[not_sensitive]
         foreign: ForeignType,
@@ -32,15 +30,13 @@ fn passes_through_foreign_types_in_struct() {
 
 #[test]
 fn does_not_walk_nested_sensitive_fields() {
-    #[derive(Clone, Sensitive, PartialEq)]
-    #[cfg_attr(feature = "slog", derive(serde::Serialize))]
+    #[derive(Clone, Sensitive, PartialEq, serde::Serialize)]
     struct InnerSensitive {
         #[sensitive(Secret)]
         password: String,
     }
 
-    #[derive(Clone, Sensitive)]
-    #[cfg_attr(feature = "slog", derive(serde::Serialize))]
+    #[derive(Clone, Sensitive, serde::Serialize)]
     struct Outer {
         #[not_sensitive]
         inner: InnerSensitive,
@@ -63,14 +59,12 @@ fn does_not_walk_nested_sensitive_fields() {
 
 #[test]
 fn works_on_enum_variant_fields() {
-    #[derive(Clone, Debug, PartialEq)]
-    #[cfg_attr(feature = "slog", derive(serde::Serialize))]
+    #[derive(Clone, Debug, PartialEq, serde::Serialize)]
     struct Metadata {
         version: u32,
     }
 
-    #[derive(Clone, Sensitive)]
-    #[cfg_attr(feature = "slog", derive(serde::Serialize))]
+    #[derive(Clone, Sensitive, serde::Serialize)]
     enum Event {
         Success {
             #[not_sensitive]
@@ -81,6 +75,7 @@ fn works_on_enum_variant_fields() {
         Failure {
             #[not_sensitive]
             code: u32,
+            #[not_sensitive]
             message: String,
         },
     }

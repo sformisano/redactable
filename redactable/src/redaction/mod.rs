@@ -4,10 +4,10 @@
 //!
 //! - **`traits`**: Core traits (`RedactableWithMapper`, `SensitiveWithPolicy`, `Redactable`)
 //! - **`redact`**: Application layer - the redaction machinery (`PolicyApplicable`, `RedactableMapper`)
-//! - **`wrappers`**: Wrapper types (`SensitiveValue`, `NotSensitiveValue`)
-//! - **`output`**: Output types for logging boundaries (`RedactedOutput`, `ToRedactedOutput`)
+//! - **`wrappers`**: Wrapper types (`SensitiveValue`, `BypassRedaction`)
+//! - **`output`**: The logging-boundary sink value (`RedactedValue`, `ToRedacted`)
 //! - **`display`**: Redacted display support (`RedactableWithFormatter`, `RedactedFormatterRef`)
-//! - **`escape_hatches`**: Escape hatches for non-sensitive values
+//! - **`escape_hatches`**: The Bypass family for deliberately non-redacted values
 //! - **`containers`**: `RedactableWithMapper` implementations for std types
 //!
 //! Policy marker types and text policies live in `crate::policy`.
@@ -16,8 +16,8 @@ mod containers;
 mod display;
 mod escape_hatches;
 mod ip_policy;
-#[cfg(feature = "json")]
 mod json;
+mod list;
 mod output;
 pub mod redact;
 mod traits;
@@ -26,20 +26,16 @@ mod wrappers;
 // Re-export core traits
 // Re-export display types
 pub use display::{PolicyRedactedFormatterRef, RedactableWithFormatter, RedactedFormatterRef};
-// Re-export escape hatches
+// Re-export the Bypass family
 pub use escape_hatches::{
-    NotSensitive, NotSensitiveDebug, NotSensitiveDebugExt, NotSensitiveDisplay,
-    NotSensitiveDisplayExt, NotSensitiveExt,
+    BypassDebugRedaction, BypassDisplayRedaction, BypassJsonRedaction, BypassRedactionMarker,
+    BypassTextRedaction,
 };
-#[cfg(feature = "json")]
-pub use escape_hatches::{NotSensitiveJson, NotSensitiveJsonExt};
-#[cfg(feature = "json")]
-pub use output::serialize_redacted_json;
-#[cfg(feature = "json")]
-pub use output::{IntoRedactedJsonExt, RedactedJson, RedactedJsonExt, RedactedJsonRef};
-// Re-export output types
+pub use list::RedactedList;
+// Re-export the sink value and its producer trait
 pub use output::{
-    IntoRedactedOutputExt, RedactedOutput, RedactedOutputExt, RedactedOutputRef, ToRedactedOutput,
+    RedactedValue, ToRedacted, generated_declared_json, generated_redacted_display,
+    generated_redacted_dual, generated_redacted_json, serialize_redacted_json,
 };
 // Re-export redaction machinery
 pub use redact::{
@@ -50,4 +46,4 @@ pub use traits::{Redactable, RedactableWithMapper, SensitiveWithPolicy};
 // Re-export wrapper types
 #[doc(hidden)]
 pub use ip_policy::{IpPolicyApplicable, IpPolicyApplicableRef};
-pub use wrappers::{NotSensitiveValue, SensitiveValue};
+pub use wrappers::{BypassRedaction, SensitiveValue};

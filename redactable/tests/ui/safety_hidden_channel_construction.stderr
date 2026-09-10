@@ -1,0 +1,107 @@
+error[E0308]: mismatched types
+  --> tests/ui/safety_hidden_channel_construction.rs:17:37
+   |
+17 |     let _ = generated_redacted_json(arbitrary.clone());
+   |             ----------------------- ^^^^^^^^^^^^^^^^^ expected `&_`, found `Value`
+   |             |
+   |             arguments to this function are incorrect
+   |
+   = note: expected reference `&_`
+                   found enum `Value`
+note: function defined here
+  --> src/redaction/output.rs
+   |
+   | pub fn generated_redacted_json<T: Redactable + Clone + Serialize>(value: &T) -> RedactedValue {
+   |        ^^^^^^^^^^^^^^^^^^^^^^^
+help: consider borrowing here
+   |
+17 |     let _ = generated_redacted_json(&arbitrary.clone());
+   |                                     +
+
+error[E0061]: this function takes 1 argument but 2 arguments were supplied
+  --> tests/ui/safety_hidden_channel_construction.rs:18:13
+   |
+18 |     let _ = generated_redacted_dual(&arbitrary, arbitrary.clone());
+   |             ^^^^^^^^^^^^^^^^^^^^^^^             ----------------- unexpected argument #2 of type `Value`
+   |
+note: function defined here
+  --> src/redaction/output.rs
+   |
+   | pub fn generated_redacted_dual<T>(value: &T) -> RedactedValue
+   |        ^^^^^^^^^^^^^^^^^^^^^^^
+help: remove the extra argument
+   |
+18 -     let _ = generated_redacted_dual(&arbitrary, arbitrary.clone());
+18 +     let _ = generated_redacted_dual(&arbitrary);
+   |
+
+error[E0277]: `str` has no declared redacted formatting
+  --> tests/ui/safety_hidden_channel_construction.rs:20:40
+   |
+20 |     let _ = generated_redacted_display("plain");
+   |             -------------------------- ^^^^^^^ this formatted field needs a redaction declaration
+   |             |
+   |             required by a bound introduced by this call
+   |
+   = help: the trait `redactable::__private::DeclaredFormatting` is not implemented for `str`
+   = note: select `#[sensitive(Policy)]`, use a declared type, or explicitly mark the field `#[not_sensitive]`
+   = note: for a local container, derive `SensitiveDisplay` or `SensitiveDual` and declare its formatted fields; reviewed manual formatters may implement `redactable::__private::DeclaredFormatting`
+   = help: the following other types implement trait `redactable::__private::DeclaredFormatting`:
+             &T
+             (T0, T1)
+             (T0, T1, T2)
+             (T0, T1, T2, T3)
+             (T0,)
+             Arc<T>
+             BTreeMap<K, V>
+             BTreeSet<T>
+           and $N others
+note: required by a bound in `redactable::__private::generated_redacted_display`
+  --> src/redaction/output.rs
+   |
+   | pub fn generated_redacted_display<T: DeclaredFormatting + ?Sized>(value: &T) -> RedactedValue {
+   |                                      ^^^^^^^^^^^^^^^^^^ required by this bound in `generated_redacted_display`
+
+error[E0277]: `std::string::String` has no declared redaction behavior
+  --> tests/ui/safety_hidden_channel_construction.rs:21:37
+   |
+21 |     let _ = generated_redacted_json(&String::from("raw"));
+   |             ----------------------- ^^^^^^^^^^^^^^^^^^^^ this value needs a redaction declaration
+   |             |
+   |             required by a bound introduced by this call
+   |
+   = help: the trait `Redactable` is not implemented for `std::string::String`
+   = note: for a local container, derive `Sensitive` and select field policies or explicit `#[not_sensitive]` declarations
+   = note: for a raw value, use `SensitiveValue<T, P>` or deliberately declare it public with `BypassRedaction<T>`
+   = help: the following other types implement trait `Redactable`:
+             (T0, T1)
+             (T0, T1, T2)
+             (T0, T1, T2, T3)
+             (T0,)
+             Arc<T>
+             BTreeMap<K, V>
+             BTreeSet<T>
+             Box<T>
+           and $N others
+note: required by a bound in `redactable::__private::generated_redacted_json`
+  --> src/redaction/output.rs
+   |
+   | pub fn generated_redacted_json<T: Redactable + Clone + Serialize>(value: &T) -> RedactedValue {
+   |                                   ^^^^^^^^^^ required by this bound in `generated_redacted_json`
+
+error[E0277]: `std::string::String` is not declared free of sensitive data
+  --> tests/ui/safety_hidden_channel_construction.rs:22:37
+   |
+22 |     let _ = generated_declared_json(&String::from("raw"));
+   |             ----------------------- ^^^^^^^^^^^^^^^^^^^^ this value has no public declaration
+   |             |
+   |             required by a bound introduced by this call
+   |
+   = help: the trait `redactable::__private::DeclaredNotSensitive` is not implemented for `std::string::String`
+   = note: derive `NotSensitive` on the type to declare it public
+   = note: or log a value you do not own through `BypassJsonRedaction`
+note: required by a bound in `redactable::__private::generated_declared_json`
+  --> src/redaction/output.rs
+   |
+   | pub fn generated_declared_json<T: DeclaredNotSensitive + Serialize + ?Sized>(
+   |                                   ^^^^^^^^^^^^^^^^^^^^ required by this bound in `generated_declared_json`

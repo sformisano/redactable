@@ -1,18 +1,11 @@
-use std::{
-    cell::RefCell,
-    collections::BTreeMap,
-    marker::PhantomData,
-    rc::Rc,
-    sync::Arc,
-};
+use std::{cell::RefCell, collections::BTreeMap, marker::PhantomData, rc::Rc, sync::Arc};
 
-use redactable::{
-    IntoRedactedJsonExt, IntoRedactedOutputExt, IpAddress, RedactableWithFormatter,
-    RedactedJsonExt, RedactedOutputExt, RedactionPolicy, Secret, Sensitive, SensitiveDisplay,
-    ToRedactedOutput,
-};
 use redactable::tracing::{
     IntoTracingRedactedDebugExt, TracingRedactedDebugExt, TracingRedactedExt,
+};
+use redactable::{
+    IpAddress, RedactableWithFormatter, RedactionPolicy, Secret, Sensitive, SensitiveDisplay,
+    ToRedacted, slog::SlogRedactedExt,
 };
 use serde::Serialize;
 
@@ -80,7 +73,10 @@ where
     assert!(!shared_output.contains("panic-abort-canary"));
     drop(shared);
     let mutable = arc.value.borrow_mut();
-    assert_eq!(arc.redacted_display().to_string(), "<borrowed> | <borrowed>");
+    assert_eq!(
+        arc.redacted_display().to_string(),
+        "<borrowed> | <borrowed>"
+    );
     drop(mutable);
 
     let rc = RcAliasDisplay::<P, String> {
@@ -145,7 +141,14 @@ fn assert_borrowed_map_key() {
             "panic-abort-canary".to_owned(),
         )])),
     };
-    let borrow = nested.values.as_ref().unwrap().keys().next().unwrap().borrow_mut();
+    let borrow = nested
+        .values
+        .as_ref()
+        .unwrap()
+        .keys()
+        .next()
+        .unwrap()
+        .borrow_mut();
     let output = nested.redacted_display().to_string();
     assert!(output.contains("<borrowed>"));
     assert!(!output.contains("panic-abort-canary"));
@@ -193,32 +196,28 @@ fn run_borrowed_adapter_mode(mode: &str) {
     let _borrow = value.secret.borrow_mut();
     match mode {
         "borrowed-output" => {
-            let _ = value.redacted_output().to_redacted_output();
+            let _ = value.to_redacted();
         }
         "borrowed-json" => {
-            let _ = value.redacted_json().to_redacted_output();
+            let _ = value.slog_redacted_json();
         }
         "borrowed-tracing-debug" => {
             let _ = value.tracing_redacted_debug();
         }
         "borrowed-tracing-display" => {
-            let _ = value.redacted_output().tracing_redacted();
+            let _ = value.tracing_redacted();
         }
         _ => panic!("unknown borrowed adapter mode"),
     }
 }
 
+// Only the `tracing` adapters still take ownership. Logging otherwise clones
+// (D9), so the sink-value routes moved to `run_borrowed_adapter_mode` above.
 fn run_consuming_adapter_mode(mode: &str) {
     let value = borrowed_adapter_event();
     let borrow = value.secret.borrow_mut();
     std::mem::forget(borrow);
     match mode {
-        "consuming-output" => {
-            let _ = value.into_redacted_output();
-        }
-        "consuming-json" => {
-            let _ = value.into_redacted_json().to_redacted_output();
-        }
         "consuming-tracing-debug" => {
             let _ = value.into_tracing_redacted_debug();
         }

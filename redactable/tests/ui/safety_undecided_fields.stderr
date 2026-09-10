@@ -1,0 +1,893 @@
+error[E0277]: `String` has no declared redaction behavior
+  --> tests/ui/safety_undecided_fields.rs:11:12
+   |
+11 |     field: RawAlias,
+   |            ^^^^^^^^ this value needs a redaction declaration
+   |
+   = help: the trait `Redactable` is not implemented for `String`
+   = note: for a local container, derive `Sensitive` and select field policies or explicit `#[not_sensitive]` declarations
+   = note: for a raw value, use `SensitiveValue<T, P>` or deliberately declare it public with `BypassRedaction<T>`
+   = help: the following other types implement trait `Redactable`:
+             (T0, T1)
+             (T0, T1, T2)
+             (T0, T1, T2, T3)
+             (T0,)
+             Arc<T>
+             BTreeMap<K, V>
+             BTreeSet<T>
+             Box<T>
+           and $N others
+note: required by a bound in `redactable::__private::require_declared_redaction`
+  --> src/__private/declaration.rs
+   |
+   | pub fn require_declared_redaction<T: Redactable>(_: &T) {}
+   |                                      ^^^^^^^^^^ required by this bound in `require_declared_redaction`
+
+error[E0277]: `String` has no declared redaction behavior
+  --> tests/ui/safety_undecided_fields.rs:15:12
+   |
+15 |     field: Option<String>,
+   |            ^^^^^^^^^^^^^^ this value needs a redaction declaration
+   |
+   = help: the trait `Redactable` is not implemented for `String`
+   = note: for a local container, derive `Sensitive` and select field policies or explicit `#[not_sensitive]` declarations
+   = note: for a raw value, use `SensitiveValue<T, P>` or deliberately declare it public with `BypassRedaction<T>`
+   = help: the following other types implement trait `Redactable`:
+             (T0, T1)
+             (T0, T1, T2)
+             (T0, T1, T2, T3)
+             (T0,)
+             Arc<T>
+             BTreeMap<K, V>
+             BTreeSet<T>
+             Box<T>
+           and $N others
+   = note: required for `std::option::Option<String>` to implement `Redactable`
+note: required by a bound in `redactable::__private::require_declared_redaction`
+  --> src/__private/declaration.rs
+   |
+   | pub fn require_declared_redaction<T: Redactable>(_: &T) {}
+   |                                      ^^^^^^^^^^ required by this bound in `require_declared_redaction`
+
+error[E0277]: `String` has no declared redaction behavior
+  --> tests/ui/safety_undecided_fields.rs:19:12
+   |
+19 |     field: Vec<String>,
+   |            ^^^^^^^^^^^ this value needs a redaction declaration
+   |
+   = help: the trait `Redactable` is not implemented for `String`
+   = note: for a local container, derive `Sensitive` and select field policies or explicit `#[not_sensitive]` declarations
+   = note: for a raw value, use `SensitiveValue<T, P>` or deliberately declare it public with `BypassRedaction<T>`
+   = help: the following other types implement trait `Redactable`:
+             (T0, T1)
+             (T0, T1, T2)
+             (T0, T1, T2, T3)
+             (T0,)
+             Arc<T>
+             BTreeMap<K, V>
+             BTreeSet<T>
+             Box<T>
+           and $N others
+   = note: required for `Vec<String>` to implement `Redactable`
+note: required by a bound in `redactable::__private::require_declared_redaction`
+  --> src/__private/declaration.rs
+   |
+   | pub fn require_declared_redaction<T: Redactable>(_: &T) {}
+   |                                      ^^^^^^^^^^ required by this bound in `require_declared_redaction`
+
+error[E0277]: `String` has no declared redaction behavior
+  --> tests/ui/safety_undecided_fields.rs:23:12
+   |
+23 |     field: VecDeque<String>,
+   |            ^^^^^^^^^^^^^^^^ this value needs a redaction declaration
+   |
+   = help: the trait `Redactable` is not implemented for `String`
+   = note: for a local container, derive `Sensitive` and select field policies or explicit `#[not_sensitive]` declarations
+   = note: for a raw value, use `SensitiveValue<T, P>` or deliberately declare it public with `BypassRedaction<T>`
+   = help: the following other types implement trait `Redactable`:
+             (T0, T1)
+             (T0, T1, T2)
+             (T0, T1, T2, T3)
+             (T0,)
+             Arc<T>
+             BTreeMap<K, V>
+             BTreeSet<T>
+             Box<T>
+           and $N others
+   = note: required for `VecDeque<String>` to implement `Redactable`
+note: required by a bound in `redactable::__private::require_declared_redaction`
+  --> src/__private/declaration.rs
+   |
+   | pub fn require_declared_redaction<T: Redactable>(_: &T) {}
+   |                                      ^^^^^^^^^^ required by this bound in `require_declared_redaction`
+
+error[E0277]: `String` has no declared redaction behavior
+  --> tests/ui/safety_undecided_fields.rs:27:12
+   |
+27 |     field: [String; 2],
+   |            ^^^^^^^^^^^ this value needs a redaction declaration
+   |
+   = help: the trait `Redactable` is not implemented for `String`
+   = note: for a local container, derive `Sensitive` and select field policies or explicit `#[not_sensitive]` declarations
+   = note: for a raw value, use `SensitiveValue<T, P>` or deliberately declare it public with `BypassRedaction<T>`
+   = help: the following other types implement trait `Redactable`:
+             (T0, T1)
+             (T0, T1, T2)
+             (T0, T1, T2, T3)
+             (T0,)
+             Arc<T>
+             BTreeMap<K, V>
+             BTreeSet<T>
+             Box<T>
+           and $N others
+   = note: required for `[String; 2]` to implement `Redactable`
+note: required by a bound in `redactable::__private::require_declared_redaction`
+  --> src/__private/declaration.rs
+   |
+   | pub fn require_declared_redaction<T: Redactable>(_: &T) {}
+   |                                      ^^^^^^^^^^ required by this bound in `require_declared_redaction`
+
+error[E0277]: `String` has no declared redaction behavior
+  --> tests/ui/safety_undecided_fields.rs:31:12
+   |
+31 |     field: Box<String>,
+   |            ^^^^^^^^^^^ this value needs a redaction declaration
+   |
+   = help: the trait `Redactable` is not implemented for `String`
+   = note: for a local container, derive `Sensitive` and select field policies or explicit `#[not_sensitive]` declarations
+   = note: for a raw value, use `SensitiveValue<T, P>` or deliberately declare it public with `BypassRedaction<T>`
+   = help: the following other types implement trait `Redactable`:
+             (T0, T1)
+             (T0, T1, T2)
+             (T0, T1, T2, T3)
+             (T0,)
+             Arc<T>
+             BTreeMap<K, V>
+             BTreeSet<T>
+             Box<T>
+           and $N others
+   = note: required for `Box<String>` to implement `Redactable`
+note: required by a bound in `redactable::__private::require_declared_redaction`
+  --> src/__private/declaration.rs
+   |
+   | pub fn require_declared_redaction<T: Redactable>(_: &T) {}
+   |                                      ^^^^^^^^^^ required by this bound in `require_declared_redaction`
+
+error[E0277]: `String` has no declared redaction behavior
+  --> tests/ui/safety_undecided_fields.rs:39:12
+   |
+39 |     field: Rc<String>,
+   |            ^^^^^^^^^^ this value needs a redaction declaration
+   |
+   = help: the trait `Redactable` is not implemented for `String`
+   = note: for a local container, derive `Sensitive` and select field policies or explicit `#[not_sensitive]` declarations
+   = note: for a raw value, use `SensitiveValue<T, P>` or deliberately declare it public with `BypassRedaction<T>`
+   = help: the following other types implement trait `Redactable`:
+             (T0, T1)
+             (T0, T1, T2)
+             (T0, T1, T2, T3)
+             (T0,)
+             Arc<T>
+             BTreeMap<K, V>
+             BTreeSet<T>
+             Box<T>
+           and $N others
+   = note: required for `Rc<String>` to implement `Redactable`
+note: required by a bound in `redactable::__private::require_declared_redaction`
+  --> src/__private/declaration.rs
+   |
+   | pub fn require_declared_redaction<T: Redactable>(_: &T) {}
+   |                                      ^^^^^^^^^^ required by this bound in `require_declared_redaction`
+
+error[E0277]: `String` has no declared redaction behavior
+  --> tests/ui/safety_undecided_fields.rs:44:12
+   |
+44 |     field: Arc<String>,
+   |            ^^^^^^^^^^^ this value needs a redaction declaration
+   |
+   = help: the trait `Redactable` is not implemented for `String`
+   = note: for a local container, derive `Sensitive` and select field policies or explicit `#[not_sensitive]` declarations
+   = note: for a raw value, use `SensitiveValue<T, P>` or deliberately declare it public with `BypassRedaction<T>`
+   = help: the following other types implement trait `Redactable`:
+             (T0, T1)
+             (T0, T1, T2)
+             (T0, T1, T2, T3)
+             (T0,)
+             Arc<T>
+             BTreeMap<K, V>
+             BTreeSet<T>
+             Box<T>
+           and $N others
+   = note: required for `Arc<String>` to implement `Redactable`
+note: required by a bound in `redactable::__private::require_declared_redaction`
+  --> src/__private/declaration.rs
+   |
+   | pub fn require_declared_redaction<T: Redactable>(_: &T) {}
+   |                                      ^^^^^^^^^^ required by this bound in `require_declared_redaction`
+
+error[E0277]: `String` has no declared redaction behavior
+  --> tests/ui/safety_undecided_fields.rs:48:12
+   |
+48 |     field: RefCell<String>,
+   |            ^^^^^^^^^^^^^^^ this value needs a redaction declaration
+   |
+   = help: the trait `Redactable` is not implemented for `String`
+   = note: for a local container, derive `Sensitive` and select field policies or explicit `#[not_sensitive]` declarations
+   = note: for a raw value, use `SensitiveValue<T, P>` or deliberately declare it public with `BypassRedaction<T>`
+   = help: the following other types implement trait `Redactable`:
+             (T0, T1)
+             (T0, T1, T2)
+             (T0, T1, T2, T3)
+             (T0,)
+             Arc<T>
+             BTreeMap<K, V>
+             BTreeSet<T>
+             Box<T>
+           and $N others
+   = note: required for `RefCell<String>` to implement `Redactable`
+note: required by a bound in `redactable::__private::require_declared_redaction`
+  --> src/__private/declaration.rs
+   |
+   | pub fn require_declared_redaction<T: Redactable>(_: &T) {}
+   |                                      ^^^^^^^^^^ required by this bound in `require_declared_redaction`
+
+error[E0277]: `u8` has no declared redaction behavior
+  --> tests/ui/safety_undecided_fields.rs:52:12
+   |
+52 |     field: Cell<u8>,
+   |            ^^^^^^^^ this value needs a redaction declaration
+   |
+   = help: the trait `Redactable` is not implemented for `u8`
+   = note: for a local container, derive `Sensitive` and select field policies or explicit `#[not_sensitive]` declarations
+   = note: for a raw value, use `SensitiveValue<T, P>` or deliberately declare it public with `BypassRedaction<T>`
+   = help: the following other types implement trait `Redactable`:
+             (T0, T1)
+             (T0, T1, T2)
+             (T0, T1, T2, T3)
+             (T0,)
+             Arc<T>
+             BTreeMap<K, V>
+             BTreeSet<T>
+             Box<T>
+           and $N others
+   = note: required for `Cell<u8>` to implement `Redactable`
+note: required by a bound in `redactable::__private::require_declared_redaction`
+  --> src/__private/declaration.rs
+   |
+   | pub fn require_declared_redaction<T: Redactable>(_: &T) {}
+   |                                      ^^^^^^^^^^ required by this bound in `require_declared_redaction`
+
+error[E0277]: the trait bound `std::sync::Mutex<String>: Clone` is not satisfied
+  --> tests/ui/safety_undecided_fields.rs:56:5
+   |
+54 | #[derive(Clone, serde::Serialize, Sensitive)]
+   |          ----- in this derive macro expansion
+55 | struct Structural10 {
+56 |     field: Mutex<String>,
+   |     ^^^^^^^^^^^^^^^^^^^^ the trait `Clone` is not implemented for `std::sync::Mutex<String>`
+
+error[E0277]: `String` has no declared redaction behavior
+  --> tests/ui/safety_undecided_fields.rs:56:12
+   |
+56 |     field: Mutex<String>,
+   |            ^^^^^^^^^^^^^ this value needs a redaction declaration
+   |
+   = help: the trait `Redactable` is not implemented for `String`
+   = note: for a local container, derive `Sensitive` and select field policies or explicit `#[not_sensitive]` declarations
+   = note: for a raw value, use `SensitiveValue<T, P>` or deliberately declare it public with `BypassRedaction<T>`
+   = help: the following other types implement trait `Redactable`:
+             (T0, T1)
+             (T0, T1, T2)
+             (T0, T1, T2, T3)
+             (T0,)
+             Arc<T>
+             BTreeMap<K, V>
+             BTreeSet<T>
+             Box<T>
+           and $N others
+   = note: required for `std::sync::Mutex<String>` to implement `Redactable`
+note: required by a bound in `redactable::__private::require_declared_redaction`
+  --> src/__private/declaration.rs
+   |
+   | pub fn require_declared_redaction<T: Redactable>(_: &T) {}
+   |                                      ^^^^^^^^^^ required by this bound in `require_declared_redaction`
+
+error[E0277]: the trait bound `std::sync::RwLock<String>: Clone` is not satisfied
+  --> tests/ui/safety_undecided_fields.rs:60:5
+   |
+58 | #[derive(Clone, serde::Serialize, Sensitive)]
+   |          ----- in this derive macro expansion
+59 | struct Structural11 {
+60 |     field: RwLock<String>,
+   |     ^^^^^^^^^^^^^^^^^^^^^ the trait `Clone` is not implemented for `std::sync::RwLock<String>`
+
+error[E0277]: `String` has no declared redaction behavior
+  --> tests/ui/safety_undecided_fields.rs:60:12
+   |
+60 |     field: RwLock<String>,
+   |            ^^^^^^^^^^^^^^ this value needs a redaction declaration
+   |
+   = help: the trait `Redactable` is not implemented for `String`
+   = note: for a local container, derive `Sensitive` and select field policies or explicit `#[not_sensitive]` declarations
+   = note: for a raw value, use `SensitiveValue<T, P>` or deliberately declare it public with `BypassRedaction<T>`
+   = help: the following other types implement trait `Redactable`:
+             (T0, T1)
+             (T0, T1, T2)
+             (T0, T1, T2, T3)
+             (T0,)
+             Arc<T>
+             BTreeMap<K, V>
+             BTreeSet<T>
+             Box<T>
+           and $N others
+   = note: required for `std::sync::RwLock<String>` to implement `Redactable`
+note: required by a bound in `redactable::__private::require_declared_redaction`
+  --> src/__private/declaration.rs
+   |
+   | pub fn require_declared_redaction<T: Redactable>(_: &T) {}
+   |                                      ^^^^^^^^^^ required by this bound in `require_declared_redaction`
+
+error[E0277]: `String` has no declared redaction behavior
+  --> tests/ui/safety_undecided_fields.rs:64:12
+   |
+64 |     field: Result<String, String>,
+   |            ^^^^^^^^^^^^^^^^^^^^^^ this value needs a redaction declaration
+   |
+   = help: the trait `Redactable` is not implemented for `String`
+   = note: for a local container, derive `Sensitive` and select field policies or explicit `#[not_sensitive]` declarations
+   = note: for a raw value, use `SensitiveValue<T, P>` or deliberately declare it public with `BypassRedaction<T>`
+   = help: the following other types implement trait `Redactable`:
+             (T0, T1)
+             (T0, T1, T2)
+             (T0, T1, T2, T3)
+             (T0,)
+             Arc<T>
+             BTreeMap<K, V>
+             BTreeSet<T>
+             Box<T>
+           and $N others
+   = note: required for `Result<String, String>` to implement `Redactable`
+note: required by a bound in `redactable::__private::require_declared_redaction`
+  --> src/__private/declaration.rs
+   |
+   | pub fn require_declared_redaction<T: Redactable>(_: &T) {}
+   |                                      ^^^^^^^^^^ required by this bound in `require_declared_redaction`
+
+error[E0277]: `String` has no declared redaction behavior
+  --> tests/ui/safety_undecided_fields.rs:68:12
+   |
+68 |     field: (String, String),
+   |            ^^^^^^^^^^^^^^^^ this value needs a redaction declaration
+   |
+   = help: the trait `Redactable` is not implemented for `String`
+   = note: for a local container, derive `Sensitive` and select field policies or explicit `#[not_sensitive]` declarations
+   = note: for a raw value, use `SensitiveValue<T, P>` or deliberately declare it public with `BypassRedaction<T>`
+   = help: the following other types implement trait `Redactable`:
+             (T0, T1)
+             (T0, T1, T2)
+             (T0, T1, T2, T3)
+             (T0,)
+             Arc<T>
+             BTreeMap<K, V>
+             BTreeSet<T>
+             Box<T>
+           and $N others
+   = note: required for `(String, String)` to implement `Redactable`
+note: required by a bound in `redactable::__private::require_declared_redaction`
+  --> src/__private/declaration.rs
+   |
+   | pub fn require_declared_redaction<T: Redactable>(_: &T) {}
+   |                                      ^^^^^^^^^^ required by this bound in `require_declared_redaction`
+
+error[E0277]: `String` has no declared redaction behavior
+  --> tests/ui/safety_undecided_fields.rs:72:12
+   |
+72 |     field: HashMap<String, String>,
+   |            ^^^^^^^^^^^^^^^^^^^^^^^ this value needs a redaction declaration
+   |
+   = help: the trait `Redactable` is not implemented for `String`
+   = note: for a local container, derive `Sensitive` and select field policies or explicit `#[not_sensitive]` declarations
+   = note: for a raw value, use `SensitiveValue<T, P>` or deliberately declare it public with `BypassRedaction<T>`
+   = help: the following other types implement trait `Redactable`:
+             (T0, T1)
+             (T0, T1, T2)
+             (T0, T1, T2, T3)
+             (T0,)
+             Arc<T>
+             BTreeMap<K, V>
+             BTreeSet<T>
+             Box<T>
+           and $N others
+   = note: required for `HashMap<String, String>` to implement `Redactable`
+note: required by a bound in `redactable::__private::require_declared_redaction`
+  --> src/__private/declaration.rs
+   |
+   | pub fn require_declared_redaction<T: Redactable>(_: &T) {}
+   |                                      ^^^^^^^^^^ required by this bound in `require_declared_redaction`
+
+error[E0277]: `String` has no declared redaction behavior
+  --> tests/ui/safety_undecided_fields.rs:76:12
+   |
+76 |     field: BTreeMap<String, String>,
+   |            ^^^^^^^^^^^^^^^^^^^^^^^^ this value needs a redaction declaration
+   |
+   = help: the trait `Redactable` is not implemented for `String`
+   = note: for a local container, derive `Sensitive` and select field policies or explicit `#[not_sensitive]` declarations
+   = note: for a raw value, use `SensitiveValue<T, P>` or deliberately declare it public with `BypassRedaction<T>`
+   = help: the following other types implement trait `Redactable`:
+             (T0, T1)
+             (T0, T1, T2)
+             (T0, T1, T2, T3)
+             (T0,)
+             Arc<T>
+             BTreeMap<K, V>
+             BTreeSet<T>
+             Box<T>
+           and $N others
+   = note: required for `BTreeMap<String, String>` to implement `Redactable`
+note: required by a bound in `redactable::__private::require_declared_redaction`
+  --> src/__private/declaration.rs
+   |
+   | pub fn require_declared_redaction<T: Redactable>(_: &T) {}
+   |                                      ^^^^^^^^^^ required by this bound in `require_declared_redaction`
+
+error[E0277]: `String` has no declared redacted formatting
+  --> tests/ui/safety_undecided_fields.rs:81:12
+   |
+81 |     field: RawAlias,
+   |            ^^^^^^^^ this formatted field needs a redaction declaration
+   |
+   = help: the trait `redactable::__private::DeclaredFormatting` is not implemented for `String`
+   = note: select `#[sensitive(Policy)]`, use a declared type, or explicitly mark the field `#[not_sensitive]`
+   = note: for a local container, derive `SensitiveDisplay` or `SensitiveDual` and declare its formatted fields; reviewed manual formatters may implement `redactable::__private::DeclaredFormatting`
+   = help: the following other types implement trait `redactable::__private::DeclaredFormatting`:
+             &T
+             (T0, T1)
+             (T0, T1, T2)
+             (T0, T1, T2, T3)
+             (T0,)
+             Arc<T>
+             BTreeMap<K, V>
+             BTreeSet<T>
+           and $N others
+note: required by a bound in `redactable::__private::require_declared_formatting`
+  --> src/__private/declaration.rs
+   |
+   | pub fn require_declared_formatting<T: DeclaredFormatting + ?Sized>(_: &T) {}
+   |                                       ^^^^^^^^^^^^^^^^^^ required by this bound in `require_declared_formatting`
+
+error[E0277]: `String` has no declared redacted formatting
+  --> tests/ui/safety_undecided_fields.rs:86:12
+   |
+86 |     field: Option<String>,
+   |            ^^^^^^^^^^^^^^ this formatted field needs a redaction declaration
+   |
+   = help: the trait `redactable::__private::DeclaredFormatting` is not implemented for `String`
+   = note: select `#[sensitive(Policy)]`, use a declared type, or explicitly mark the field `#[not_sensitive]`
+   = note: for a local container, derive `SensitiveDisplay` or `SensitiveDual` and declare its formatted fields; reviewed manual formatters may implement `redactable::__private::DeclaredFormatting`
+   = help: the following other types implement trait `redactable::__private::DeclaredFormatting`:
+             &T
+             (T0, T1)
+             (T0, T1, T2)
+             (T0, T1, T2, T3)
+             (T0,)
+             Arc<T>
+             BTreeMap<K, V>
+             BTreeSet<T>
+           and $N others
+   = note: required for `std::option::Option<String>` to implement `redactable::__private::DeclaredFormatting`
+note: required by a bound in `redactable::__private::require_declared_formatting`
+  --> src/__private/declaration.rs
+   |
+   | pub fn require_declared_formatting<T: DeclaredFormatting + ?Sized>(_: &T) {}
+   |                                       ^^^^^^^^^^^^^^^^^^ required by this bound in `require_declared_formatting`
+
+error[E0277]: `String` has no declared redacted formatting
+  --> tests/ui/safety_undecided_fields.rs:91:12
+   |
+91 |     field: Vec<String>,
+   |            ^^^^^^^^^^^ this formatted field needs a redaction declaration
+   |
+   = help: the trait `redactable::__private::DeclaredFormatting` is not implemented for `String`
+   = note: select `#[sensitive(Policy)]`, use a declared type, or explicitly mark the field `#[not_sensitive]`
+   = note: for a local container, derive `SensitiveDisplay` or `SensitiveDual` and declare its formatted fields; reviewed manual formatters may implement `redactable::__private::DeclaredFormatting`
+   = help: the following other types implement trait `redactable::__private::DeclaredFormatting`:
+             &T
+             (T0, T1)
+             (T0, T1, T2)
+             (T0, T1, T2, T3)
+             (T0,)
+             Arc<T>
+             BTreeMap<K, V>
+             BTreeSet<T>
+           and $N others
+   = note: required for `Vec<String>` to implement `redactable::__private::DeclaredFormatting`
+note: required by a bound in `redactable::__private::require_declared_formatting`
+  --> src/__private/declaration.rs
+   |
+   | pub fn require_declared_formatting<T: DeclaredFormatting + ?Sized>(_: &T) {}
+   |                                       ^^^^^^^^^^^^^^^^^^ required by this bound in `require_declared_formatting`
+
+error[E0277]: `String` has no declared redacted formatting
+  --> tests/ui/safety_undecided_fields.rs:96:12
+   |
+96 |     field: VecDeque<String>,
+   |            ^^^^^^^^^^^^^^^^ this formatted field needs a redaction declaration
+   |
+   = help: the trait `redactable::__private::DeclaredFormatting` is not implemented for `String`
+   = note: select `#[sensitive(Policy)]`, use a declared type, or explicitly mark the field `#[not_sensitive]`
+   = note: for a local container, derive `SensitiveDisplay` or `SensitiveDual` and declare its formatted fields; reviewed manual formatters may implement `redactable::__private::DeclaredFormatting`
+   = help: the following other types implement trait `redactable::__private::DeclaredFormatting`:
+             &T
+             (T0, T1)
+             (T0, T1, T2)
+             (T0, T1, T2, T3)
+             (T0,)
+             Arc<T>
+             BTreeMap<K, V>
+             BTreeSet<T>
+           and $N others
+   = note: required for `VecDeque<String>` to implement `redactable::__private::DeclaredFormatting`
+note: required by a bound in `redactable::__private::require_declared_formatting`
+  --> src/__private/declaration.rs
+   |
+   | pub fn require_declared_formatting<T: DeclaredFormatting + ?Sized>(_: &T) {}
+   |                                       ^^^^^^^^^^^^^^^^^^ required by this bound in `require_declared_formatting`
+
+error[E0277]: `String` has no declared redacted formatting
+   --> tests/ui/safety_undecided_fields.rs:101:12
+    |
+101 |     field: [String; 2],
+    |            ^^^^^^^^^^^ this formatted field needs a redaction declaration
+    |
+    = help: the trait `redactable::__private::DeclaredFormatting` is not implemented for `String`
+    = note: select `#[sensitive(Policy)]`, use a declared type, or explicitly mark the field `#[not_sensitive]`
+    = note: for a local container, derive `SensitiveDisplay` or `SensitiveDual` and declare its formatted fields; reviewed manual formatters may implement `redactable::__private::DeclaredFormatting`
+    = help: the following other types implement trait `redactable::__private::DeclaredFormatting`:
+              &T
+              (T0, T1)
+              (T0, T1, T2)
+              (T0, T1, T2, T3)
+              (T0,)
+              Arc<T>
+              BTreeMap<K, V>
+              BTreeSet<T>
+            and $N others
+    = note: required for `[String; 2]` to implement `redactable::__private::DeclaredFormatting`
+note: required by a bound in `redactable::__private::require_declared_formatting`
+   --> src/__private/declaration.rs
+    |
+    | pub fn require_declared_formatting<T: DeclaredFormatting + ?Sized>(_: &T) {}
+    |                                       ^^^^^^^^^^^^^^^^^^ required by this bound in `require_declared_formatting`
+
+error[E0277]: `String` has no declared redacted formatting
+   --> tests/ui/safety_undecided_fields.rs:106:12
+    |
+106 |     field: Box<String>,
+    |            ^^^^^^^^^^^ this formatted field needs a redaction declaration
+    |
+    = help: the trait `redactable::__private::DeclaredFormatting` is not implemented for `String`
+    = note: select `#[sensitive(Policy)]`, use a declared type, or explicitly mark the field `#[not_sensitive]`
+    = note: for a local container, derive `SensitiveDisplay` or `SensitiveDual` and declare its formatted fields; reviewed manual formatters may implement `redactable::__private::DeclaredFormatting`
+    = help: the following other types implement trait `redactable::__private::DeclaredFormatting`:
+              &T
+              (T0, T1)
+              (T0, T1, T2)
+              (T0, T1, T2, T3)
+              (T0,)
+              Arc<T>
+              BTreeMap<K, V>
+              BTreeSet<T>
+            and $N others
+    = note: required for `Box<String>` to implement `redactable::__private::DeclaredFormatting`
+note: required by a bound in `redactable::__private::require_declared_formatting`
+   --> src/__private/declaration.rs
+    |
+    | pub fn require_declared_formatting<T: DeclaredFormatting + ?Sized>(_: &T) {}
+    |                                       ^^^^^^^^^^^^^^^^^^ required by this bound in `require_declared_formatting`
+
+error[E0277]: `String` has no declared redacted formatting
+   --> tests/ui/safety_undecided_fields.rs:111:12
+    |
+111 |     field: Rc<String>,
+    |            ^^^^^^^^^^ this formatted field needs a redaction declaration
+    |
+    = help: the trait `redactable::__private::DeclaredFormatting` is not implemented for `String`
+    = note: select `#[sensitive(Policy)]`, use a declared type, or explicitly mark the field `#[not_sensitive]`
+    = note: for a local container, derive `SensitiveDisplay` or `SensitiveDual` and declare its formatted fields; reviewed manual formatters may implement `redactable::__private::DeclaredFormatting`
+    = help: the following other types implement trait `redactable::__private::DeclaredFormatting`:
+              &T
+              (T0, T1)
+              (T0, T1, T2)
+              (T0, T1, T2, T3)
+              (T0,)
+              Arc<T>
+              BTreeMap<K, V>
+              BTreeSet<T>
+            and $N others
+    = note: required for `Rc<String>` to implement `redactable::__private::DeclaredFormatting`
+note: required by a bound in `redactable::__private::require_declared_formatting`
+   --> src/__private/declaration.rs
+    |
+    | pub fn require_declared_formatting<T: DeclaredFormatting + ?Sized>(_: &T) {}
+    |                                       ^^^^^^^^^^^^^^^^^^ required by this bound in `require_declared_formatting`
+
+error[E0277]: `String` has no declared redacted formatting
+   --> tests/ui/safety_undecided_fields.rs:116:12
+    |
+116 |     field: Arc<String>,
+    |            ^^^^^^^^^^^ this formatted field needs a redaction declaration
+    |
+    = help: the trait `redactable::__private::DeclaredFormatting` is not implemented for `String`
+    = note: select `#[sensitive(Policy)]`, use a declared type, or explicitly mark the field `#[not_sensitive]`
+    = note: for a local container, derive `SensitiveDisplay` or `SensitiveDual` and declare its formatted fields; reviewed manual formatters may implement `redactable::__private::DeclaredFormatting`
+    = help: the following other types implement trait `redactable::__private::DeclaredFormatting`:
+              &T
+              (T0, T1)
+              (T0, T1, T2)
+              (T0, T1, T2, T3)
+              (T0,)
+              Arc<T>
+              BTreeMap<K, V>
+              BTreeSet<T>
+            and $N others
+    = note: required for `Arc<String>` to implement `redactable::__private::DeclaredFormatting`
+note: required by a bound in `redactable::__private::require_declared_formatting`
+   --> src/__private/declaration.rs
+    |
+    | pub fn require_declared_formatting<T: DeclaredFormatting + ?Sized>(_: &T) {}
+    |                                       ^^^^^^^^^^^^^^^^^^ required by this bound in `require_declared_formatting`
+
+error[E0277]: `String` has no declared redacted formatting
+   --> tests/ui/safety_undecided_fields.rs:121:12
+    |
+121 |     field: RefCell<String>,
+    |            ^^^^^^^^^^^^^^^ this formatted field needs a redaction declaration
+    |
+    = help: the trait `redactable::__private::DeclaredFormatting` is not implemented for `String`
+    = note: select `#[sensitive(Policy)]`, use a declared type, or explicitly mark the field `#[not_sensitive]`
+    = note: for a local container, derive `SensitiveDisplay` or `SensitiveDual` and declare its formatted fields; reviewed manual formatters may implement `redactable::__private::DeclaredFormatting`
+    = help: the following other types implement trait `redactable::__private::DeclaredFormatting`:
+              &T
+              (T0, T1)
+              (T0, T1, T2)
+              (T0, T1, T2, T3)
+              (T0,)
+              Arc<T>
+              BTreeMap<K, V>
+              BTreeSet<T>
+            and $N others
+    = note: required for `RefCell<String>` to implement `redactable::__private::DeclaredFormatting`
+note: required by a bound in `redactable::__private::require_declared_formatting`
+   --> src/__private/declaration.rs
+    |
+    | pub fn require_declared_formatting<T: DeclaredFormatting + ?Sized>(_: &T) {}
+    |                                       ^^^^^^^^^^^^^^^^^^ required by this bound in `require_declared_formatting`
+
+error[E0277]: `u8` has no declared redacted formatting
+   --> tests/ui/safety_undecided_fields.rs:126:12
+    |
+126 |     field: Cell<u8>,
+    |            ^^^^^^^^ this formatted field needs a redaction declaration
+    |
+    = help: the trait `redactable::__private::DeclaredFormatting` is not implemented for `u8`
+    = note: select `#[sensitive(Policy)]`, use a declared type, or explicitly mark the field `#[not_sensitive]`
+    = note: for a local container, derive `SensitiveDisplay` or `SensitiveDual` and declare its formatted fields; reviewed manual formatters may implement `redactable::__private::DeclaredFormatting`
+    = help: the following other types implement trait `redactable::__private::DeclaredFormatting`:
+              &T
+              (T0, T1)
+              (T0, T1, T2)
+              (T0, T1, T2, T3)
+              (T0,)
+              Arc<T>
+              BTreeMap<K, V>
+              BTreeSet<T>
+            and $N others
+    = note: required for `Cell<u8>` to implement `redactable::__private::DeclaredFormatting`
+note: required by a bound in `redactable::__private::require_declared_formatting`
+   --> src/__private/declaration.rs
+    |
+    | pub fn require_declared_formatting<T: DeclaredFormatting + ?Sized>(_: &T) {}
+    |                                       ^^^^^^^^^^^^^^^^^^ required by this bound in `require_declared_formatting`
+
+error[E0277]: `String` has no declared redacted formatting
+   --> tests/ui/safety_undecided_fields.rs:131:12
+    |
+131 |     field: Mutex<String>,
+    |            ^^^^^^^^^^^^^ this formatted field needs a redaction declaration
+    |
+    = help: the trait `redactable::__private::DeclaredFormatting` is not implemented for `String`
+    = note: select `#[sensitive(Policy)]`, use a declared type, or explicitly mark the field `#[not_sensitive]`
+    = note: for a local container, derive `SensitiveDisplay` or `SensitiveDual` and declare its formatted fields; reviewed manual formatters may implement `redactable::__private::DeclaredFormatting`
+    = help: the following other types implement trait `redactable::__private::DeclaredFormatting`:
+              &T
+              (T0, T1)
+              (T0, T1, T2)
+              (T0, T1, T2, T3)
+              (T0,)
+              Arc<T>
+              BTreeMap<K, V>
+              BTreeSet<T>
+            and $N others
+    = note: required for `std::sync::Mutex<String>` to implement `redactable::__private::DeclaredFormatting`
+note: required by a bound in `redactable::__private::require_declared_formatting`
+   --> src/__private/declaration.rs
+    |
+    | pub fn require_declared_formatting<T: DeclaredFormatting + ?Sized>(_: &T) {}
+    |                                       ^^^^^^^^^^^^^^^^^^ required by this bound in `require_declared_formatting`
+
+error[E0277]: `String` has no declared redacted formatting
+   --> tests/ui/safety_undecided_fields.rs:136:12
+    |
+136 |     field: RwLock<String>,
+    |            ^^^^^^^^^^^^^^ this formatted field needs a redaction declaration
+    |
+    = help: the trait `redactable::__private::DeclaredFormatting` is not implemented for `String`
+    = note: select `#[sensitive(Policy)]`, use a declared type, or explicitly mark the field `#[not_sensitive]`
+    = note: for a local container, derive `SensitiveDisplay` or `SensitiveDual` and declare its formatted fields; reviewed manual formatters may implement `redactable::__private::DeclaredFormatting`
+    = help: the following other types implement trait `redactable::__private::DeclaredFormatting`:
+              &T
+              (T0, T1)
+              (T0, T1, T2)
+              (T0, T1, T2, T3)
+              (T0,)
+              Arc<T>
+              BTreeMap<K, V>
+              BTreeSet<T>
+            and $N others
+    = note: required for `std::sync::RwLock<String>` to implement `redactable::__private::DeclaredFormatting`
+note: required by a bound in `redactable::__private::require_declared_formatting`
+   --> src/__private/declaration.rs
+    |
+    | pub fn require_declared_formatting<T: DeclaredFormatting + ?Sized>(_: &T) {}
+    |                                       ^^^^^^^^^^^^^^^^^^ required by this bound in `require_declared_formatting`
+
+error[E0277]: `String` has no declared redacted formatting
+   --> tests/ui/safety_undecided_fields.rs:141:12
+    |
+141 |     field: Result<String, String>,
+    |            ^^^^^^^^^^^^^^^^^^^^^^ this formatted field needs a redaction declaration
+    |
+    = help: the trait `redactable::__private::DeclaredFormatting` is not implemented for `String`
+    = note: select `#[sensitive(Policy)]`, use a declared type, or explicitly mark the field `#[not_sensitive]`
+    = note: for a local container, derive `SensitiveDisplay` or `SensitiveDual` and declare its formatted fields; reviewed manual formatters may implement `redactable::__private::DeclaredFormatting`
+    = help: the following other types implement trait `redactable::__private::DeclaredFormatting`:
+              &T
+              (T0, T1)
+              (T0, T1, T2)
+              (T0, T1, T2, T3)
+              (T0,)
+              Arc<T>
+              BTreeMap<K, V>
+              BTreeSet<T>
+            and $N others
+    = note: required for `Result<String, String>` to implement `redactable::__private::DeclaredFormatting`
+note: required by a bound in `redactable::__private::require_declared_formatting`
+   --> src/__private/declaration.rs
+    |
+    | pub fn require_declared_formatting<T: DeclaredFormatting + ?Sized>(_: &T) {}
+    |                                       ^^^^^^^^^^^^^^^^^^ required by this bound in `require_declared_formatting`
+
+error[E0277]: `String` has no declared redacted formatting
+   --> tests/ui/safety_undecided_fields.rs:146:12
+    |
+146 |     field: (String, String),
+    |            ^^^^^^^^^^^^^^^^ this formatted field needs a redaction declaration
+    |
+    = help: the trait `redactable::__private::DeclaredFormatting` is not implemented for `String`
+    = note: select `#[sensitive(Policy)]`, use a declared type, or explicitly mark the field `#[not_sensitive]`
+    = note: for a local container, derive `SensitiveDisplay` or `SensitiveDual` and declare its formatted fields; reviewed manual formatters may implement `redactable::__private::DeclaredFormatting`
+    = help: the following other types implement trait `redactable::__private::DeclaredFormatting`:
+              &T
+              (T0, T1)
+              (T0, T1, T2)
+              (T0, T1, T2, T3)
+              (T0,)
+              Arc<T>
+              BTreeMap<K, V>
+              BTreeSet<T>
+            and $N others
+    = note: required for `(String, String)` to implement `redactable::__private::DeclaredFormatting`
+note: required by a bound in `redactable::__private::require_declared_formatting`
+   --> src/__private/declaration.rs
+    |
+    | pub fn require_declared_formatting<T: DeclaredFormatting + ?Sized>(_: &T) {}
+    |                                       ^^^^^^^^^^^^^^^^^^ required by this bound in `require_declared_formatting`
+
+error[E0277]: `String` has no declared redacted formatting
+   --> tests/ui/safety_undecided_fields.rs:151:12
+    |
+151 |     field: HashMap<String, String>,
+    |            ^^^^^^^^^^^^^^^^^^^^^^^ this formatted field needs a redaction declaration
+    |
+    = help: the trait `redactable::__private::DeclaredFormatting` is not implemented for `String`
+    = note: select `#[sensitive(Policy)]`, use a declared type, or explicitly mark the field `#[not_sensitive]`
+    = note: for a local container, derive `SensitiveDisplay` or `SensitiveDual` and declare its formatted fields; reviewed manual formatters may implement `redactable::__private::DeclaredFormatting`
+    = help: the following other types implement trait `redactable::__private::DeclaredFormatting`:
+              &T
+              (T0, T1)
+              (T0, T1, T2)
+              (T0, T1, T2, T3)
+              (T0,)
+              Arc<T>
+              BTreeMap<K, V>
+              BTreeSet<T>
+            and $N others
+    = note: required for `HashMap<String, String>` to implement `redactable::__private::DeclaredFormatting`
+note: required by a bound in `redactable::__private::require_declared_formatting`
+   --> src/__private/declaration.rs
+    |
+    | pub fn require_declared_formatting<T: DeclaredFormatting + ?Sized>(_: &T) {}
+    |                                       ^^^^^^^^^^^^^^^^^^ required by this bound in `require_declared_formatting`
+
+error[E0277]: `String` has no declared redacted formatting
+   --> tests/ui/safety_undecided_fields.rs:156:12
+    |
+156 |     field: BTreeMap<String, String>,
+    |            ^^^^^^^^^^^^^^^^^^^^^^^^ this formatted field needs a redaction declaration
+    |
+    = help: the trait `redactable::__private::DeclaredFormatting` is not implemented for `String`
+    = note: select `#[sensitive(Policy)]`, use a declared type, or explicitly mark the field `#[not_sensitive]`
+    = note: for a local container, derive `SensitiveDisplay` or `SensitiveDual` and declare its formatted fields; reviewed manual formatters may implement `redactable::__private::DeclaredFormatting`
+    = help: the following other types implement trait `redactable::__private::DeclaredFormatting`:
+              &T
+              (T0, T1)
+              (T0, T1, T2)
+              (T0, T1, T2, T3)
+              (T0,)
+              Arc<T>
+              BTreeMap<K, V>
+              BTreeSet<T>
+            and $N others
+    = note: required for `BTreeMap<String, String>` to implement `redactable::__private::DeclaredFormatting`
+note: required by a bound in `redactable::__private::require_declared_formatting`
+   --> src/__private/declaration.rs
+    |
+    | pub fn require_declared_formatting<T: DeclaredFormatting + ?Sized>(_: &T) {}
+    |                                       ^^^^^^^^^^^^^^^^^^ required by this bound in `require_declared_formatting`
+
+error[E0277]: `String` has no declared redaction behavior
+   --> tests/ui/safety_undecided_fields.rs:161:16
+    |
+161 |     undecided: String,
+    |                ^^^^^^ this value needs a redaction declaration
+    |
+    = help: the trait `Redactable` is not implemented for `String`
+    = note: for a local container, derive `Sensitive` and select field policies or explicit `#[not_sensitive]` declarations
+    = note: for a raw value, use `SensitiveValue<T, P>` or deliberately declare it public with `BypassRedaction<T>`
+    = help: the following other types implement trait `Redactable`:
+              (T0, T1)
+              (T0, T1, T2)
+              (T0, T1, T2, T3)
+              (T0,)
+              Arc<T>
+              BTreeMap<K, V>
+              BTreeSet<T>
+              Box<T>
+            and $N others
+note: required by a bound in `redactable::__private::require_declared_redaction`
+   --> src/__private/declaration.rs
+    |
+    | pub fn require_declared_redaction<T: Redactable>(_: &T) {}
+    |                                      ^^^^^^^^^^ required by this bound in `require_declared_redaction`
+
+error[E0599]: the method `redact` exists for struct `Generic<String>`, but its trait bounds were not satisfied
+   --> tests/ui/safety_undecided_fields.rs:166:36
+    |
+164 | struct Generic<T>(T);
+    | ----------------- method `redact` not found for this struct because it doesn't satisfy `Generic<String>: Redactable`
+165 | fn main() {
+166 |     let _ = Generic(String::new()).redact();
+    |                                    ^^^^^^ method cannot be called on `Generic<String>` due to unsatisfied trait bounds
+    |
+note: trait bound `String: Redactable` was not satisfied
+   --> tests/ui/safety_undecided_fields.rs:163:35
+    |
+163 | #[derive(Clone, serde::Serialize, Sensitive)]
+    |                                   ^^^^^^^^^ type parameter would need to implement `Redactable`
+    = help: consider manually implementing the trait to avoid undesired bounds
+    = help: items from traits can only be used if the trait is implemented and in scope
+    = note: the following traits define an item `redact`, perhaps you need to implement one of them:
+            candidate #1: `Redactable`
+            candidate #2: `redactable::ScalarRedaction`
+    = note: this error originates in the derive macro `Sensitive` (in Nightly builds, run with -Z macro-backtrace for more info)

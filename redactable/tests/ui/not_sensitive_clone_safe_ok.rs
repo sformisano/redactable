@@ -1,4 +1,4 @@
-use redactable::{NotSensitive, RedactedOutputExt, ToRedactedOutput};
+use redactable::{NotSensitive, ToRedacted};
 
 #[derive(Clone, Debug, NotSensitive, serde::Serialize)]
 struct Generic<T>(T);
@@ -6,11 +6,8 @@ struct Generic<T>(T);
 #[derive(Clone, Debug, serde::Serialize)]
 struct RefCell(String);
 
-fn output<T>(value: &T)
-where
-    T: redactable::Redactable + Clone + std::fmt::Debug + std::panic::RefUnwindSafe,
-{
-    let _ = value.redacted_output().to_redacted_output();
+fn output<T: ToRedacted>(value: &T) {
+    let _ = value.to_redacted();
 }
 
 fn main() {

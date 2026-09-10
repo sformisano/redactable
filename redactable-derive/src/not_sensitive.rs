@@ -5,11 +5,13 @@
 
 use proc_macro2::{Ident, TokenStream};
 use quote::quote;
+use syn::{Attribute, Error, Generics, Type};
 use syn::{Data, DeriveInput, Result, parse_quote, spanned::Spanned};
 
 use crate::{
     crate_paths::{crate_root, isolate_generated_items},
     fresh_ident::FreshIdentAllocator,
+    output::not_sensitive_to_redacted_impl,
 };
 
 /// Rejects `#[sensitive]` and `#[not_sensitive]` attributes on a non-sensitive type.
@@ -17,20 +19,28 @@ use crate::{
 /// Checks container-level, variant-level, and field-level attributes. `#[sensitive]`
 /// is wrong because the type is explicitly non-sensitive; `#[not_sensitive]` is
 /// redundant because the entire type is already non-sensitive.
-fn reject_sensitivity_attrs(attrs: &[syn::Attribute], data: &Data, macro_name: &str) -> Result<()> {
-    let check_attr = |attr: &syn::Attribute| -> Result<()> {
+fn reject_sensitivity_attrs(attrs: &[Attribute], data: &Data, macro_name: &str) -> Result<()> {
+    let check_attr = |attr: &Attribute| -> Result<()> {
         if attr.path().is_ident("sensitive") {
-            return Err(syn::Error::new(
+            return Err(Error::new(
                 attr.span(),
-                format!("`#[sensitive]` attributes are not allowed on `{macro_name}` types"),
+                format!(
+                    "`#[sensitive]` attributes are not allowed on `{macro_name}` types; derive `Sensitive` and declare its fields when traversal is needed"
+                ),
             ));
         }
         if attr.path().is_ident("not_sensitive") {
-            return Err(syn::Error::new(
+            return Err(Error::new(
                 attr.span(),
                 format!(
                     "`#[not_sensitive]` attributes are not needed on `{macro_name}` types (the entire type is already non-sensitive)"
                 ),
+            ));
+        }
+        if attr.path().is_ident("redactable") {
+            return Err(Error::new_spanned(
+                attr,
+                "`#[redactable(...)]` is not supported on non-sensitive derives; annotate the specific recursive or legacy-formatted field of a `Sensitive` type",
             ));
         }
         Ok(())
@@ -78,7 +88,7 @@ pub(crate) fn expand_not_sensitive(input: DeriveInput) -> Result<TokenStream> {
 
     // Reject unions
     if let Data::Union(u) = &data {
-        return Err(syn::Error::new(
+        return Err(Error::new(
             u.union_token.span(),
             "`NotSensitive` cannot be derived for unions",
         ));
@@ -91,7 +101,8 @@ pub(crate) fn expand_not_sensitive(input: DeriveInput) -> Result<TokenStream> {
     let mapper = fresh.fresh("__redactable_mapper");
 
     // RedactableWithMapper impl (no-op passthrough). Deriving NotSensitive is
-    // an explicit declaration, so the type also gets Redactable.
+    // an explicit declaration, so the type also gets Redactable and the
+    // `DeclaredNotSensitive` companion the raw-JSON producer is bounded on.
     let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
     let container_impl = quote! {
         impl #impl_generics #crate_root::RedactableWithMapper for #ident #ty_generics #where_clause {
@@ -101,7 +112,13 @@ pub(crate) fn expand_not_sensitive(input: DeriveInput) -> Result<TokenStream> {
         }
 
         impl #impl_generics #crate_root::Redactable for #ident #ty_generics #where_clause {}
+
+        impl #impl_generics #crate_root::__private::DeclaredNotSensitive for #ident #ty_generics #where_clause {}
     };
+
+    // The author declared the whole type public, so the producer serializes the
+    // raw value. `Serialize` is mandatory and is reported on this impl.
+    let to_redacted_impl = not_sensitive_to_redacted_impl(&ident, &generics, &crate_root);
 
     // slog impl - serialize directly as structured JSON (no redaction needed)
     #[cfg(feature = "slog")]
@@ -112,7 +129,7 @@ pub(crate) fn expand_not_sensitive(input: DeriveInput) -> Result<TokenStream> {
         let slog_crate = quote! { #crate_root::__private::slog };
         let mut slog_generics = generics.clone();
         let (_, ty_generics, _) = slog_generics.split_for_impl();
-        let self_ty: syn::Type = parse_quote!(#ident #ty_generics);
+        let self_ty: Type = parse_quote!(#ident #ty_generics);
         slog_generics
             .make_where_clause()
             .predicates
@@ -153,6 +170,7 @@ pub(crate) fn expand_not_sensitive(input: DeriveInput) -> Result<TokenStream> {
 
     let generated = quote! {
         #container_impl
+        #to_redacted_impl
         #slog_impl
         #tracing_impl
     };
@@ -171,7 +189,7 @@ pub(crate) fn expand_not_sensitive_display(input: DeriveInput) -> Result<TokenSt
 
     // Reject unions
     if let Data::Union(u) = &data {
-        return Err(syn::Error::new(
+        return Err(Error::new(
             u.union_token.span(),
             "`NotSensitiveDisplay` cannot be derived for unions",
         ));
@@ -216,7 +234,7 @@ pub(crate) fn expand_not_sensitive_display(input: DeriveInput) -> Result<TokenSt
         let slog_crate = quote! { #crate_root::__private::slog };
         let mut slog_generics = generics;
         let (_, ty_generics, _) = slog_generics.split_for_impl();
-        let self_ty: syn::Type = syn::parse_quote!(#ident #ty_generics);
+        let self_ty: Type = syn::parse_quote!(#ident #ty_generics);
         slog_generics
             .make_where_clause()
             .predicates
@@ -254,7 +272,7 @@ pub(crate) fn expand_not_sensitive_display(input: DeriveInput) -> Result<TokenSt
 
 fn not_sensitive_display_core_impls(
     ident: &Ident,
-    generics: &syn::Generics,
+    generics: &Generics,
     crate_root: &TokenStream,
     mapper_type: &Ident,
     mapper: &Ident,
@@ -274,7 +292,7 @@ fn not_sensitive_display_core_impls(
 
     let mut display_generics = generics.clone();
     let (_, display_ty, _) = generics.split_for_impl();
-    let display_self_ty: syn::Type = parse_quote!(#ident #display_ty);
+    let display_self_ty: Type = parse_quote!(#ident #display_ty);
     display_generics
         .make_where_clause()
         .predicates
@@ -288,13 +306,11 @@ fn not_sensitive_display_core_impls(
             }
         }
 
-        impl #display_impl_generics #crate_root::ToRedactedOutput for #ident #display_ty_generics #display_where_clause {
-            fn to_redacted_output(&self) -> #crate_root::RedactedOutput {
-                #crate_root::RedactedOutput::Text(
-                    ::std::string::ToString::to_string(
-                        &#crate_root::RedactableWithFormatter::redacted_display(self),
-                    ),
-                )
+        impl #display_impl_generics #crate_root::__private::DeclaredFormatting for #ident #display_ty_generics #display_where_clause {}
+
+        impl #display_impl_generics #crate_root::ToRedacted for #ident #display_ty_generics #display_where_clause {
+            fn to_redacted(&self) -> #crate_root::RedactedValue {
+                #crate_root::__private::generated_redacted_display(self)
             }
         }
     };

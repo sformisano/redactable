@@ -2,20 +2,22 @@
 //!
 //! Owned [`PolicyApplicable`] implementations consume and rebuild the map,
 //! applying the policy to the values (keys pass through redaction
-//! unchanged). Borrowed [`PolicyApplicableRef`] implementations produce
-//! [`PolicyMapOutput`], which renders keys from the source map by reference
-//! so formatting never clones a borrow-sensitive key. The
-//! generated-formatting implementations render the same maps for
-//! `Display`/`Debug` output. Rebuilding a `HashMap` clones its
-//! `BuildHasher`, whose `Clone` behavior (including panics) is inherited.
+//! unchanged). Ordinary borrowed [`PolicyApplicableRef`] implementations rebuild
+//! maps and clone their keys. Rebuilding a `HashMap` also clones its `BuildHasher`,
+//! inheriting that implementation's behavior, including panics.
+//! Generated text/secret formatting instead produces [`PolicyMapOutput`],
+//! rendering source keys by reference without cloning keys or hashers.
+//! IP-map formatting uses its separate key-cloning projection.
 
 use std::{
     collections::{BTreeMap, HashMap},
+    fmt::{Debug, Formatter, Result as FmtResult},
     hash::{BuildHasher, Hash},
 };
 
 use crate::{
     __private::{PolicyApplicableRefForGeneratedFormatting, PolicyFormattingOutput},
+    RedactableWithFormatter,
     policy::{RecursivePolicyKind, RedactionPolicy},
 };
 
@@ -24,7 +26,7 @@ use super::core::{
     collect_policy_formatting,
 };
 
-/// Owned reference-policy output for maps.
+/// Owned generated text/secret formatting output for maps.
 ///
 /// Keys are rendered from the source map by reference, so formatting never
 /// clones a borrow-sensitive key. Values remain structurally redacted.
@@ -39,14 +41,14 @@ struct PolicyMapKey {
     rendered: String,
 }
 
-impl std::fmt::Debug for PolicyMapKey {
-    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl Debug for PolicyMapKey {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
         formatter.write_str(&self.rendered)
     }
 }
 
-impl<V: std::fmt::Debug> std::fmt::Debug for PolicyMapOutput<V> {
-    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl<V: Debug> Debug for PolicyMapOutput<V> {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
         let mut map = formatter.debug_map();
         for (key, value) in &self.entries {
             map.entry(key, value);
@@ -55,8 +57,8 @@ impl<V: std::fmt::Debug> std::fmt::Debug for PolicyMapOutput<V> {
     }
 }
 
-impl<V: crate::RedactableWithFormatter> crate::RedactableWithFormatter for PolicyMapOutput<V> {
-    fn fmt_redacted(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl<V: RedactableWithFormatter> RedactableWithFormatter for PolicyMapOutput<V> {
+    fn fmt_redacted(&self, formatter: &mut Formatter<'_>) -> FmtResult {
         let mut map = formatter.debug_map();
         for (key, value) in &self.entries {
             map.entry(key, &value.redacted_display());
@@ -130,7 +132,7 @@ where
 
 impl<K, V, S> PolicyApplicableRefForGeneratedFormatting for HashMap<K, V, S>
 where
-    K: Hash + Eq + std::fmt::Debug,
+    K: Hash + Eq + Debug,
     V: PolicyApplicableRefForGeneratedFormatting,
     S: BuildHasher,
 {
@@ -184,7 +186,7 @@ where
 
 impl<K, V> PolicyApplicableRefForGeneratedFormatting for BTreeMap<K, V>
 where
-    K: Ord + std::fmt::Debug,
+    K: Ord + Debug,
     V: PolicyApplicableRefForGeneratedFormatting,
 {
     type FormattingOutput = PolicyMapOutput<V::FormattingOutput>;

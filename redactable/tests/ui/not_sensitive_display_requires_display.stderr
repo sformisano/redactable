@@ -1,8 +1,8 @@
 error[E0277]: `NoDisplay` doesn't implement `std::fmt::Display`
  --> tests/ui/not_sensitive_display_requires_display.rs:8:20
   |
-8 |     require_output(&NotSensitiveDisplay(NoDisplay));
-  |     -------------- ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ unsatisfied trait bound
+8 |     require_output(&BypassDisplayRedaction(NoDisplay));
+  |     -------------- ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ unsatisfied trait bound
   |     |
   |     required by a bound introduced by this call
   |
@@ -11,16 +11,16 @@ help: the trait `std::fmt::Display` is not implemented for `NoDisplay`
   |
 3 | struct NoDisplay;
   | ^^^^^^^^^^^^^^^^
-help: the trait `ToRedactedOutput` is implemented for `NotSensitiveDisplay<T>`
+help: the trait `ToRedacted` is implemented for `BypassDisplayRedaction<T>`
  --> src/redaction/escape_hatches.rs
   |
-  | / impl<T> ToRedactedOutput for NotSensitiveDisplay<T>
+  | / impl<T> ToRedacted for BypassDisplayRedaction<T>
   | | where
-  | |     T: std::fmt::Display,
-  | |_________________________^
-  = note: required for `NotSensitiveDisplay<NoDisplay>` to implement `ToRedactedOutput`
+  | |     T: Display,
+  | |_______________^
+  = note: required for `BypassDisplayRedaction<NoDisplay>` to implement `ToRedacted`
 note: required by a bound in `require_output`
  --> tests/ui/not_sensitive_display_requires_display.rs:5:22
   |
-5 | fn require_output<T: ToRedactedOutput>(_: &T) {}
-  |                      ^^^^^^^^^^^^^^^^ required by this bound in `require_output`
+5 | fn require_output<T: ToRedacted>(_: &T) {}
+  |                      ^^^^^^^^^^ required by this bound in `require_output`

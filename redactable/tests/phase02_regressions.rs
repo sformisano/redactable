@@ -10,6 +10,8 @@ use std::{
     panic::{AssertUnwindSafe, catch_unwind},
 };
 
+#[cfg(feature = "ip-address")]
+use redactable::IpAddress as BuiltinIpAddress;
 use redactable::{Redactable, RedactableWithFormatter, Secret, Sensitive, SensitiveDisplay};
 use serde::Serialize;
 
@@ -64,9 +66,9 @@ fn refcell_policy_output_preserves_values_and_fails_closed_on_conflict() {
 }
 
 type ScalarAlias = u64;
-type SecretAlias = redactable::Secret;
+type SecretAlias = Secret;
 #[cfg(feature = "ip-address")]
-type IpPolicyAlias = redactable::IpAddress;
+type IpPolicyAlias = BuiltinIpAddress;
 #[cfg(feature = "ip-address")]
 type Ipv4Alias = Ipv4Addr;
 
@@ -194,14 +196,14 @@ use custom::IpAddress;
 #[derive(Clone, Sensitive, Serialize)]
 struct CustomPolicyMap {
     #[sensitive(IpAddress)]
-    values: HashMap<std::net::IpAddr, String>,
+    values: HashMap<IpAddr, String>,
 }
 
 #[derive(SensitiveDisplay)]
 #[error("{values}")]
 struct CustomPolicyMapDisplay {
     #[sensitive(IpAddress)]
-    values: HashMap<std::net::IpAddr, String>,
+    values: HashMap<IpAddr, String>,
 }
 
 #[derive(Clone, Sensitive, Serialize)]
@@ -236,8 +238,11 @@ fn custom_same_tail_policy_paths_preserve_map_keys() {
 struct CollisionStruct {
     #[sensitive(Secret)]
     __redactable_mapper: String,
+    #[not_sensitive]
     __redactable_f: String,
+    #[not_sensitive]
     __redactable_debug: String,
+    #[not_sensitive]
     field_0: String,
 }
 

@@ -1,9 +1,8 @@
-use super::*;
+use redactable::{Redactable, Secret, Sensitive};
 
 #[test]
 fn redacts_numeric_types_to_zero() {
-    #[derive(Clone, Sensitive)]
-    #[cfg_attr(feature = "slog", derive(serde::Serialize))]
+    #[derive(Clone, Sensitive, serde::Serialize)]
     struct ScalarData {
         #[sensitive(Secret)]
         secret_number: i32,
@@ -11,6 +10,7 @@ fn redacts_numeric_types_to_zero() {
         secret_flag: bool,
         #[sensitive(Secret)]
         secret_char: char,
+        #[not_sensitive]
         public_number: i32,
     }
 
@@ -31,8 +31,7 @@ fn redacts_numeric_types_to_zero() {
 
 #[test]
 fn redacts_all_scalar_types() {
-    #[derive(Clone, Sensitive)]
-    #[cfg_attr(feature = "slog", derive(serde::Serialize))]
+    #[derive(Clone, Sensitive, serde::Serialize)]
     struct AllScalars {
         #[sensitive(Secret)]
         i8_val: i8,

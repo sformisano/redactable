@@ -1,7 +1,7 @@
 use std::{
     cell::RefCell,
     collections::{BTreeMap, HashMap},
-    fmt,
+    fmt::{Debug, Formatter, Result as FmtResult},
     sync::atomic::Ordering,
 };
 
@@ -12,8 +12,8 @@ use crate::{ALTERNATE_KEY_DEBUGS, COMPACT_KEY_DEBUGS, non_clone::NonCloneBuildHa
 #[derive(PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct FlagKey;
 
-impl fmt::Debug for FlagKey {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl Debug for FlagKey {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
         if formatter.alternate() {
             ALTERNATE_KEY_DEBUGS.fetch_add(1, Ordering::SeqCst);
             formatter.write_str("AlternateKey")

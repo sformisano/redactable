@@ -1,4 +1,4 @@
-use super::*;
+use redactable::TextRedactionPolicy;
 
 #[test]
 fn applies_full_redaction_by_default() {

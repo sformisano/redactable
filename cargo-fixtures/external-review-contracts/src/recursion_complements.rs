@@ -1,34 +1,34 @@
-use redactable::{
-    Redactable, RedactableWithFormatter, RedactableWithMapper, Sensitive, SensitiveDisplay,
-};
+// Qualified type paths intentionally exercise derive name resolution.
+use redactable::{Redactable, RedactableWithFormatter, Sensitive, SensitiveDisplay};
+use redactable::{Secret, SensitiveValue};
 
 mod other {
     use redactable::Sensitive;
 
-    #[derive(Sensitive)]
+    #[derive(Clone, serde::Serialize, Sensitive)]
     pub struct Node<T> {
         pub value: T,
     }
 }
 
-#[derive(Sensitive)]
+#[derive(Clone, serde::Serialize, Sensitive)]
 struct Node<T> {
     child: crate::recursion_complements::other::Node<T>,
 }
 
 fn redact_unrelated<T>(value: Node<T>) -> Node<T>
 where
-    crate::recursion_complements::other::Node<T>: RedactableWithMapper,
+    crate::recursion_complements::other::Node<T>: Redactable,
 {
     value.redact()
 }
 
-#[derive(Sensitive)]
+#[derive(Clone, serde::Serialize, Sensitive)]
 struct MutualA {
     next: Option<Box<MutualB>>,
 }
 
-#[derive(Sensitive)]
+#[derive(Clone, serde::Serialize, Sensitive)]
 struct MutualB {
     next: Option<Box<MutualA>>,
 }
@@ -46,9 +46,11 @@ struct DisplayB {
 }
 
 pub fn exercise() {
+    use self::other::Node as OtherNode;
+
     let _ = redact_unrelated(Node {
-        child: other::Node {
-            value: String::from("secret"),
+        child: OtherNode {
+            value: SensitiveValue::<String, Secret>::from(String::from("secret")),
         },
     });
     let _ = MutualA { next: None }.redact();

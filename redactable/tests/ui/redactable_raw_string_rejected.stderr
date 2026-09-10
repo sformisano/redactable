@@ -2,13 +2,13 @@ error[E0277]: `String` has no declared redaction behavior
   --> tests/ui/redactable_raw_string_rejected.rs:14:24
    |
 14 |     require_redactable(&password);
-   |     ------------------ ^^^^^^^^^ raw values cannot be redacted or certified as redacted output
+   |     ------------------ ^^^^^^^^^ this value needs a redaction declaration
    |     |
    |     required by a bound introduced by this call
    |
    = help: the trait `Redactable` is not implemented for `String`
-   = note: derive `Sensitive`, `NotSensitive`, or `NotSensitiveDisplay` on the type
-   = note: or wrap the value in `SensitiveValue<T, P>` / `NotSensitiveValue<T>`
+   = note: for a local container, derive `Sensitive` and select field policies or explicit `#[not_sensitive]` declarations
+   = note: for a raw value, use `SensitiveValue<T, P>` or deliberately declare it public with `BypassRedaction<T>`
    = help: the following other types implement trait `Redactable`:
              (T0, T1)
              (T0, T1, T2)

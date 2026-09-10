@@ -1,31 +1,31 @@
 error[E0599]: the method `redact` exists for struct `Envelope<String>`, but its trait bounds were not satisfied
-  --> tests/ui/phase01_user_phantom_data_no_traversal.rs:14:6
+  --> tests/ui/phase01_user_phantom_data_no_traversal.rs:32:6
    |
- 3 |   struct PhantomData<T>(T);
-   |   --------------------- doesn't satisfy `_: RedactableWithMapper`
+ 6 |   struct PhantomData<T>(T);
+   |   --------------------- doesn't satisfy `PhantomData<String>: Redactable`
 ...
- 6 |   struct Envelope<T> {
+24 |   struct Envelope<T> {
    |   ------------------ method `redact` not found for this struct because it doesn't satisfy `Envelope<String>: Redactable`
 ...
-11 |       let _ = Envelope {
+29 |       let _ = Envelope {
    |  _____________-
-12 | |         marker: PhantomData(String::from("phase01-canary")),
-13 | |     }
-14 | |     .redact();
+30 | |         marker: PhantomData(String::from("phase01-canary")),
+31 | |     }
+32 | |     .redact();
    | |     -^^^^^^ method cannot be called on `Envelope<String>` due to unsatisfied trait bounds
    | |_____|
    |
    |
-note: trait bound `PhantomData<String>: redactable::RedactableWithMapper` was not satisfied
-  --> tests/ui/phase01_user_phantom_data_no_traversal.rs:5:10
+note: trait bound `PhantomData<String>: Redactable` was not satisfied
+  --> tests/ui/phase01_user_phantom_data_no_traversal.rs:23:35
    |
- 5 | #[derive(Sensitive)]
-   |          ^^^^^^^^^ type parameter would need to implement `Redactable`
-note: the trait `redactable::RedactableWithMapper` must be implemented
+23 | #[derive(Clone, serde::Serialize, Sensitive)]
+   |                                   ^^^^^^^^^ type parameter would need to implement `Redactable`
+note: the trait `Redactable` must be implemented
   --> src/redaction/traits.rs
    |
-   | pub trait RedactableWithMapper: Sized {
-   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   | pub trait Redactable: RedactableWithMapper {
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
    = help: consider manually implementing the trait to avoid undesired bounds
    = help: items from traits can only be used if the trait is implemented and in scope
    = note: the following traits define an item `redact`, perhaps you need to implement one of them:

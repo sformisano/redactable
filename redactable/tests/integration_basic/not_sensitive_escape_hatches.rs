@@ -1,4 +1,7 @@
-use super::*;
+use std::fmt::{Debug, Display, Formatter, Result as FmtResult};
+
+use crate::log_redacted;
+use redactable::{BypassDebugRedaction, BypassDisplayRedaction, BypassRedactionMarker};
 
 #[test]
 fn debug_wrapper_uses_debug_formatting() {
@@ -9,11 +12,8 @@ fn debug_wrapper_uses_debug_formatting() {
     }
 
     let value = DebugOnly { id: 7 };
-    let redacted = log_redacted(&value.not_sensitive_debug());
-    assert_eq!(
-        redacted,
-        RedactedOutput::Text("DebugOnly { id: 7 }".to_string())
-    );
+    let redacted = log_redacted(&BypassDebugRedaction(&value));
+    assert_eq!(redacted.text(), "DebugOnly { id: 7 }");
 }
 
 #[test]
@@ -23,24 +23,24 @@ fn generic_wrapper_accepts_types_without_display_or_debug() {
     }
 
     let value = NoTraits { id: 7 };
-    let wrapped = value.not_sensitive();
+    let wrapped = BypassRedactionMarker(&value);
     assert_eq!(wrapped.inner().id, 7);
 }
 
 #[test]
-fn not_sensitive_borrows_so_value_remains_usable() {
+fn the_marker_borrows_so_the_value_remains_usable() {
     // This is the main use case: log a value and continue using it
     let error_msg = "connection failed".to_string();
 
     // Use in logging context (simulated)
-    let _logged = format!("{}", error_msg.not_sensitive());
+    let _logged = format!("{}", BypassRedactionMarker(&error_msg));
 
-    // Value is still usable after - this would fail if not_sensitive() consumed
+    // Value is still usable after - it would not be if the wrapper consumed it
     assert_eq!(error_msg, "connection failed");
 
     // Same for display/debug variants
-    let _display = log_redacted(&error_msg.not_sensitive_display());
-    let _debug = log_redacted(&error_msg.not_sensitive_debug());
+    let _display = log_redacted(&BypassDisplayRedaction(&error_msg));
+    let _debug = log_redacted(&BypassDebugRedaction(&error_msg));
     assert_eq!(error_msg, "connection failed");
 }
 
@@ -48,32 +48,29 @@ fn not_sensitive_borrows_so_value_remains_usable() {
 fn display_wrapper_uses_display_and_debug_wrapper_uses_debug() {
     struct FormatType(u64);
 
-    impl std::fmt::Display for FormatType {
-        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    impl Display for FormatType {
+        fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
             write!(f, "display-{}", self.0)
         }
     }
 
-    impl std::fmt::Debug for FormatType {
-        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    impl Debug for FormatType {
+        fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
             write!(f, "debug-{}", self.0)
         }
     }
 
     let value = FormatType(1);
-    let display_output = log_redacted(&value.not_sensitive_display());
-    assert_eq!(
-        display_output,
-        RedactedOutput::Text("display-1".to_string())
-    );
+    let display_output = log_redacted(&BypassDisplayRedaction(&value));
+    assert_eq!(display_output.text(), "display-1");
 
-    let debug_output = log_redacted(&value.not_sensitive_debug());
-    assert_eq!(debug_output, RedactedOutput::Text("debug-1".to_string()));
+    let debug_output = log_redacted(&BypassDebugRedaction(&value));
+    assert_eq!(debug_output.text(), "debug-1");
 
-    let display_wrapper = value.not_sensitive_display();
+    let display_wrapper = BypassDisplayRedaction(&value);
     assert_eq!(format!("{display_wrapper:?}"), "display-1");
 
-    let generic_wrapper = value.not_sensitive();
+    let generic_wrapper = BypassRedactionMarker(&value);
     assert_eq!(format!("{generic_wrapper}"), "display-1");
     assert_eq!(format!("{generic_wrapper:?}"), "debug-1");
 }

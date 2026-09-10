@@ -4,8 +4,7 @@
 //! Owned `String` and `Cow` traversal invokes the mapper; borrowed traversal
 //! applies the policy directly. This module contains those implementations,
 //! plus the formatting markers that let generated code treat these string-like
-//! leaves — and, with the `json` feature, `serde_json::Value` — as directly
-//! formattable leaves. Policy application for `serde_json::Value` itself lives
+//! leaves — and `serde_json::Value` — as directly formattable leaves. Policy application for `serde_json::Value` itself lives
 //! in the `json` module of `redaction`, which treats it as an opaque leaf that
 //! fully redacts and deliberately ignores the mapper.
 
@@ -120,8 +119,6 @@ impl PolicyApplicableRefForFormatting for String {}
 impl PolicyApplicableRefForFormatting for Cow<'_, str> {}
 impl PolicyApplicableRefForFormatting for &str {}
 
-#[cfg(feature = "json")]
 impl_policy_ref_formatting_leaf!(serde_json::Value);
 
-#[cfg(feature = "json")]
 impl PolicyApplicableRefForFormatting for serde_json::Value {}

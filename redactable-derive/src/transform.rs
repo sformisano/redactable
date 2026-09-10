@@ -5,6 +5,7 @@
 
 use proc_macro2::{Ident, Span, TokenStream};
 use quote::quote_spanned;
+use syn::{Type, WherePredicate};
 
 use crate::{
     crate_root,
@@ -18,9 +19,9 @@ use crate::{
 /// during traversal of struct fields or enum variants.
 pub(crate) struct DeriveContext<'a> {
     pub(crate) container_path: &'a TokenStream,
-    pub(crate) container_predicates: &'a mut Vec<syn::WherePredicate>,
-    pub(crate) policy_predicates: &'a mut Vec<syn::WherePredicate>,
-    pub(crate) debug_unredacted_predicates: &'a mut Vec<syn::WherePredicate>,
+    pub(crate) container_predicates: &'a mut Vec<WherePredicate>,
+    pub(crate) policy_predicates: &'a mut Vec<WherePredicate>,
+    pub(crate) debug_predicates: &'a mut Vec<WherePredicate>,
     pub(crate) mapper: &'a Ident,
 }
 
@@ -30,13 +31,13 @@ pub(crate) struct DeriveContext<'a> {
 ///
 /// | Annotation              | Behavior                                             |
 /// |-------------------------|------------------------------------------------------|
-/// | None                    | Walk containers, scalars pass through                |
+/// | None                    | Traverse types with declared redaction behavior      |
 /// | `#[sensitive(Secret)]`  | Scalars redact to default; strings to "[REDACTED]"   |
 /// | `#[sensitive(Policy)]`  | Apply policy recursively through wrappers            |
 /// | `#[not_sensitive]`      | Explicit passthrough (no transformation)             |
 pub(crate) fn generate_field_transform(
     ctx: &mut DeriveContext<'_>,
-    ty: &syn::Type,
+    ty: &Type,
     binding: &Ident,
     span: Span,
     strategy: &Strategy,
@@ -49,9 +50,11 @@ pub(crate) fn generate_field_transform(
         Strategy::WalkDefault => {
             if !recursive_bound_override {
                 push_container_predicate(ctx.container_predicates, ty);
-                push_debug_predicate(ctx.debug_unredacted_predicates, ty);
+                push_debug_predicate(ctx.debug_predicates, ty);
             }
+            let crate_root = crate_root();
             quote_spanned! { span =>
+                #crate_root::__private::require_declared_redaction::<#ty>(&#binding);
                 let #binding = #container_path::redact_with(#binding, #mapper);
             }
         }
@@ -61,14 +64,13 @@ pub(crate) fn generate_field_transform(
             // Still collect debug generics: the field is printed in generated Debug impls
             // even though it's not transformed, so its type needs a Debug bound.
             if !recursive_bound_override {
-                push_debug_predicate(ctx.debug_unredacted_predicates, ty);
+                push_debug_predicate(ctx.debug_predicates, ty);
             }
             TokenStream::new()
         }
         Strategy::Policy(policy_path) => {
             if !recursive_bound_override {
                 push_policy_predicate(ctx.policy_predicates, ty, policy_path);
-                push_debug_predicate(ctx.debug_unredacted_predicates, ty);
             }
             let policy = policy_path.clone();
             let crate_root = crate_root();

@@ -1,50 +1,52 @@
 use std::{
-    cell::RefCell,
+    cell::{Cell, RefCell},
     collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque},
     rc::Rc,
     sync::Arc,
 };
 
 use redactable::__private::PolicyApplicableRefForFormatting as FormattingMarker;
+use redactable::policy::RecursivePolicyKind;
 use redactable::{
-    RedactableMapper, RedactableWithFormatter, Secret, SensitiveDisplay, SensitiveDual,
+    PolicyApplicableRef, RedactableMapper, RedactableWithFormatter, RedactionPolicy, Secret,
+    SensitiveDisplay, SensitiveDual,
 };
 
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct ManualLeaf(pub String);
 
-impl redactable::PolicyApplicableRef for ManualLeaf {
+impl PolicyApplicableRef for ManualLeaf {
     type Output = String;
 
     fn apply_policy_ref<P, M>(&self, _mapper: &M) -> Self::Output
     where
-        P: redactable::RedactionPolicy,
-        P::Kind: redactable::policy::RecursivePolicyKind,
+        P: RedactionPolicy,
+        P::Kind: RecursivePolicyKind,
         M: RedactableMapper,
     {
         P::policy().apply_to(&self.0)
     }
 }
 
-impl redactable::__private::PolicyApplicableRefForFormatting for ManualLeaf {}
+impl FormattingMarker for ManualLeaf {}
 
 #[derive(Debug)]
 pub struct DownstreamBoxLeaf(pub String);
 
-impl redactable::PolicyApplicableRef for DownstreamBoxLeaf {
+impl PolicyApplicableRef for DownstreamBoxLeaf {
     type Output = String;
 
     fn apply_policy_ref<P, M>(&self, _mapper: &M) -> Self::Output
     where
-        P: redactable::RedactionPolicy,
-        P::Kind: redactable::policy::RecursivePolicyKind,
+        P: RedactionPolicy,
+        P::Kind: RecursivePolicyKind,
         M: RedactableMapper,
     {
         P::policy().apply_to(&self.0)
     }
 }
 
-impl redactable::__private::PolicyApplicableRefForFormatting for Box<DownstreamBoxLeaf> {}
+impl FormattingMarker for Box<DownstreamBoxLeaf> {}
 
 #[derive(SensitiveDisplay)]
 #[error("{value} {value:?}")]
@@ -56,13 +58,13 @@ pub struct DownstreamBoxFormatting {
 #[derive(Clone, Debug)]
 pub struct LegacyOnlyLeaf(pub String);
 
-impl redactable::PolicyApplicableRef for LegacyOnlyLeaf {
+impl PolicyApplicableRef for LegacyOnlyLeaf {
     type Output = String;
 
     fn apply_policy_ref<P, M>(&self, _mapper: &M) -> Self::Output
     where
-        P: redactable::RedactionPolicy,
-        P::Kind: redactable::policy::RecursivePolicyKind,
+        P: RedactionPolicy,
+        P::Kind: RecursivePolicyKind,
         M: RedactableMapper,
     {
         P::policy().apply_to(&self.0)
@@ -77,7 +79,7 @@ pub struct CombinedLegacyRecursive<T> {
     pub value: Option<T>,
 }
 
-#[derive(SensitiveDual)]
+#[derive(Clone, serde::Serialize, SensitiveDual)]
 #[error("{value}")]
 pub struct CombinedLegacyRecursiveDual {
     #[sensitive(Secret)]
@@ -207,13 +209,13 @@ legacy_formatting_case!(
 #[derive(Clone, Copy, Debug)]
 pub struct CopyManualLeaf(pub u8);
 
-impl redactable::PolicyApplicableRef for CopyManualLeaf {
+impl PolicyApplicableRef for CopyManualLeaf {
     type Output = u8;
 
     fn apply_policy_ref<P, M>(&self, _mapper: &M) -> Self::Output
     where
-        P: redactable::RedactionPolicy,
-        P::Kind: redactable::policy::RecursivePolicyKind,
+        P: RedactionPolicy,
+        P::Kind: RecursivePolicyKind,
         M: RedactableMapper,
     {
         let _ = self.0;
@@ -221,14 +223,14 @@ impl redactable::PolicyApplicableRef for CopyManualLeaf {
     }
 }
 
-impl redactable::__private::PolicyApplicableRefForFormatting for CopyManualLeaf {}
+impl FormattingMarker for CopyManualLeaf {}
 
 #[derive(SensitiveDisplay)]
 #[error("{value}")]
 pub struct LegacyCellDisplay {
     #[sensitive(Secret)]
     #[redactable(legacy_formatting)]
-    pub value: std::cell::Cell<CopyManualLeaf>,
+    pub value: Cell<CopyManualLeaf>,
 }
 
 #[derive(SensitiveDisplay)]
@@ -236,7 +238,7 @@ pub struct LegacyCellDisplay {
 pub struct LegacyCellDebug {
     #[sensitive(Secret)]
     #[redactable(legacy_formatting)]
-    pub value: std::cell::Cell<CopyManualLeaf>,
+    pub value: Cell<CopyManualLeaf>,
 }
 
 #[derive(SensitiveDisplay)]
@@ -258,7 +260,7 @@ pub struct ManualFormatting {
 #[error("{leaf}")]
 pub struct GenericManual<T>
 where
-    T: redactable::PolicyApplicableRef + redactable::__private::PolicyApplicableRefForFormatting,
+    T: PolicyApplicableRef + FormattingMarker,
 {
     #[sensitive(Secret)]
     pub leaf: T,
@@ -268,7 +270,7 @@ where
 #[error("{leaf:?}")]
 pub struct GenericManualDebug<T>
 where
-    T: redactable::PolicyApplicableRef + redactable::__private::PolicyApplicableRefForFormatting,
+    T: PolicyApplicableRef + FormattingMarker,
 {
     #[sensitive(Secret)]
     pub leaf: T,
@@ -280,7 +282,7 @@ pub type Transparent<T> = T;
 #[error("{leaf}")]
 pub struct RenamedMarker<T>
 where
-    T: redactable::PolicyApplicableRef + FormattingMarker,
+    T: PolicyApplicableRef + FormattingMarker,
 {
     #[sensitive(Secret)]
     pub leaf: T,
@@ -290,7 +292,7 @@ where
 #[error("{leaf}")]
 pub struct TransparentMarker<T>
 where
-    T: redactable::PolicyApplicableRef + FormattingMarker,
+    T: PolicyApplicableRef + FormattingMarker,
 {
     #[sensitive(Secret)]
     pub leaf: Transparent<T>,

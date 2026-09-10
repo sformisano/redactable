@@ -1,13 +1,16 @@
+// Qualified type paths intentionally exercise derive name resolution.
+use redactable::BypassRedaction;
 use redactable::{Redactable, RedactableWithFormatter, Sensitive, SensitiveDisplay, SensitiveDual};
+use redactable::{Secret, SensitiveValue};
 
-#[derive(Sensitive)]
+#[derive(Clone, serde::Serialize, Sensitive)]
 pub struct QualifiedNode<T> {
     value: T,
     #[redactable(recursive)]
     next: Option<Box<crate::explicit_recursion::QualifiedNode<T>>>,
 }
 
-#[derive(Sensitive)]
+#[derive(Clone, serde::Serialize, Sensitive)]
 pub enum QualifiedEnum<T> {
     Next(
         T,
@@ -18,21 +21,21 @@ pub enum QualifiedEnum<T> {
 
 type Alias<T> = AliasNode<T>;
 
-#[derive(Sensitive)]
+#[derive(Clone, serde::Serialize, Sensitive)]
 pub struct AliasNode<T> {
     value: T,
     #[redactable(recursive)]
     next: Option<Box<Alias<T>>>,
 }
 
-#[derive(Sensitive)]
+#[derive(Clone, serde::Serialize, Sensitive)]
 pub struct MutualA<T> {
     value: T,
     #[redactable(recursive)]
     next: Option<Box<MutualB<T>>>,
 }
 
-#[derive(Sensitive)]
+#[derive(Clone, serde::Serialize, Sensitive)]
 pub struct MutualB<T> {
     value: T,
     #[redactable(recursive)]
@@ -84,7 +87,7 @@ pub struct DisplayMutualB<T> {
     next: Option<Box<DisplayMutualA<T>>>,
 }
 
-#[derive(SensitiveDual)]
+#[derive(Clone, serde::Serialize, SensitiveDual)]
 #[error("dual {value:?} {next:?}")]
 pub struct QualifiedDualNode<T> {
     value: T,
@@ -94,70 +97,74 @@ pub struct QualifiedDualNode<T> {
 
 pub fn exercise() {
     let _ = QualifiedNode {
-        value: String::from("secret"),
+        value: SensitiveValue::<String, Secret>::from(String::from("secret")),
         next: None,
     }
     .redact();
     let _ = QualifiedEnum::Next(
-        String::from("secret"),
-        Box::new(QualifiedEnum::End(String::from("secret"))),
+        SensitiveValue::<String, Secret>::from(String::from("secret")),
+        Box::new(QualifiedEnum::End(SensitiveValue::<String, Secret>::from(
+            String::from("secret"),
+        ))),
     )
     .redact();
     let _ = AliasNode {
-        value: String::from("secret"),
+        value: SensitiveValue::<String, Secret>::from(String::from("secret")),
         next: None,
     }
     .redact();
     let _ = MutualA {
-        value: String::from("secret"),
+        value: SensitiveValue::<String, Secret>::from(String::from("secret")),
         next: None,
     }
     .redact();
     let _ = MutualB {
-        value: String::from("secret"),
+        value: SensitiveValue::<String, Secret>::from(String::from("secret")),
         next: None,
     }
     .redact();
     let _ = MutualA {
-        value: String::from("public"),
+        value: BypassRedaction::from(String::from("public")),
         next: Some(Box::new(MutualB {
-            value: String::from("public"),
+            value: BypassRedaction::from(String::from("public")),
             next: None,
         })),
     }
     .redact();
     let _ = QualifiedDisplayNode {
-        value: String::from("secret"),
+        value: SensitiveValue::<String, Secret>::from(String::from("secret")),
         next: None,
     }
     .redacted_display()
     .to_string();
     let _ = QualifiedDisplayEnum::Next(
-        String::from("secret"),
-        Box::new(QualifiedDisplayEnum::End(String::from("secret"))),
+        SensitiveValue::<String, Secret>::from(String::from("secret")),
+        Box::new(QualifiedDisplayEnum::End(
+            SensitiveValue::<String, Secret>::from(String::from("secret")),
+        )),
     )
     .redacted_display()
     .to_string();
     let _ = AliasDisplayNode {
-        value: String::from("secret"),
+        value: SensitiveValue::<String, Secret>::from(String::from("secret")),
         next: None,
     }
     .redacted_display()
     .to_string();
     let _ = DisplayMutualA {
-        value: String::from("secret"),
+        value: SensitiveValue::<String, Secret>::from(String::from("secret")),
         next: None,
     }
     .redacted_display()
     .to_string();
     let _ = DisplayMutualB {
-        value: String::from("secret"),
+        value: SensitiveValue::<String, Secret>::from(String::from("secret")),
         next: None,
     }
     .redacted_display()
     .to_string();
     let _ = QualifiedDualNode {
-        value: String::from("secret"),
+        value: SensitiveValue::<String, Secret>::from(String::from("secret")),
         next: None,
     }
     .redact();

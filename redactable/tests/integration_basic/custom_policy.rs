@@ -1,4 +1,4 @@
-use super::*;
+use redactable::{Redactable, RedactionPolicy, Sensitive, TextPolicyKind, TextRedactionPolicy};
 
 #[test]
 fn applies_user_defined_policy() {
@@ -13,11 +13,11 @@ fn applies_user_defined_policy() {
         }
     }
 
-    #[derive(Clone, Sensitive)]
-    #[cfg_attr(feature = "slog", derive(serde::Serialize))]
+    #[derive(Clone, Sensitive, serde::Serialize)]
     struct Record {
         #[sensitive(InternalId)]
         id: String,
+        #[not_sensitive]
         name: String,
     }
 

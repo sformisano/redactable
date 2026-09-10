@@ -2,7 +2,7 @@
 
 use redactable::NotSensitive;
 
-#[derive(Debug, NotSensitive)]
+#[derive(serde::Serialize, Debug, NotSensitive)]
 struct PublicData {
     #[not_sensitive]
     name: String,

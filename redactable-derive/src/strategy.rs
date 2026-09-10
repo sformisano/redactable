@@ -4,7 +4,7 @@
 //! structured errors for invalid forms.
 
 use proc_macro2::Span;
-use syn::{Attribute, Meta, Result, spanned::Spanned};
+use syn::{Attribute, Error, Meta, Path, Result, spanned::Spanned};
 
 /// Additive code-generation overrides for one derived field.
 #[derive(Clone, Copy, Debug, Default)]
@@ -62,7 +62,7 @@ pub(crate) fn parse_redactable_field_options(
                 })?;
             }
             Meta::Path(_) | Meta::NameValue(_) => {
-                return Err(syn::Error::new(
+                return Err(Error::new(
                     attr.span(),
                     "expected `#[redactable(recursive)]`, `#[redactable(legacy_formatting)]`, or `#[redactable(generated_formatting)]`",
                 ));
@@ -78,25 +78,25 @@ pub(crate) fn parse_redactable_field_options(
 ///
 /// | Attribute              | Strategy              | Behavior                              |
 /// |------------------------|-----------------------|---------------------------------------|
-/// | None                   | `WalkDefault`         | Walk containers; scalars pass through |
+/// | None                   | `WalkDefault`         | Traverse declared field behavior |
 /// | `#[sensitive(Policy)]` | `Policy(policy_path)` | Apply redaction policy                |
 /// | `#[not_sensitive]`     | `NotSensitive`        | Explicit passthrough (no traversal)      |
 #[derive(Clone, Debug)]
 pub(crate) enum Strategy {
-    /// No annotation: walk containers, scalars pass through unchanged.
+    /// No annotation: require declared behavior and traverse the field.
     WalkDefault,
     /// `#[sensitive(Policy)]`: apply redaction policy.
     ///
     /// The policy type (e.g., `Secret`, `Token`, `Pii`) determines how
     /// the value is redacted via `RedactionPolicy`.
-    Policy(syn::Path),
+    Policy(Path),
     /// `#[not_sensitive]`: explicit passthrough, no traversal or transformation.
     NotSensitive,
 }
 
 fn set_strategy(target: &mut Option<Strategy>, next: Strategy, span: Span) -> Result<()> {
     if target.is_some() {
-        return Err(syn::Error::new(
+        return Err(Error::new(
             span,
             "multiple #[sensitive] or #[not_sensitive] attributes on the same field",
         ));
@@ -113,23 +113,23 @@ fn set_strategy(target: &mut Option<Strategy>, next: Strategy, span: Span) -> Re
 pub(crate) fn reject_variant_sensitivity_attrs(attrs: &[Attribute]) -> Result<()> {
     for attr in attrs {
         if attr.path().is_ident("sensitive") {
-            return Err(syn::Error::new(
+            return Err(Error::new(
                 attr.span(),
                 "`#[sensitive(...)]` is not supported on enum variants; \
                  annotate the variant's fields instead",
             ));
         }
         if attr.path().is_ident("not_sensitive") {
-            return Err(syn::Error::new(
+            return Err(Error::new(
                 attr.span(),
                 "`#[not_sensitive]` is not supported on enum variants; \
                  annotate the variant's fields instead",
             ));
         }
         if attr.path().is_ident("redactable") {
-            return Err(syn::Error::new(
+            return Err(Error::new(
                 attr.span(),
-                "`#[redactable(...)]` is only supported on fields; annotate the specific recursive or legacy-formatted field",
+                "`#[redactable(...)]` is not supported on enum variants; annotate the specific field",
             ));
         }
     }
@@ -146,7 +146,7 @@ pub(crate) fn parse_field_strategy(attrs: &[Attribute]) -> Result<Strategy> {
                     set_strategy(&mut strategy, Strategy::NotSensitive, attr.span())?;
                 }
                 _ => {
-                    return Err(syn::Error::new(
+                    return Err(Error::new(
                         attr.span(),
                         "#[not_sensitive] does not take arguments",
                     ));
@@ -161,7 +161,7 @@ pub(crate) fn parse_field_strategy(attrs: &[Attribute]) -> Result<Strategy> {
 
         match &attr.meta {
             Meta::Path(_) => {
-                return Err(syn::Error::new(
+                return Err(Error::new(
                     attr.span(),
                     "missing policy: use #[sensitive(Policy)] \
                      (e.g., #[sensitive(Secret)], #[sensitive(Token)])",
@@ -169,12 +169,12 @@ pub(crate) fn parse_field_strategy(attrs: &[Attribute]) -> Result<Strategy> {
             }
             Meta::List(list) => {
                 // Parse as a policy path (e.g., #[sensitive(Secret)])
-                match syn::parse2::<syn::Path>(list.tokens.clone()) {
+                match syn::parse2::<Path>(list.tokens.clone()) {
                     Ok(path) => {
                         set_strategy(&mut strategy, Strategy::Policy(path), attr.span())?;
                     }
                     Err(_) => {
-                        return Err(syn::Error::new(
+                        return Err(Error::new(
                             attr.span(),
                             "expected a policy type (e.g., #[sensitive(Secret)])",
                         ));
@@ -182,7 +182,7 @@ pub(crate) fn parse_field_strategy(attrs: &[Attribute]) -> Result<Strategy> {
                 }
             }
             Meta::NameValue(_) => {
-                return Err(syn::Error::new(
+                return Err(Error::new(
                     attr.span(),
                     "expected #[sensitive(Policy)] syntax \
                      (e.g., #[sensitive(Secret)], #[sensitive(Token)])",
@@ -191,18 +191,19 @@ pub(crate) fn parse_field_strategy(attrs: &[Attribute]) -> Result<Strategy> {
         }
     }
 
-    // Default: no annotation means walk containers (scalars pass through)
+    // Default: no annotation means traverse declared field behavior
     Ok(strategy.unwrap_or(Strategy::WalkDefault))
 }
 
 #[cfg(test)]
 mod tests {
+    use proc_macro2::TokenStream;
     use quote::quote;
-    use syn::DeriveInput;
+    use syn::{Attribute, DeriveInput};
 
     use super::*;
 
-    fn parse_attrs(tokens: proc_macro2::TokenStream) -> Vec<Attribute> {
+    fn parse_attrs(tokens: TokenStream) -> Vec<Attribute> {
         let input: DeriveInput = syn::parse2(quote! {
             #tokens
             struct Dummy;

@@ -3,7 +3,7 @@
 
 use redactable::NotSensitive;
 
-#[derive(Clone, NotSensitive)]
+#[derive(serde::Serialize, Clone, NotSensitive)]
 enum Status {
     #[not_sensitive]
     Ready,
