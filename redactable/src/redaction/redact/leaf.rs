@@ -10,6 +10,8 @@
 
 use std::borrow::Cow;
 
+use serde_json::Value;
+
 use crate::{
     __private::{
         PolicyApplicableRefForFormatting, PolicyApplicableRefForGeneratedFormatting,
@@ -119,6 +121,6 @@ impl PolicyApplicableRefForFormatting for String {}
 impl PolicyApplicableRefForFormatting for Cow<'_, str> {}
 impl PolicyApplicableRefForFormatting for &str {}
 
-impl_policy_ref_formatting_leaf!(serde_json::Value);
+impl_policy_ref_formatting_leaf!(Value);
 
-impl PolicyApplicableRefForFormatting for serde_json::Value {}
+impl PolicyApplicableRefForFormatting for Value {}

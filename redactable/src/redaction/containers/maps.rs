@@ -2,7 +2,7 @@
 
 use std::{
     collections::{BTreeMap, HashMap},
-    hash::Hash,
+    hash::{BuildHasher, Hash},
 };
 
 use crate::redaction::{redact::RedactableMapper, traits::RedactableWithMapper};
@@ -15,7 +15,7 @@ impl<K, V, S> RedactableWithMapper for HashMap<K, V, S>
 where
     K: Hash + Eq,
     V: RedactableWithMapper,
-    S: std::hash::BuildHasher + Clone,
+    S: BuildHasher + Clone,
 {
     fn redact_with<M: RedactableMapper>(self, mapper: &M) -> Self {
         // NOTE: Map keys are not redacted by design. Only values are redacted to

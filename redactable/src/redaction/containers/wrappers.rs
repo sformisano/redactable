@@ -2,7 +2,8 @@
 
 use std::{
     collections::VecDeque,
-    sync::{Mutex, RwLock},
+    rc::Rc,
+    sync::{Arc, Mutex, RwLock},
 };
 
 use crate::redaction::{redact::RedactableMapper, traits::RedactableWithMapper};
@@ -73,21 +74,21 @@ where
     }
 }
 
-impl<T> RedactableWithMapper for std::sync::Arc<T>
+impl<T> RedactableWithMapper for Arc<T>
 where
     T: RedactableWithMapper + Clone,
 {
     fn redact_with<M: RedactableMapper>(self, mapper: &M) -> Self {
-        std::sync::Arc::new((*self).clone().redact_with(mapper))
+        Arc::new((*self).clone().redact_with(mapper))
     }
 }
 
-impl<T> RedactableWithMapper for std::rc::Rc<T>
+impl<T> RedactableWithMapper for Rc<T>
 where
     T: RedactableWithMapper + Clone,
 {
     fn redact_with<M: RedactableMapper>(self, mapper: &M) -> Self {
-        std::rc::Rc::new((*self).clone().redact_with(mapper))
+        Rc::new((*self).clone().redact_with(mapper))
     }
 }
 

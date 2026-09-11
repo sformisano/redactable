@@ -12,7 +12,7 @@ use std::{
 };
 
 use redactable::{
-    RedactableWithFormatter, Secret, SensitiveValue,
+    RedactableWithFormatter, Secret, SensitiveValue, ToRedacted,
     tracing::{TracingRedactedDebugExt, TracingRedactedExt},
 };
 use redactable_test_fixtures::{AuthEvent, FixtureError, FixtureUser, GenericDualFixture};
@@ -257,6 +257,83 @@ fn display_helper_records_redacted_display_field() {
         !error_output.contains("raw-password"),
         "raw display secret must not reach tracing, got: {error_output}"
     );
+}
+
+#[test]
+fn unsized_producer_tracing_text_matches_concrete_output() {
+    let token = SensitiveValue::<String, Secret>::from("unsized-tracing-canary".to_owned());
+    let producer: &dyn ToRedacted = &token;
+
+    let fields = capture_fields(|| {
+        tracing::info!(
+            concrete = token.tracing_redacted(),
+            dynamic = producer.tracing_redacted(),
+        );
+    });
+    let concrete = debug_text(field_named(&fields, "concrete"), "concrete");
+    let dynamic = debug_text(field_named(&fields, "dynamic"), "dynamic");
+
+    assert_eq!(concrete, "[REDACTED]");
+    assert_eq!(dynamic, concrete);
+}
+
+#[cfg(feature = "tracing-valuable")]
+#[test]
+fn valuable_error_projection_forwards_caller_mutation() {
+    use std::{
+        cell::RefCell,
+        error::Error,
+        fmt::{Display, Formatter, Result as FmtResult},
+    };
+
+    use redactable::{Sensitive, tracing::IntoTracingRedactedValuableExt};
+    use valuable::{Valuable, Value as ValuableValue, Visit as ValuableVisit};
+
+    #[derive(Clone, serde::Serialize, Sensitive)]
+    struct Event {
+        #[sensitive(Secret)]
+        secret: RefCell<String>,
+    }
+
+    impl Display for Event {
+        fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
+            formatter.write_str(&self.secret.borrow())
+        }
+    }
+
+    impl Error for Event {}
+
+    impl Valuable for Event {
+        fn as_value(&self) -> ValuableValue<'_> {
+            ValuableValue::Error(self)
+        }
+
+        fn visit(&self, visit: &mut dyn ValuableVisit) {
+            visit.visit_value(self.as_value());
+        }
+    }
+
+    let wrapped = Event {
+        secret: RefCell::new("original-secret".to_owned()),
+    }
+    .into_tracing_redacted_valuable();
+    let projection = wrapped.as_value();
+    let error = projection
+        .as_error()
+        .expect("valuable projection should expose the inner error");
+    assert_eq!(error.to_string(), "[REDACTED]");
+
+    error
+        .downcast_ref::<Event>()
+        .expect("borrowed error should retain its concrete type")
+        .secret
+        .replace("caller-update".to_owned());
+
+    let later_projection = wrapped.as_value();
+    let later = later_projection
+        .as_error()
+        .expect("later projection should still expose the inner error");
+    assert_eq!(later.to_string(), "caller-update");
 }
 
 #[test]

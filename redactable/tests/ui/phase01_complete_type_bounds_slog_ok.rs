@@ -1,3 +1,4 @@
+use redactable::PolicyDisplay;
 use std::{
     cell::Cell,
     collections::{BTreeMap, HashMap, hash_map::DefaultHasher},
@@ -25,7 +26,7 @@ struct Key(u8);
 type Hasher = BuildHasherDefault<DefaultHasher>;
 
 #[derive(Clone, serde::Serialize, Sensitive)]
-struct Complete<K, V, S> {
+struct Complete<K, V, S> where Arc<V>: Redactable, Rc<V>: Redactable, HashMap<K,V,S>: Redactable, BTreeMap<K,V>: Redactable {
     #[serde(skip)]
     arc: Arc<V>,
     #[serde(skip)]
@@ -42,10 +43,10 @@ struct Tuple<K, V, S>(
     #[serde(skip)] Arc<V>,
     HashMap<K, V, S>,
     BypassRedaction<K>,
-);
+) where Arc<V>: Redactable, HashMap<K,V,S>: Redactable;
 
 #[derive(Clone, serde::Serialize, Sensitive)]
-enum Shapes<K, V, S> {
+enum Shapes<K, V, S> where Rc<V>: Redactable, HashMap<K,V,S>: Redactable, BTreeMap<K,V>: Redactable {
     Named { values: HashMap<K, V, S> },
     Tuple(#[serde(skip)] Rc<V>, BTreeMap<K, V>),
     Unit,
@@ -53,7 +54,7 @@ enum Shapes<K, V, S> {
 
 #[derive(serde::Serialize, SensitiveDisplay)]
 #[error("email {email}")]
-struct PolicyOutput<T> {
+struct PolicyOutput<T: PolicyDisplay<Email>> {
     #[sensitive(Email)]
     email: T,
 }

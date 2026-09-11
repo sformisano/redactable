@@ -11,7 +11,7 @@
 use std::collections::BTreeSet;
 
 use proc_macro2::{Ident, Span};
-use syn::{Attribute, LitStr, Result, spanned::Spanned};
+use syn::{Attribute, Error, Expr, Lit, LitStr, Meta, Result, spanned::Spanned};
 
 use super::model::{FormatMode, Placeholder, PlaceholderKey};
 
@@ -37,7 +37,7 @@ pub(super) fn validate_positional_placeholders(placeholders: &[Placeholder]) -> 
                     PlaceholderKey::Named(_) | PlaceholderKey::Index(_) => None,
                 })
                 .unwrap_or_else(Span::call_site);
-            return Err(syn::Error::new(
+            return Err(Error::new(
                 span,
                 "positional placeholders must be contiguous starting at 0",
             ));
@@ -65,7 +65,7 @@ pub(super) fn template_from_attrs(attrs: &[Attribute], span: Span) -> Result<Lit
     if let Some(doc) = doc_template_from_attrs(attrs) {
         return Ok(doc);
     }
-    Err(syn::Error::new(
+    Err(Error::new(
         span,
         "missing display template: add #[error(\"...\")] or a doc comment",
     ))
@@ -77,14 +77,14 @@ fn error_template_from_attrs(attrs: &[Attribute]) -> Result<Option<LitStr>> {
             continue;
         }
         match &attr.meta {
-            syn::Meta::List(list) => {
+            Meta::List(list) => {
                 let error_lit: Result<LitStr> = syn::parse2(list.tokens.clone());
                 return error_lit
                     .map(Some)
-                    .map_err(|_| syn::Error::new(attr.span(), "expected #[error(\"...\")]"));
+                    .map_err(|_| Error::new(attr.span(), "expected #[error(\"...\")]"));
             }
             _ => {
-                return Err(syn::Error::new(attr.span(), "expected #[error(\"...\")]"));
+                return Err(Error::new(attr.span(), "expected #[error(\"...\")]"));
             }
         }
     }
@@ -97,9 +97,9 @@ fn doc_template_from_attrs(attrs: &[Attribute]) -> Option<LitStr> {
         if !attr.path().is_ident("doc") {
             continue;
         }
-        if let syn::Meta::NameValue(value) = &attr.meta
-            && let syn::Expr::Lit(expr) = &value.value
-            && let syn::Lit::Str(lit) = &expr.lit
+        if let Meta::NameValue(value) = &attr.meta
+            && let Expr::Lit(expr) = &value.value
+            && let Lit::Str(lit) = &expr.lit
         {
             lines.push(lit.value().trim_start().to_string());
         }
@@ -134,7 +134,7 @@ pub(super) fn parse_placeholders(template: &LitStr) -> Result<Vec<Placeholder>> 
                     inside.push(next);
                 }
                 if !closed {
-                    return Err(syn::Error::new(
+                    return Err(Error::new(
                         template.span(),
                         "unmatched `{` in format string",
                     ));
@@ -151,7 +151,7 @@ pub(super) fn parse_placeholders(template: &LitStr) -> Result<Vec<Placeholder>> 
                 } else if arg_part.chars().all(|c| c.is_ascii_digit()) {
                     let index = arg_part
                         .parse::<usize>()
-                        .map_err(|_| syn::Error::new(template.span(), "invalid index"))?;
+                        .map_err(|_| Error::new(template.span(), "invalid index"))?;
                     PlaceholderKey::Index(index)
                 } else {
                     PlaceholderKey::Named(parse_placeholder_ident(arg_part, template.span())?)
@@ -166,7 +166,7 @@ pub(super) fn parse_placeholders(template: &LitStr) -> Result<Vec<Placeholder>> 
                 if matches!(chars.peek(), Some('}')) {
                     chars.next();
                 } else {
-                    return Err(syn::Error::new(
+                    return Err(Error::new(
                         template.span(),
                         "unmatched `}` in format string",
                     ));
@@ -182,7 +182,7 @@ pub(super) fn parse_placeholders(template: &LitStr) -> Result<Vec<Placeholder>> 
 fn parse_placeholder_ident(value: &str, span: Span) -> Result<Ident> {
     syn::parse_str::<Ident>(value)
         .or_else(|_| syn::parse_str::<Ident>(&format!("r#{value}")))
-        .map_err(|_| syn::Error::new(span, format!("unsupported format placeholder `{value}`")))
+        .map_err(|_| Error::new(span, format!("unsupported format placeholder `{value}`")))
 }
 
 fn format_mode_from_spec(spec_part: &str, span: Span) -> Result<FormatMode> {
@@ -191,13 +191,13 @@ fn format_mode_from_spec(spec_part: &str, span: Span) -> Result<FormatMode> {
         return Ok(FormatMode::Display);
     }
     if has_dynamic_width_or_precision(spec) {
-        return Err(syn::Error::new(
+        return Err(Error::new(
             span,
             "format specifiers with dynamic width/precision are not supported",
         ));
     }
     if is_unsupported_debug_specifier(spec) {
-        return Err(syn::Error::new(
+        return Err(Error::new(
             span,
             format!("unsupported format specifier `{spec}`; only Display and Debug are supported"),
         ));
@@ -205,7 +205,7 @@ fn format_mode_from_spec(spec_part: &str, span: Span) -> Result<FormatMode> {
     let last = spec.chars().last().unwrap_or_default();
     match last {
         '?' => Ok(FormatMode::Debug),
-        'x' | 'X' | 'o' | 'b' | 'p' | 'e' | 'E' => Err(syn::Error::new(
+        'x' | 'X' | 'o' | 'b' | 'p' | 'e' | 'E' => Err(Error::new(
             span,
             format!("unsupported format specifier `{spec}`; only Display and Debug are supported"),
         )),
@@ -243,7 +243,8 @@ fn is_unsupported_debug_specifier(spec: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use super::{FormatMode, format_mode_from_spec};
+    use proc_macro2::Span;
 
     #[test]
     fn format_mode_allows_star_and_dollar_fill_chars() {

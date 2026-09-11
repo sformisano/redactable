@@ -1,3 +1,4 @@
+use redactable::{PolicyDebug, PolicyDisplay};
 use std::{cell::RefCell, collections::BTreeMap, marker::PhantomData, rc::Rc, sync::Arc};
 
 use redactable::tracing::{
@@ -16,7 +17,10 @@ type RcCellAlias<T> = Rc<CellAlias<T>>;
 
 #[derive(SensitiveDisplay)]
 #[error("{value}")]
-struct GenericAliasDisplay<P: RedactionPolicy, T> {
+struct GenericAliasDisplay<P: RedactionPolicy, T>
+where
+    NestedCellAlias<T>: PolicyDisplay<P>,
+{
     #[sensitive(P)]
     value: NestedCellAlias<T>,
     marker: PhantomData<P>,
@@ -24,7 +28,10 @@ struct GenericAliasDisplay<P: RedactionPolicy, T> {
 
 #[derive(SensitiveDisplay)]
 #[error("{value} | {value:?}")]
-struct ArcAliasDisplay<P: RedactionPolicy, T> {
+struct ArcAliasDisplay<P: RedactionPolicy, T>
+where
+    ArcCellAlias<T>: PolicyDisplay<P> + PolicyDebug<P>,
+{
     #[sensitive(P)]
     value: ArcCellAlias<T>,
     marker: PhantomData<P>,
@@ -32,7 +39,10 @@ struct ArcAliasDisplay<P: RedactionPolicy, T> {
 
 #[derive(SensitiveDisplay)]
 #[error("{value} | {value:?}")]
-struct RcAliasDisplay<P: RedactionPolicy, T> {
+struct RcAliasDisplay<P: RedactionPolicy, T>
+where
+    RcCellAlias<T>: PolicyDisplay<P> + PolicyDebug<P>,
+{
     #[sensitive(P)]
     value: RcCellAlias<T>,
     marker: PhantomData<P>,
@@ -41,7 +51,7 @@ struct RcAliasDisplay<P: RedactionPolicy, T> {
 fn assert_borrow_conflict<P>()
 where
     P: RedactionPolicy,
-    GenericAliasDisplay<P, String>: RedactableWithFormatter,
+    NestedCellAlias<String>: PolicyDisplay<P>,
 {
     let display = GenericAliasDisplay::<P, String> {
         value: Some(RefCell::new("panic-abort-canary".to_owned())),
@@ -59,8 +69,8 @@ where
 fn assert_pointer_borrow_states<P>()
 where
     P: RedactionPolicy,
-    ArcAliasDisplay<P, String>: RedactableWithFormatter,
-    RcAliasDisplay<P, String>: RedactableWithFormatter,
+    ArcCellAlias<String>: PolicyDisplay<P> + PolicyDebug<P>,
+    RcCellAlias<String>: PolicyDisplay<P> + PolicyDebug<P>,
 {
     let arc = ArcAliasDisplay::<P, String> {
         value: Arc::new(RefCell::new("panic-abort-canary".to_owned())),
@@ -110,7 +120,7 @@ struct NestedBorrowedKeyDisplay {
 
 #[derive(SensitiveDisplay)]
 #[error("{values}")]
-struct GenericBorrowedKeyDisplay<T> {
+struct GenericBorrowedKeyDisplay<T: PolicyDisplay<Secret>> {
     #[sensitive(Secret)]
     values: T,
 }

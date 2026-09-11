@@ -24,7 +24,10 @@ use crate::{
 use super::{
     RedactedDisplayOutput,
     bounds::collect_bounds,
-    model::{FieldInfo, FormatArgsOutput, FormatMode, PlaceholderKey, build_fields_from_syn},
+    model::{
+        FieldInfo, FormatArgsOutput, FormatMode, FormattingRoute, PlaceholderKey,
+        build_fields_from_syn,
+    },
     template::{
         merge_mode, parse_placeholders, template_from_attrs, validate_positional_placeholders,
     },
@@ -39,8 +42,8 @@ pub(super) fn derive_struct_display(
     fresh: &mut FreshIdentAllocator,
 ) -> Result<RedactedDisplayOutput> {
     let template = template_from_attrs(attrs, name.span())?;
-    let fields = build_fields_from_syn(&data.fields, fresh)?;
-    let format_args = build_format_args(&template, &fields, generics, formatter, fresh)?;
+    let fields = build_fields_from_syn(&data.fields, generics, fresh)?;
+    let format_args = build_format_args(&template, &fields, formatter, fresh)?;
     let format_prelude = format_args.prelude.clone();
     let pattern = match data.fields {
         Fields::Named(_) => {
@@ -90,8 +93,8 @@ pub(super) fn derive_enum_display(
     for variant in &data.variants {
         reject_variant_sensitivity_attrs(&variant.attrs)?;
         let template = template_from_attrs(&variant.attrs, variant.ident.span())?;
-        let fields = build_fields_from_syn(&variant.fields, fresh)?;
-        let format_args = build_format_args(&template, &fields, generics, formatter, fresh)?;
+        let fields = build_fields_from_syn(&variant.fields, generics, fresh)?;
+        let format_args = build_format_args(&template, &fields, formatter, fresh)?;
         let format_prelude = format_args.prelude.clone();
         let variant_ident = &variant.ident;
         let pattern = match &variant.fields {
@@ -148,7 +151,6 @@ pub(super) fn derive_enum_display(
 fn build_format_args(
     template: &LitStr,
     fields: &[FieldInfo<'_>],
-    generics: &Generics,
     formatter: &Ident,
     fresh: &mut FreshIdentAllocator,
 ) -> Result<FormatArgsOutput> {
@@ -211,7 +213,6 @@ fn build_format_args(
         collect_bounds(
             field,
             mode,
-            generics,
             &mut display_generics,
             &mut debug_generics,
             &mut policy_ref_generics,
@@ -228,7 +229,6 @@ fn build_format_args(
         collect_bounds(
             field,
             mode,
-            generics,
             &mut display_generics,
             &mut debug_generics,
             &mut policy_ref_generics,
@@ -281,9 +281,13 @@ fn redacted_expr_for_field(field: &FieldInfo<'_>) -> TokenStream {
         },
         Strategy::Policy(policy) => {
             let policy = policy.clone();
-            if field.legacy_formatting_override {
+            if field.formatting_route == FormattingRoute::Legacy {
                 quote_spanned! { span =>
                     #crate_root::__private::legacy_policy_formatting_ref::<#policy, _>(#ident)
+                }
+            } else if field.formatting_route == FormattingRoute::Declared {
+                quote_spanned! { span =>
+                    #crate_root::__private::declared_policy_formatting_ref::<#policy, _>(#ident)
                 }
             } else {
                 quote_spanned! { span =>

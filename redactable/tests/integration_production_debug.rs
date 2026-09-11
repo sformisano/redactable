@@ -72,6 +72,7 @@ fn redacted_display_is_unaffected_by_debug_mode() {
 
 mod consumer_test {
     use redactable::{Secret, Sensitive, SensitiveDisplay, SensitiveDual};
+    use std::fmt::Display;
 
     #[derive(Clone, Sensitive, serde::Serialize)]
     pub struct FixtureUser {
@@ -102,7 +103,7 @@ mod consumer_test {
 
     #[derive(Clone, SensitiveDual, serde::Serialize)]
     #[error("{label}: {secret}")]
-    pub struct GenericDualFixture<T> {
+    pub struct GenericDualFixture<T: Display> {
         #[not_sensitive]
         pub label: T,
         #[sensitive(Secret)]

@@ -1,6 +1,8 @@
 //! Borrowed formatting projections and the probe-based dispatch that selects
 //! between legacy and generated formatting routes.
 
+use crate::{PolicyDebug, PolicyDisplay};
+use std::fmt::{Debug, Display, Formatter, Result as FmtResult};
 use std::marker::PhantomData;
 
 use crate::{RedactableWithFormatter, RedactionPolicy, redaction::PolicyMapper};
@@ -58,48 +60,48 @@ pub fn legacy_policy_formatting_ref<P, T: ?Sized>(
     }
 }
 
-impl<P, T> std::fmt::Display for ExplicitLegacyPolicyFormattingRef<'_, P, T>
+impl<P, T> Display for ExplicitLegacyPolicyFormattingRef<'_, P, T>
 where
     P: RedactionPolicy,
     T: PolicyFieldRef<P> + ?Sized,
     <T as PolicyFieldRef<P>>::Output: RedactableWithFormatter,
 {
-    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
         self.value
             .apply_field_ref(&PolicyMapper)
             .fmt_redacted(formatter)
     }
 }
 
-impl<P, T> std::fmt::Debug for ExplicitLegacyPolicyFormattingRef<'_, P, T>
+impl<P, T> Debug for ExplicitLegacyPolicyFormattingRef<'_, P, T>
 where
     P: RedactionPolicy,
     T: PolicyFieldRef<P> + ?Sized,
-    <T as PolicyFieldRef<P>>::Output: std::fmt::Debug,
+    <T as PolicyFieldRef<P>>::Output: Debug,
 {
-    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        std::fmt::Debug::fmt(&self.value.apply_field_ref(&PolicyMapper), formatter)
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
+        Debug::fmt(&self.value.apply_field_ref(&PolicyMapper), formatter)
     }
 }
 
-impl<P, T> std::fmt::Display for LegacyPolicyFormattingRef<'_, P, T>
+impl<P, T> Display for LegacyPolicyFormattingRef<'_, P, T>
 where
     P: RedactionPolicy,
     P::Kind: PolicyKindDisplayFormatting<P, T>,
     T: ?Sized,
 {
-    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
         <P::Kind as PolicyKindDisplayFormatting<P, T>>::fmt_display(self.value, formatter)
     }
 }
 
-impl<P, T> std::fmt::Debug for LegacyPolicyFormattingRef<'_, P, T>
+impl<P, T> Debug for LegacyPolicyFormattingRef<'_, P, T>
 where
     P: RedactionPolicy,
     P::Kind: PolicyKindDebugFormatting<P, T>,
     T: ?Sized,
 {
-    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
         <P::Kind as PolicyKindDebugFormatting<P, T>>::fmt_debug(self.value, formatter)
     }
 }
@@ -160,24 +162,24 @@ pub fn policy_formatting_ref<P, T: ?Sized>(value: &T) -> PolicyFormattingRef<'_,
     }
 }
 
-impl<P, T> std::fmt::Display for PolicyFormattingRef<'_, P, T>
+impl<P, T> Display for PolicyFormattingRef<'_, P, T>
 where
     P: RedactionPolicy,
     P::Kind: PolicyKindDisplayFormatting<P, T>,
     T: ?Sized,
 {
-    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
         <P::Kind as PolicyKindDisplayFormatting<P, T>>::fmt_display(self.value, formatter)
     }
 }
 
-impl<P, T> std::fmt::Debug for PolicyFormattingRef<'_, P, T>
+impl<P, T> Debug for PolicyFormattingRef<'_, P, T>
 where
     P: RedactionPolicy,
     P::Kind: PolicyKindDebugFormatting<P, T>,
     T: ?Sized,
 {
-    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
         <P::Kind as PolicyKindDebugFormatting<P, T>>::fmt_debug(self.value, formatter)
     }
 }
@@ -189,28 +191,62 @@ pub struct GeneratedPolicyFormattingRef<'a, P, T: ?Sized> {
     policy: PhantomData<P>,
 }
 
-impl<P, T> std::fmt::Display for GeneratedPolicyFormattingRef<'_, P, T>
+impl<P, T> Display for GeneratedPolicyFormattingRef<'_, P, T>
 where
     P: RedactionPolicy,
     P::Kind: GeneratedPolicyKindDisplayFormatting<P, T>,
     T: ?Sized,
 {
-    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
         <P::Kind as GeneratedPolicyKindDisplayFormatting<P, T>>::fmt_generated_display(
             self.value, formatter,
         )
     }
 }
 
-impl<P, T> std::fmt::Debug for GeneratedPolicyFormattingRef<'_, P, T>
+impl<P, T> Debug for GeneratedPolicyFormattingRef<'_, P, T>
 where
     P: RedactionPolicy,
     P::Kind: GeneratedPolicyKindDebugFormatting<P, T>,
     T: ?Sized,
 {
-    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
         <P::Kind as GeneratedPolicyKindDebugFormatting<P, T>>::fmt_generated_debug(
             self.value, formatter,
         )
+    }
+}
+
+/// Direct borrowed formatter for an explicitly declared field capability.
+#[doc(hidden)]
+pub struct DeclaredPolicyFormattingRef<'a, P, T: ?Sized> {
+    value: &'a T,
+    policy: PhantomData<P>,
+}
+
+/// Borrows a field without a nominal marker probe.
+#[doc(hidden)]
+pub fn declared_policy_formatting_ref<P, T: ?Sized>(
+    value: &T,
+) -> DeclaredPolicyFormattingRef<'_, P, T> {
+    DeclaredPolicyFormattingRef {
+        value,
+        policy: PhantomData,
+    }
+}
+
+impl<P: RedactionPolicy, T: PolicyDisplay<P> + ?Sized> Display
+    for DeclaredPolicyFormattingRef<'_, P, T>
+{
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
+        self.value.fmt_policy_display(formatter)
+    }
+}
+
+impl<P: RedactionPolicy, T: PolicyDebug<P> + ?Sized> Debug
+    for DeclaredPolicyFormattingRef<'_, P, T>
+{
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
+        self.value.fmt_policy_debug(formatter)
     }
 }

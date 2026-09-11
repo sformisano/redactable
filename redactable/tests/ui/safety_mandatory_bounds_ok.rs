@@ -1,13 +1,14 @@
-//! `Clone + Serialize` (and `Serialize` alone for `NotSensitive`) are the only
-//! bounds the derives add, and generic parameters may supply them.
+//! Structural declarations state their field capabilities; producer bounds remain separate.
 
+use redactable::Redactable;
 use redactable::{
     NotSensitive, RedactedValue, Secret, Sensitive, SensitiveDisplay, SensitiveDual, ToRedacted,
 };
 use serde::{Serialize, Serializer};
+use serde_json::Value;
 
 #[derive(Clone, Serialize, Sensitive)]
-struct Structural<T> {
+struct Structural<T: Redactable> {
     item: T,
     #[not_sensitive]
     approved: bool,
@@ -75,6 +76,6 @@ fn main() {
     );
     assert_eq!(
         Fallible.to_redacted().json(),
-        serde_json::Value::String("[REDACTED]".into())
+        Value::String("[REDACTED]".into())
     );
 }

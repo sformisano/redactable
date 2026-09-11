@@ -9,6 +9,7 @@ use redactable::{
     Email, Redactable, RedactableMapper, RedactableWithMapper, Secret, Sensitive, SensitiveDisplay,
     SensitiveDual, Token,
 };
+use std::fmt::Display;
 
 /// Exact README tracing fixture with production-compiled generated `Debug`.
 #[derive(Clone, Sensitive, serde::Serialize)]
@@ -55,7 +56,7 @@ pub struct FixtureError {
 /// Genuine generic dual derive compiled outside `cfg(test)`.
 #[derive(Clone, SensitiveDual, serde::Serialize)]
 #[error("{label}: {secret}")]
-pub struct GenericDualFixture<T> {
+pub struct GenericDualFixture<T: Display> {
     #[not_sensitive]
     pub label: T,
     #[sensitive(Secret)]

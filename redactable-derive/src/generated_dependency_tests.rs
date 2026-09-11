@@ -1,7 +1,11 @@
 use proc_macro2::{TokenStream, TokenTree};
 use quote::quote;
 
-use super::*;
+use crate::{
+    not_sensitive::{expand_not_sensitive, expand_not_sensitive_display},
+    sensitive::{DeriveKind, expand},
+};
+use syn::DeriveInput;
 
 fn collect_paths(stream: TokenStream, paths: &mut Vec<Vec<String>>) {
     let tokens: Vec<_> = stream.into_iter().collect();

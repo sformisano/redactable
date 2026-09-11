@@ -51,9 +51,10 @@ pub use field::{
     PolicyKindFieldRefForFormatting, RecursivePolicyField,
 };
 pub use formatting::{
-    ExplicitLegacyPolicyFormattingRef, GeneratedPolicyFormattingRef, LegacyPolicyFormattingRef,
-    PolicyFormattingDispatch, PolicyFormattingProbe, PolicyFormattingRef,
-    legacy_policy_formatting_ref, policy_formatting_probe, policy_formatting_ref,
+    DeclaredPolicyFormattingRef, ExplicitLegacyPolicyFormattingRef, GeneratedPolicyFormattingRef,
+    LegacyPolicyFormattingRef, PolicyFormattingDispatch, PolicyFormattingProbe,
+    PolicyFormattingRef, declared_policy_formatting_ref, legacy_policy_formatting_ref,
+    policy_formatting_probe, policy_formatting_ref,
 };
 pub use kinds::{
     GeneratedPolicyKindDebugFormatting, GeneratedPolicyKindDisplayFormatting,

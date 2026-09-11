@@ -7,6 +7,15 @@ use crate::{
     TextPolicyKind,
     redaction::{IpPolicyApplicableRef, PolicyApplicableRef, PolicyFormattingMapper, PolicyMapper},
 };
+use std::fmt::{Debug, Formatter, Result as FmtResult};
+#[cfg(feature = "ip-address")]
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
+use std::{
+    cell::{Cell, RefCell},
+    collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque},
+    rc::Rc,
+    sync::Arc,
+};
 
 use super::field::{
     PolicyApplicableRefForFormatting, PolicyApplicableRefForGeneratedFormatting, PolicyFieldRef,
@@ -21,31 +30,28 @@ use super::{
 #[doc(hidden)]
 pub trait PolicyKindDisplayFormatting<P: RedactionPolicy, T: ?Sized> {
     /// Formats the policy result for a display placeholder.
-    fn fmt_display(value: &T, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result;
+    fn fmt_display(value: &T, formatter: &mut Formatter<'_>) -> FmtResult;
 }
 
 /// Kind-level debug formatter for a library-owned field shape.
 #[doc(hidden)]
 pub trait PolicyKindDebugFormatting<P: RedactionPolicy, T: ?Sized> {
     /// Formats the policy result for a debug placeholder.
-    fn fmt_debug(value: &T, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result;
+    fn fmt_debug(value: &T, formatter: &mut Formatter<'_>) -> FmtResult;
 }
 
 /// Display formatting selected only for generated borrowed projections.
 #[doc(hidden)]
 pub trait GeneratedPolicyKindDisplayFormatting<P: RedactionPolicy, T: ?Sized> {
     /// Formats the generated borrowed policy result.
-    fn fmt_generated_display(
-        value: &T,
-        formatter: &mut std::fmt::Formatter<'_>,
-    ) -> std::fmt::Result;
+    fn fmt_generated_display(value: &T, formatter: &mut Formatter<'_>) -> FmtResult;
 }
 
 /// Debug formatting selected only for generated borrowed projections.
 #[doc(hidden)]
 pub trait GeneratedPolicyKindDebugFormatting<P: RedactionPolicy, T: ?Sized> {
     /// Debug-formats the generated borrowed policy result.
-    fn fmt_generated_debug(value: &T, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result;
+    fn fmt_generated_debug(value: &T, formatter: &mut Formatter<'_>) -> FmtResult;
 }
 
 macro_rules! impl_recursive_generated_kind_formatting {
@@ -56,10 +62,7 @@ macro_rules! impl_recursive_generated_kind_formatting {
             T: PolicyApplicableRefForGeneratedFormatting + ?Sized,
             T::FormattingOutput: RedactableWithFormatter,
         {
-            fn fmt_generated_display(
-                value: &T,
-                formatter: &mut std::fmt::Formatter<'_>,
-            ) -> std::fmt::Result {
+            fn fmt_generated_display(value: &T, formatter: &mut Formatter<'_>) -> FmtResult {
                 value
                     .apply_policy_ref_for_generated_formatting::<P, _>(
                         &PolicyFormattingMapper::new(formatter.alternate()),
@@ -72,13 +75,10 @@ macro_rules! impl_recursive_generated_kind_formatting {
         where
             P: RedactionPolicy<Kind = $kind>,
             T: PolicyApplicableRefForGeneratedFormatting + ?Sized,
-            T::FormattingOutput: std::fmt::Debug,
+            T::FormattingOutput: Debug,
         {
-            fn fmt_generated_debug(
-                value: &T,
-                formatter: &mut std::fmt::Formatter<'_>,
-            ) -> std::fmt::Result {
-                std::fmt::Debug::fmt(
+            fn fmt_generated_debug(value: &T, formatter: &mut Formatter<'_>) -> FmtResult {
+                Debug::fmt(
                     &value.apply_policy_ref_for_generated_formatting::<P, _>(
                         &PolicyFormattingMapper::new(formatter.alternate()),
                     ),
@@ -98,10 +98,7 @@ where
     T: IpPolicyApplicableRef<P> + ?Sized,
     T::Output: RedactableWithFormatter,
 {
-    fn fmt_generated_display(
-        value: &T,
-        formatter: &mut std::fmt::Formatter<'_>,
-    ) -> std::fmt::Result {
+    fn fmt_generated_display(value: &T, formatter: &mut Formatter<'_>) -> FmtResult {
         value
             .apply_ip_policy_ref_for_formatting(&PolicyMapper)
             .fmt_redacted(formatter)
@@ -112,10 +109,10 @@ impl<P, T> GeneratedPolicyKindDebugFormatting<P, T> for IpAddressPolicyKind
 where
     P: RedactionPolicy<Kind = IpAddressPolicyKind>,
     T: IpPolicyApplicableRef<P> + ?Sized,
-    T::Output: std::fmt::Debug,
+    T::Output: Debug,
 {
-    fn fmt_generated_debug(value: &T, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        std::fmt::Debug::fmt(
+    fn fmt_generated_debug(value: &T, formatter: &mut Formatter<'_>) -> FmtResult {
+        Debug::fmt(
             &value.apply_ip_policy_ref_for_formatting(&PolicyMapper),
             formatter,
         )
@@ -128,7 +125,7 @@ where
     T: PolicyApplicableRefForFormatting + PolicyApplicableRef + ?Sized,
     T::Output: RedactableWithFormatter,
 {
-    fn fmt_display(value: &T, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt_display(value: &T, formatter: &mut Formatter<'_>) -> FmtResult {
         value.fmt_policy_display::<P>(formatter)
     }
 }
@@ -137,9 +134,9 @@ impl<P, T> PolicyKindDebugFormatting<P, T> for TextPolicyKind
 where
     P: RedactionPolicy<Kind = TextPolicyKind>,
     T: PolicyApplicableRefForFormatting + PolicyApplicableRef + ?Sized,
-    T::Output: std::fmt::Debug,
+    T::Output: Debug,
 {
-    fn fmt_debug(value: &T, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt_debug(value: &T, formatter: &mut Formatter<'_>) -> FmtResult {
         value.fmt_policy_debug::<P>(formatter)
     }
 }
@@ -150,7 +147,7 @@ where
     T: PolicyApplicableRefForFormatting + PolicyApplicableRef + ?Sized,
     T::Output: RedactableWithFormatter,
 {
-    fn fmt_display(value: &T, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt_display(value: &T, formatter: &mut Formatter<'_>) -> FmtResult {
         value.fmt_policy_display::<P>(formatter)
     }
 }
@@ -159,9 +156,9 @@ impl<P, T> PolicyKindDebugFormatting<P, T> for SecretPolicyKind
 where
     P: RedactionPolicy<Kind = SecretPolicyKind>,
     T: PolicyApplicableRefForFormatting + PolicyApplicableRef + ?Sized,
-    T::Output: std::fmt::Debug,
+    T::Output: Debug,
 {
-    fn fmt_debug(value: &T, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt_debug(value: &T, formatter: &mut Formatter<'_>) -> FmtResult {
         value.fmt_policy_debug::<P>(formatter)
     }
 }
@@ -172,7 +169,7 @@ where
     T: IpPolicyApplicableRef<P> + ?Sized,
     T::Output: RedactableWithFormatter,
 {
-    fn fmt_display(value: &T, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt_display(value: &T, formatter: &mut Formatter<'_>) -> FmtResult {
         value
             .apply_ip_policy_ref_for_formatting(&PolicyMapper)
             .fmt_redacted(formatter)
@@ -183,10 +180,10 @@ impl<P, T> PolicyKindDebugFormatting<P, T> for IpAddressPolicyKind
 where
     P: RedactionPolicy<Kind = IpAddressPolicyKind>,
     T: IpPolicyApplicableRef<P> + ?Sized,
-    T::Output: std::fmt::Debug,
+    T::Output: Debug,
 {
-    fn fmt_debug(value: &T, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        std::fmt::Debug::fmt(
+    fn fmt_debug(value: &T, formatter: &mut Formatter<'_>) -> FmtResult {
+        Debug::fmt(
             &value.apply_ip_policy_ref_for_formatting(&PolicyMapper),
             formatter,
         )
@@ -202,7 +199,7 @@ macro_rules! impl_generated_kind_formatting {
             <$ty as PolicyApplicableRefForGeneratedFormatting>::FormattingOutput:
                 RedactableWithFormatter,
         {
-            fn fmt_display(value: &$ty, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            fn fmt_display(value: &$ty, formatter: &mut Formatter<'_>) -> FmtResult {
                 value
                     .apply_policy_ref_for_generated_formatting::<P, _>(
                         &PolicyFormattingMapper::new(formatter.alternate()),
@@ -215,10 +212,10 @@ macro_rules! impl_generated_kind_formatting {
         where
             P: RedactionPolicy<Kind = TextPolicyKind>,
             $ty: PolicyApplicableRefForGeneratedFormatting,
-            <$ty as PolicyApplicableRefForGeneratedFormatting>::FormattingOutput: std::fmt::Debug,
+            <$ty as PolicyApplicableRefForGeneratedFormatting>::FormattingOutput: Debug,
         {
-            fn fmt_debug(value: &$ty, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-                std::fmt::Debug::fmt(
+            fn fmt_debug(value: &$ty, formatter: &mut Formatter<'_>) -> FmtResult {
+                Debug::fmt(
                     &value.apply_policy_ref_for_generated_formatting::<P, _>(
                         &PolicyFormattingMapper::new(formatter.alternate()),
                     ),
@@ -234,7 +231,7 @@ macro_rules! impl_generated_kind_formatting {
             <$ty as PolicyApplicableRefForGeneratedFormatting>::FormattingOutput:
                 RedactableWithFormatter,
         {
-            fn fmt_display(value: &$ty, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            fn fmt_display(value: &$ty, formatter: &mut Formatter<'_>) -> FmtResult {
                 value
                     .apply_policy_ref_for_generated_formatting::<P, _>(
                         &PolicyFormattingMapper::new(formatter.alternate()),
@@ -247,10 +244,10 @@ macro_rules! impl_generated_kind_formatting {
         where
             P: RedactionPolicy<Kind = SecretPolicyKind>,
             $ty: PolicyApplicableRefForGeneratedFormatting,
-            <$ty as PolicyApplicableRefForGeneratedFormatting>::FormattingOutput: std::fmt::Debug,
+            <$ty as PolicyApplicableRefForGeneratedFormatting>::FormattingOutput: Debug,
         {
-            fn fmt_debug(value: &$ty, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-                std::fmt::Debug::fmt(
+            fn fmt_debug(value: &$ty, formatter: &mut Formatter<'_>) -> FmtResult {
+                Debug::fmt(
                     &value.apply_policy_ref_for_generated_formatting::<P, _>(
                         &PolicyFormattingMapper::new(formatter.alternate()),
                     ),
@@ -264,28 +261,39 @@ macro_rules! impl_generated_kind_formatting {
 impl_generated_kind_formatting!(
     [T] Option<T>;
     [T] Vec<T>;
-    [T] std::collections::VecDeque<T>;
+    [T] VecDeque<T>;
     [T, const N: usize] [T; N];
-    [T] std::sync::Arc<T>;
-    [T] std::rc::Rc<T>;
-    [T] std::cell::RefCell<T>;
-    [T] std::cell::Cell<T>;
+    [T] Arc<T>;
+    [T] Rc<T>;
+    [T] RefCell<T>;
+    [T] Cell<T>;
     [T, E] Result<T, E>;
-    [K, V, S] std::collections::HashMap<K, V, S>;
-    [K, V] std::collections::BTreeMap<K, V>;
-    [T, S] std::collections::HashSet<T, S>;
-    [T] std::collections::BTreeSet<T>;
+    [K, V, S] HashMap<K, V, S>;
+    [K, V] BTreeMap<K, V>;
+    [T, S] HashSet<T, S>;
+    [T] BTreeSet<T>;
 );
 
 macro_rules! impl_secret_scalar_formatting {
     ($($ty:ty),+ $(,)?) => {$ (
+        impl<P: RedactionPolicy<Kind = SecretPolicyKind>> GeneratedPolicyKindDisplayFormatting<P, $ty> for SecretPolicyKind {
+            fn fmt_generated_display(value: &$ty, formatter: &mut Formatter<'_>) -> FmtResult {
+                <Self as PolicyKindDisplayFormatting<P, $ty>>::fmt_display(value, formatter)
+            }
+        }
+        impl<P: RedactionPolicy<Kind = SecretPolicyKind>> GeneratedPolicyKindDebugFormatting<P, $ty> for SecretPolicyKind {
+            fn fmt_generated_debug(value: &$ty, formatter: &mut Formatter<'_>) -> FmtResult {
+                <Self as PolicyKindDebugFormatting<P, $ty>>::fmt_debug(value, formatter)
+            }
+        }
+
         impl PolicyApplicableRefForFormatting for $ty {}
 
         impl<P> PolicyKindDisplayFormatting<P, $ty> for SecretPolicyKind
         where
             P: RedactionPolicy<Kind = SecretPolicyKind>,
         {
-            fn fmt_display(value: &$ty, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            fn fmt_display(value: &$ty, formatter: &mut Formatter<'_>) -> FmtResult {
                 <$ty as PolicyFieldRef<P>>::apply_field_ref(value, &PolicyMapper)
                     .fmt_redacted(formatter)
             }
@@ -295,8 +303,8 @@ macro_rules! impl_secret_scalar_formatting {
         where
             P: RedactionPolicy<Kind = SecretPolicyKind>,
         {
-            fn fmt_debug(value: &$ty, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-                std::fmt::Debug::fmt(
+            fn fmt_debug(value: &$ty, formatter: &mut Formatter<'_>) -> FmtResult {
+                Debug::fmt(
                     &<$ty as PolicyFieldRef<P>>::apply_field_ref(value, &PolicyMapper),
                     formatter,
                 )
@@ -312,6 +320,17 @@ impl_secret_scalar_formatting!(
 #[cfg(feature = "ip-address")]
 macro_rules! impl_root_ip_field {
     ($($ty:ty),+ $(,)?) => {$ (
+        impl GeneratedPolicyKindDisplayFormatting<IpAddress, $ty> for IpAddressPolicyKind {
+            fn fmt_generated_display(value: &$ty, formatter: &mut Formatter<'_>) -> FmtResult {
+                <Self as PolicyKindDisplayFormatting<IpAddress, $ty>>::fmt_display(value, formatter)
+            }
+        }
+        impl GeneratedPolicyKindDebugFormatting<IpAddress, $ty> for IpAddressPolicyKind {
+            fn fmt_generated_debug(value: &$ty, formatter: &mut Formatter<'_>) -> FmtResult {
+                <Self as PolicyKindDebugFormatting<IpAddress, $ty>>::fmt_debug(value, formatter)
+            }
+        }
+
         impl PolicyKindField<IpAddress, $ty> for IpAddressPolicyKind {
             fn apply_kind<M: RedactableMapper>(value: $ty, _mapper: &M) -> $ty {
                 value.redact_with_policy(&IpAddress::policy())
@@ -343,8 +362,8 @@ macro_rules! impl_root_ip_field {
         impl PolicyKindDisplayFormatting<IpAddress, $ty> for IpAddressPolicyKind {
             fn fmt_display(
                 value: &$ty,
-                formatter: &mut std::fmt::Formatter<'_>,
-            ) -> std::fmt::Result {
+                formatter: &mut Formatter<'_>,
+            ) -> FmtResult {
                 value
                     .redacted_string(&IpAddress::policy())
                     .fmt_redacted(formatter)
@@ -354,9 +373,9 @@ macro_rules! impl_root_ip_field {
         impl PolicyKindDebugFormatting<IpAddress, $ty> for IpAddressPolicyKind {
             fn fmt_debug(
                 value: &$ty,
-                formatter: &mut std::fmt::Formatter<'_>,
-            ) -> std::fmt::Result {
-                std::fmt::Debug::fmt(
+                formatter: &mut Formatter<'_>,
+            ) -> FmtResult {
+                Debug::fmt(
                     &value.redacted_string(&IpAddress::policy()),
                     formatter,
                 )
@@ -366,9 +385,4 @@ macro_rules! impl_root_ip_field {
 }
 
 #[cfg(feature = "ip-address")]
-impl_root_ip_field!(
-    std::net::Ipv4Addr,
-    std::net::Ipv6Addr,
-    std::net::IpAddr,
-    std::net::SocketAddr,
-);
+impl_root_ip_field!(Ipv4Addr, Ipv6Addr, IpAddr, SocketAddr,);

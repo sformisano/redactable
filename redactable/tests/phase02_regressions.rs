@@ -1,5 +1,6 @@
 //! Runtime regressions for semantic policies, borrow conflicts, and macro hygiene.
 
+use redactable::{PolicyDebug, PolicyDisplay};
 #[cfg(feature = "ip-address")]
 use std::net::{Ipv4Addr, SocketAddr};
 use std::{
@@ -19,7 +20,10 @@ const CANARY: &str = "phase02-refcell-canary-3d91";
 
 #[derive(SensitiveDisplay)]
 #[error("{value} | {value:?}")]
-struct RefCellDisplay<T> {
+struct RefCellDisplay<T>
+where
+    RefCell<T>: PolicyDisplay<Secret> + PolicyDebug<Secret>,
+{
     #[sensitive(Secret)]
     value: RefCell<T>,
 }

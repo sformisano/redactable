@@ -1,40 +1,42 @@
+use redactable::__private::DeclaredFormatting;
 // Qualified type paths intentionally exercise derive name resolution.
 use redactable::{Redactable, RedactableWithFormatter, Sensitive, SensitiveDisplay, SensitiveDual};
 use redactable::{Secret, SensitiveValue};
 
 #[derive(Clone, serde::Serialize, Sensitive)]
-pub struct SelfNode<T> {
+pub struct SelfNode<T: Redactable> {
     value: T,
     next: Option<Box<self::SelfNode<T>>>,
 }
 
 #[derive(SensitiveDisplay)]
 #[error("self {value:?} {next:?}")]
-pub struct SelfDisplayNode<T> {
+pub struct SelfDisplayNode<T: DeclaredFormatting> {
     value: T,
     next: Option<Box<self::SelfDisplayNode<T>>>,
 }
 
 #[derive(Clone, serde::Serialize, SensitiveDual)]
 #[error("dual {value:?} {next:?}")]
-pub struct SelfDualNode<T> {
+pub struct SelfDualNode<T: Redactable + DeclaredFormatting> {
     value: T,
     next: Option<Box<self::SelfDualNode<T>>>,
 }
 
 pub mod tree {
+    use redactable::__private::DeclaredFormatting;
     use redactable::{
         Redactable, RedactableWithFormatter, Secret, Sensitive, SensitiveDisplay, SensitiveValue,
     };
 
     #[derive(Clone, serde::Serialize, Sensitive)]
-    pub enum Tree<T> {
+    pub enum Tree<T: Redactable> {
         Branch(T, Box<self::Tree<T>>),
         Leaf(T),
     }
 
     #[derive(SensitiveDisplay)]
-    pub enum DisplayTree<T> {
+    pub enum DisplayTree<T: DeclaredFormatting> {
         #[error("branch {0:?} {1:?}")]
         Branch(T, Box<self::DisplayTree<T>>),
         #[error("leaf {0:?}")]

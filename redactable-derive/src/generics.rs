@@ -188,7 +188,7 @@ impl<'ast> Visit<'ast> for RecursiveSelfTypeVisitor<'_> {
         if node.qself.is_none() && node.path.leading_colon.is_none() {
             let segments = &node.path.segments;
             let direct_owner = segments.len() == 1 && segments[0].ident == *self.owner;
-            let qualified_owner = segments.len() > 1
+            let qualified_owner = segments.len() == 2
                 && segments
                     .first()
                     .is_some_and(|segment| segment.ident == "self")
@@ -237,11 +237,7 @@ pub(crate) fn push_generated_policy_display_formatting_predicate(
     let crate_root = crate_root();
     push_unique(
         predicates,
-        parse_quote!(#ty: #crate_root::__private::PolicyApplicableRefForGeneratedFormatting),
-    );
-    push_unique(
-        predicates,
-        parse_quote!(<#policy as #crate_root::RedactionPolicy>::Kind: #crate_root::__private::GeneratedPolicyKindDisplayFormatting<#policy, #ty>),
+        parse_quote!(#ty: #crate_root::PolicyDisplay<#policy>),
     );
 }
 
@@ -277,11 +273,7 @@ pub(crate) fn push_generated_policy_debug_formatting_predicate(
     let crate_root = crate_root();
     push_unique(
         predicates,
-        parse_quote!(#ty: #crate_root::__private::PolicyApplicableRefForGeneratedFormatting),
-    );
-    push_unique(
-        predicates,
-        parse_quote!(<#policy as #crate_root::RedactionPolicy>::Kind: #crate_root::__private::GeneratedPolicyKindDebugFormatting<#policy, #ty>),
+        parse_quote!(#ty: #crate_root::PolicyDebug<#policy>),
     );
 }
 

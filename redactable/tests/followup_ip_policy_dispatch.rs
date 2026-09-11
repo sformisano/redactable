@@ -1,5 +1,7 @@
 #![cfg(feature = "ip-address")]
 
+use custom::IpAddress as CustomIpAddress;
+use redactable::PolicyDebug;
 use std::{
     collections::{BTreeMap, BTreeSet, HashMap},
     marker::PhantomData,
@@ -9,8 +11,7 @@ use std::{
 use redactable::{
     __private::{PolicyField, PolicyFieldRef, PolicyMapper},
     IpAddress, PolicyApplicable, PolicyApplicableRef, Redactable, RedactableWithFormatter,
-    RedactionPolicy, Sensitive, SensitiveDisplay, SensitiveValue, TextPolicyKind,
-    TextRedactionPolicy, apply_policy, apply_policy_ref,
+    RedactionPolicy, Sensitive, SensitiveDisplay, SensitiveValue, apply_policy, apply_policy_ref,
 };
 
 type ClientIp = IpAddr;
@@ -56,14 +57,17 @@ struct SupportedRecursiveDisplay {
 }
 
 #[derive(Clone, Sensitive, serde::Serialize)]
-struct GenericPolicy<P: RedactionPolicy> {
+struct GenericPolicy<P: RedactionPolicy>
+where
+    HashMap<bool, String>: PolicyField<P>,
+{
     #[sensitive(P)]
     text_values: HashMap<bool, String>,
     marker: PhantomData<P>,
 }
 
 mod custom {
-    use super::*;
+    use redactable::{RedactionPolicy, TextPolicyKind, TextRedactionPolicy};
 
     pub struct IpAddress;
 
@@ -77,7 +81,11 @@ mod custom {
 }
 
 #[derive(Clone, Sensitive, serde::Serialize)]
-struct GenericRawIpKeyMaps<P: RedactionPolicy> {
+struct GenericRawIpKeyMaps<P: RedactionPolicy>
+where
+    HashMap<IpAddr, String>: PolicyField<P>,
+    BTreeMap<IpAddr, String>: PolicyField<P>,
+{
     #[sensitive(P)]
     hash: HashMap<IpAddr, String>,
     #[sensitive(P)]
@@ -87,7 +95,11 @@ struct GenericRawIpKeyMaps<P: RedactionPolicy> {
 
 #[derive(SensitiveDisplay)]
 #[error("{hash:?} {tree:?}")]
-struct GenericRawIpKeyMapsDisplay<P: RedactionPolicy> {
+struct GenericRawIpKeyMapsDisplay<P: RedactionPolicy>
+where
+    HashMap<IpAddr, String>: PolicyDebug<P>,
+    BTreeMap<IpAddr, String>: PolicyDebug<P>,
+{
     #[sensitive(P)]
     #[redactable(generated_formatting)]
     hash: HashMap<IpAddr, String>,
@@ -213,7 +225,7 @@ fn generic_raw_ip_key_maps_remain_available_to_text_policy_kinds() {
     let hash = HashMap::from([(key, CANARY.to_owned())]);
     let tree = BTreeMap::from([(key, CANARY.to_owned())]);
 
-    let redacted = GenericRawIpKeyMaps::<custom::IpAddress> {
+    let redacted = GenericRawIpKeyMaps::<CustomIpAddress> {
         hash: hash.clone(),
         tree: tree.clone(),
         marker: PhantomData,
@@ -224,7 +236,7 @@ fn generic_raw_ip_key_maps_remain_available_to_text_policy_kinds() {
     assert!(redacted.hash.contains_key(&key));
     assert!(redacted.tree.contains_key(&key));
 
-    let display = GenericRawIpKeyMapsDisplay::<custom::IpAddress> {
+    let display = GenericRawIpKeyMapsDisplay::<CustomIpAddress> {
         hash,
         tree,
         marker: PhantomData,
@@ -235,7 +247,7 @@ fn generic_raw_ip_key_maps_remain_available_to_text_policy_kinds() {
     assert!(display.contains("*****************ue"));
     assert!(!display.contains(CANARY));
 
-    let direct = PolicyApplicable::apply_policy::<custom::IpAddress, _>(
+    let direct = PolicyApplicable::apply_policy::<CustomIpAddress, _>(
         HashMap::from([(key, CANARY.to_owned())]),
         &PolicyMapper,
     );
@@ -243,10 +255,8 @@ fn generic_raw_ip_key_maps_remain_available_to_text_policy_kinds() {
     assert!(direct.contains_key(&key));
 
     let direct_source = BTreeMap::from([(key, CANARY.to_owned())]);
-    let direct_ref = PolicyApplicableRef::apply_policy_ref::<custom::IpAddress, _>(
-        &direct_source,
-        &PolicyMapper,
-    );
+    let direct_ref =
+        PolicyApplicableRef::apply_policy_ref::<CustomIpAddress, _>(&direct_source, &PolicyMapper);
     assert_eq!(direct_ref[&key], "*****************ue");
     assert!(direct_ref.contains_key(&key));
 }

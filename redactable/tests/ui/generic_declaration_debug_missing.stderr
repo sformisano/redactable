@@ -1,0 +1,15 @@
+error[E0277]: the trait bound `T: redactable::__private::PolicyApplicableRefForGeneratedFormatting` is not satisfied
+ --> tests/ui/generic_declaration_debug_missing.rs:2:10
+  |
+2 | #[derive(SensitiveDisplay)]
+  |          ^^^^^^^^^^^^^^^^ the trait `redactable::__private::PolicyApplicableRefForGeneratedFormatting` is not implemented for `T`
+3 | #[error("{value:?}")]
+  |          --------- required by this formatting parameter
+  |
+  = note: required for `SecretPolicyKind` to implement `redactable::__private::GeneratedPolicyKindDebugFormatting<Secret, T>`
+  = note: required for `T` to implement `PolicyDebug<Secret>`
+  = note: required for `redactable::__private::DeclaredPolicyFormattingRef<'_, Secret, T>` to implement `Debug`
+help: consider further restricting type parameter `T` with trait `PolicyApplicableRefForGeneratedFormatting`
+  |
+4 | struct Envelope<T: PolicyDisplay<Secret> + redactable::__private::PolicyApplicableRefForGeneratedFormatting> { #[sensitive(Secret)] value: T }
+  |                                          ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++

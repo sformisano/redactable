@@ -292,7 +292,7 @@ fn user_phantom_data_traverses_and_structured_slog_omits_canary() {
     }
 
     #[derive(Clone, Serialize, Sensitive)]
-    struct PhantomData<T> {
+    struct PhantomData<T: Redactable> {
         value: T,
     }
 

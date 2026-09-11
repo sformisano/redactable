@@ -547,7 +547,10 @@ fn main() {
         redactable::apply_policy_ref::<Secret, _>(&borrowed_map);
     assert_eq!(borrowed_map_output["key"], "[REDACTED]");
 
-    assert_eq!(format!("{:?}", BypassDebugRedaction("public")), "\"public\"");
+    assert_eq!(
+        format!("{:?}", BypassDebugRedaction("public")),
+        "\"public\""
+    );
 
     public_api_boundary::exercise();
 }

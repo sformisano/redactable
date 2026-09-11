@@ -89,7 +89,7 @@ pub(crate) fn canonical_name(ident: &Ident) -> String {
 
 #[cfg(test)]
 mod tests {
-    use syn::{DeriveInput, parse_quote};
+    use syn::{Data, DeriveInput, parse_quote};
 
     use super::FreshIdentAllocator;
 
@@ -124,7 +124,7 @@ mod tests {
         };
         let mut allocator = FreshIdentAllocator::new(&input);
         let raw_field = match &input.data {
-            syn::Data::Struct(data) => data.fields.iter().next().unwrap().ident.as_ref().unwrap(),
+            Data::Struct(data) => data.fields.iter().next().unwrap().ident.as_ref().unwrap(),
             _ => unreachable!(),
         };
 

@@ -4,7 +4,7 @@ use std::cell::Cell;
 use redactable::{NotSensitive, Redactable, Sensitive};
 
 #[derive(Clone, serde::Serialize, Sensitive)]
-struct GenericCell<T: Copy + Serialize> {
+struct GenericCell<T: Copy + Serialize> where Cell<T>: Redactable {
     value: Cell<T>,
 }
 

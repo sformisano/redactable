@@ -246,7 +246,7 @@ impl RedactionPolicy for Token {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use super::{BlockchainAddress, CreditCard, Email, PhoneNumber, Pii, RedactionPolicy, Token};
 
     #[test]
     fn builtin_policies_use_expected_defaults() {

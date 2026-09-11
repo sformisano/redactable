@@ -14,7 +14,7 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use redactable::{RedactedValue, Secret, Sensitive, ToRedacted};
+use redactable::{RedactedValue, Secret, Sensitive, ToRedacted, slog::SlogRedactedExt};
 use redactable_test_fixtures::GenericDualFixture;
 use serde::Serialize;
 use serde_json::Value as JsonValue;
@@ -126,6 +126,39 @@ fn concrete_borrow_sensitive_map_key_slog_emits_placeholder_without_cloning() {
             "[REDACTED]"
         ))))
     );
+}
+
+#[test]
+fn unsized_producer_slog_json_matches_concrete_output() {
+    #[derive(Clone, Sensitive, Serialize)]
+    struct Event {
+        #[not_sensitive]
+        label: String,
+        #[sensitive(Secret)]
+        token: String,
+    }
+
+    const CANARY: &str = "unsized-slog-adapter-canary";
+    let event = Event {
+        label: "login".to_owned(),
+        token: CANARY.to_owned(),
+    };
+    let producer: &dyn ToRedacted = &event;
+    let concrete = event.slog_redacted_json();
+    let dynamic = producer.slog_redacted_json();
+    let expected = CapturedValue::Serde(serde_json::json!({
+        "label": "login",
+        "token": "[REDACTED]",
+    }));
+
+    let mut concrete_capture = CapturingSerializer::new();
+    serialize_to_capture(&concrete, "event", &mut concrete_capture);
+    let mut dynamic_capture = CapturingSerializer::new();
+    serialize_to_capture(&dynamic, "event", &mut dynamic_capture);
+
+    assert_eq!(concrete_capture.get("event"), Some(expected.clone()));
+    assert_eq!(dynamic_capture.get("event"), Some(expected));
+    assert!(!format!("{:?}", dynamic_capture.get("event")).contains(CANARY));
 }
 
 fn log_redacted<T: ToRedacted>(value: &T) -> RedactedValue {

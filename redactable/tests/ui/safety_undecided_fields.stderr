@@ -871,6 +871,41 @@ note: required by a bound in `redactable::__private::require_declared_redaction`
     | pub fn require_declared_redaction<T: Redactable>(_: &T) {}
     |                                      ^^^^^^^^^^ required by this bound in `require_declared_redaction`
 
+error[E0277]: `T` has no declared redaction behavior
+   --> tests/ui/safety_undecided_fields.rs:164:19
+    |
+164 | struct Generic<T>(T);
+    |                   ^ this value needs a redaction declaration
+    |
+    = note: for a local container, derive `Sensitive` and select field policies or explicit `#[not_sensitive]` declarations
+    = note: for a raw value, use `SensitiveValue<T, P>` or deliberately declare it public with `BypassRedaction<T>`
+note: required by a bound in `redactable::__private::require_declared_redaction`
+   --> src/__private/declaration.rs
+    |
+    | pub fn require_declared_redaction<T: Redactable>(_: &T) {}
+    |                                      ^^^^^^^^^^ required by this bound in `require_declared_redaction`
+help: consider restricting type parameter `T` with trait `Redactable`
+    |
+164 | struct Generic<T: redactable::Redactable>(T);
+    |                 ++++++++++++++++++++++++
+
+error[E0277]: `T` does not implement `RedactableWithMapper`
+   --> tests/ui/safety_undecided_fields.rs:163:35
+    |
+163 | #[derive(Clone, serde::Serialize, Sensitive)]
+    |                                   ^^^^^^^^^
+    |                                   |
+    |                                   this type cannot be walked for sensitive data
+    |                                   required by a bound introduced by this call
+    |
+    = note: use `#[derive(Sensitive)]` on the type definition
+    = note: or use `#[sensitive(Policy)]` if this is a leaf value like String
+    = note: this error originates in the derive macro `Sensitive` (in Nightly builds, run with -Z macro-backtrace for more info)
+help: consider restricting type parameter `T` with trait `RedactableWithMapper`
+    |
+164 | struct Generic<T: redactable::RedactableWithMapper>(T);
+    |                 ++++++++++++++++++++++++++++++++++
+
 error[E0599]: the method `redact` exists for struct `Generic<String>`, but its trait bounds were not satisfied
    --> tests/ui/safety_undecided_fields.rs:166:36
     |

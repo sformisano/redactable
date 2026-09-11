@@ -1,11 +1,12 @@
 use std::{
     cell::{Cell, RefCell},
     collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque},
+    fmt::Debug,
     rc::Rc,
     sync::Arc,
 };
 
-use redactable::__private::PolicyApplicableRefForFormatting as FormattingMarker;
+use redactable::__private::{PolicyApplicableRefForFormatting as FormattingMarker, PolicyFieldRef};
 use redactable::policy::RecursivePolicyKind;
 use redactable::{
     PolicyApplicableRef, RedactableMapper, RedactableWithFormatter, RedactionPolicy, Secret,
@@ -73,7 +74,11 @@ impl PolicyApplicableRef for LegacyOnlyLeaf {
 
 #[derive(SensitiveDisplay)]
 #[error("{value}")]
-pub struct CombinedLegacyRecursive<T> {
+pub struct CombinedLegacyRecursive<T>
+where
+    Option<T>: PolicyFieldRef<Secret>,
+    <Option<T> as PolicyFieldRef<Secret>>::Output: RedactableWithFormatter,
+{
     #[sensitive(Secret)]
     #[redactable(recursive, legacy_formatting)]
     pub value: Option<T>,
@@ -261,6 +266,7 @@ pub struct ManualFormatting {
 pub struct GenericManual<T>
 where
     T: PolicyApplicableRef + FormattingMarker,
+    T::Output: RedactableWithFormatter,
 {
     #[sensitive(Secret)]
     pub leaf: T,
@@ -271,6 +277,7 @@ where
 pub struct GenericManualDebug<T>
 where
     T: PolicyApplicableRef + FormattingMarker,
+    T::Output: Debug,
 {
     #[sensitive(Secret)]
     pub leaf: T,
@@ -283,6 +290,7 @@ pub type Transparent<T> = T;
 pub struct RenamedMarker<T>
 where
     T: PolicyApplicableRef + FormattingMarker,
+    T::Output: RedactableWithFormatter,
 {
     #[sensitive(Secret)]
     pub leaf: T,
@@ -293,6 +301,7 @@ where
 pub struct TransparentMarker<T>
 where
     T: PolicyApplicableRef + FormattingMarker,
+    T::Output: RedactableWithFormatter,
 {
     #[sensitive(Secret)]
     pub leaf: Transparent<T>,

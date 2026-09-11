@@ -1,9 +1,12 @@
 //! IP address redaction implementations for std net types.
 
-use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6};
+use std::{
+    fmt::{Display, Formatter, Result as FmtResult},
+    net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6},
+};
 
 use crate::{
-    policy::IpAddress,
+    policy::{IpAddress, TextRedactionPolicy},
     redaction::{
         display::RedactableWithFormatter,
         redact::RedactableMapper,
@@ -30,34 +33,34 @@ fn redact_ipv6(addr: Ipv6Addr) -> Ipv6Addr {
 }
 
 impl SensitiveWithPolicy<IpAddress> for Ipv4Addr {
-    fn redact_with_policy(self, _policy: &crate::policy::TextRedactionPolicy) -> Self {
+    fn redact_with_policy(self, _policy: &TextRedactionPolicy) -> Self {
         redact_ipv4(self)
     }
 
-    fn redacted_string(&self, _policy: &crate::policy::TextRedactionPolicy) -> String {
+    fn redacted_string(&self, _policy: &TextRedactionPolicy) -> String {
         redact_ipv4(*self).to_string()
     }
 }
 
 impl SensitiveWithPolicy<IpAddress> for Ipv6Addr {
-    fn redact_with_policy(self, _policy: &crate::policy::TextRedactionPolicy) -> Self {
+    fn redact_with_policy(self, _policy: &TextRedactionPolicy) -> Self {
         redact_ipv6(self)
     }
 
-    fn redacted_string(&self, _policy: &crate::policy::TextRedactionPolicy) -> String {
+    fn redacted_string(&self, _policy: &TextRedactionPolicy) -> String {
         redact_ipv6(*self).to_string()
     }
 }
 
 impl SensitiveWithPolicy<IpAddress> for IpAddr {
-    fn redact_with_policy(self, _policy: &crate::policy::TextRedactionPolicy) -> Self {
+    fn redact_with_policy(self, _policy: &TextRedactionPolicy) -> Self {
         match self {
             IpAddr::V4(addr) => IpAddr::V4(redact_ipv4(addr)),
             IpAddr::V6(addr) => IpAddr::V6(redact_ipv6(addr)),
         }
     }
 
-    fn redacted_string(&self, _policy: &crate::policy::TextRedactionPolicy) -> String {
+    fn redacted_string(&self, _policy: &TextRedactionPolicy) -> String {
         match self {
             IpAddr::V4(addr) => redact_ipv4(*addr).to_string(),
             IpAddr::V6(addr) => redact_ipv6(*addr).to_string(),
@@ -66,7 +69,7 @@ impl SensitiveWithPolicy<IpAddress> for IpAddr {
 }
 
 impl SensitiveWithPolicy<IpAddress> for SocketAddr {
-    fn redact_with_policy(self, _policy: &crate::policy::TextRedactionPolicy) -> Self {
+    fn redact_with_policy(self, _policy: &TextRedactionPolicy) -> Self {
         match self {
             SocketAddr::V4(addr) => {
                 SocketAddr::V4(SocketAddrV4::new(redact_ipv4(*addr.ip()), addr.port()))
@@ -80,7 +83,7 @@ impl SensitiveWithPolicy<IpAddress> for SocketAddr {
         }
     }
 
-    fn redacted_string(&self, _policy: &crate::policy::TextRedactionPolicy) -> String {
+    fn redacted_string(&self, _policy: &TextRedactionPolicy) -> String {
         match self {
             SocketAddr::V4(addr) => {
                 SocketAddr::V4(SocketAddrV4::new(redact_ipv4(*addr.ip()), addr.port())).to_string()
@@ -121,26 +124,26 @@ impl RedactableWithMapper for SocketAddr {
 }
 
 impl RedactableWithFormatter for Ipv4Addr {
-    fn fmt_redacted(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        std::fmt::Display::fmt(self, f)
+    fn fmt_redacted(&self, f: &mut Formatter<'_>) -> FmtResult {
+        Display::fmt(self, f)
     }
 }
 
 impl RedactableWithFormatter for Ipv6Addr {
-    fn fmt_redacted(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        std::fmt::Display::fmt(self, f)
+    fn fmt_redacted(&self, f: &mut Formatter<'_>) -> FmtResult {
+        Display::fmt(self, f)
     }
 }
 
 impl RedactableWithFormatter for IpAddr {
-    fn fmt_redacted(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        std::fmt::Display::fmt(self, f)
+    fn fmt_redacted(&self, f: &mut Formatter<'_>) -> FmtResult {
+        Display::fmt(self, f)
     }
 }
 
 impl RedactableWithFormatter for SocketAddr {
-    fn fmt_redacted(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        std::fmt::Display::fmt(self, f)
+    fn fmt_redacted(&self, f: &mut Formatter<'_>) -> FmtResult {
+        Display::fmt(self, f)
     }
 }
 
@@ -148,8 +151,8 @@ impl RedactableWithFormatter for SocketAddr {
 mod tests {
     use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV6};
 
-    use super::*;
     use crate::policy::{IpAddress, RedactionPolicy};
+    use crate::redaction::SensitiveWithPolicy;
 
     #[test]
     fn ipv4_keeps_only_last_octet() {

@@ -1,5 +1,31 @@
 # Changelog
 
+## 0.13.0 - 2026-09-12
+
+### Breaking
+
+- `Sensitive`, `SensitiveDisplay`, and `SensitiveDual` now check required field
+  operations at the type definition, even when no method is called. Generic
+  declarations must state their field capabilities. Unannotated structural
+  fields require `Redactable`; policy-marked template fields use
+  `PolicyDisplay<P>`, `PolicyDebug<P>`, or both. This closes the generated
+  `Sensitive` Debug path that could print an undeclared generic payload.
+
+### Fixed
+
+- Generic policy formatting supports the same Secret scalars and bare IP types
+  as concrete fields, including socket addresses with their ports preserved.
+- A distinct type such as `self::other::Node<T>` is no longer mistaken for the
+  enclosing `Node<T>` when generating recursive bounds.
+- `.slog_redacted_json()` and `.tracing_redacted()` accept unsized `ToRedacted`
+  producers, including trait objects. `.slog_redacted()` still requires `Sized`.
+
+### Documentation
+
+- The Valuable adapter documentation now describes borrowed inner projections.
+  Caller-driven mutation through those projections can affect later output.
+  The adapter redacts its contents when constructed.
+
 ## 0.12.1 - 2026-09-11
 
 ### Changed

@@ -17,7 +17,7 @@ pub mod other {
 }
 
 #[derive(Clone, serde::Serialize, Sensitive)]
-struct Node<T> {
+struct Node<T: Redactable> {
     child: other::Node<T>,
 }
 

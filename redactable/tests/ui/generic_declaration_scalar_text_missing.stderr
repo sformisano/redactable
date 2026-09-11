@@ -1,0 +1,23 @@
+error[E0277]: the trait bound `u32: redactable::__private::PolicyApplicableRefForGeneratedFormatting` is not satisfied
+ --> tests/ui/generic_declaration_scalar_text_missing.rs:6:27
+  |
+6 | fn require_type(_: Option<Unsupported>) {}
+  |                           ^^^^^^^^^^^ the trait `redactable::__private::PolicyApplicableRefForGeneratedFormatting` is not implemented for `u32`
+  |
+  = help: the following other types implement trait `redactable::__private::PolicyApplicableRefForGeneratedFormatting`:
+            &str
+            Arc<T>
+            BTreeMap<K, V>
+            BTreeSet<T>
+            Box<T>
+            Cell<T>
+            Cow<'_, str>
+            HashMap<K, V, S>
+          and $N others
+  = note: required for `TextPolicyKind` to implement `redactable::__private::GeneratedPolicyKindDisplayFormatting<redactable::Email, u32>`
+  = note: required for `u32` to implement `PolicyDisplay<redactable::Email>`
+note: required by a bound in `Envelope`
+ --> tests/ui/generic_declaration_scalar_text_missing.rs:4:20
+  |
+4 | struct Envelope<T: PolicyDisplay<Email>> { #[sensitive(Email)] value: T }
+  |                    ^^^^^^^^^^^^^^^^^^^^ required by this bound in `Envelope`

@@ -157,6 +157,18 @@ pub trait SlogRedactedExt: ToRedacted {
     ///
     /// A JSON-carrying value is emitted as compact JSON text, as with
     /// tracing's display adapter.
+    ///
+    /// This borrowed adapter requires a sized producer. The owned JSON adapter
+    /// also accepts unsized producers.
+    ///
+    /// ```compile_fail
+    /// use redactable::{BypassTextRedaction, ToRedacted};
+    /// use redactable::slog::SlogRedactedExt;
+    ///
+    /// let value = BypassTextRedaction("safe output".to_owned());
+    /// let producer: &dyn ToRedacted = &value;
+    /// let _ = producer.slog_redacted();
+    /// ```
     fn slog_redacted(&self) -> RedactedDisplayValue<'_, Self>
     where
         Self: Sized,
@@ -175,7 +187,7 @@ pub trait SlogRedactedExt: ToRedacted {
     }
 }
 
-impl<T> SlogRedactedExt for T where T: ToRedacted {}
+impl<T: ToRedacted + ?Sized> SlogRedactedExt for T {}
 
 // Special cases: these don't use emit_value(&self.to_redacted(), ...)
 

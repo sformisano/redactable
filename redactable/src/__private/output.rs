@@ -2,6 +2,7 @@
 //! application and formatting.
 
 use std::cell::RefCell;
+use std::fmt::{Debug, Formatter, Result as FmtResult};
 
 // Kept in scope for the intra-doc link on `PolicyFormattingOutput`.
 use crate::RedactableWithFormatter;
@@ -17,7 +18,7 @@ pub enum PolicyRefCellOutput<T> {
 }
 
 impl<T: RedactableWithFormatter> RedactableWithFormatter for PolicyRefCellOutput<T> {
-    fn fmt_redacted(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt_redacted(&self, f: &mut Formatter<'_>) -> FmtResult {
         match self {
             Self::Value(value) => value.fmt_redacted(f),
             Self::Borrowed => f.write_str("<borrowed>"),
@@ -25,10 +26,10 @@ impl<T: RedactableWithFormatter> RedactableWithFormatter for PolicyRefCellOutput
     }
 }
 
-impl<T: std::fmt::Debug> std::fmt::Debug for PolicyRefCellOutput<T> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl<T: Debug> Debug for PolicyRefCellOutput<T> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         match self {
-            Self::Value(value) => std::fmt::Debug::fmt(value, f),
+            Self::Value(value) => Debug::fmt(value, f),
             Self::Borrowed => f.write_str("<borrowed>"),
         }
     }
@@ -56,7 +57,7 @@ impl<T> PolicyFormattingOutput<T> {
 }
 
 impl<T: RedactableWithFormatter> RedactableWithFormatter for PolicyFormattingOutput<T> {
-    fn fmt_redacted(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt_redacted(&self, f: &mut Formatter<'_>) -> FmtResult {
         match self {
             Self::Value(value) => value.fmt_redacted(f),
             Self::Borrowed => f.write_str("<borrowed>"),
@@ -64,10 +65,10 @@ impl<T: RedactableWithFormatter> RedactableWithFormatter for PolicyFormattingOut
     }
 }
 
-impl<T: std::fmt::Debug> std::fmt::Debug for PolicyFormattingOutput<T> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl<T: Debug> Debug for PolicyFormattingOutput<T> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         match self {
-            Self::Value(value) => std::fmt::Debug::fmt(value, f),
+            Self::Value(value) => Debug::fmt(value, f),
             Self::Borrowed => f.write_str("<borrowed>"),
         }
     }

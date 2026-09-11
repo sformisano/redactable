@@ -21,6 +21,7 @@ use crate::{
         reject_removed_output_option,
     },
     crate_paths::{crate_root, isolate_generated_items},
+    declaration::declaration_check,
     derive_enum::derive_enum,
     derive_struct::derive_struct,
     fresh_ident::FreshIdentAllocator,
@@ -151,6 +152,16 @@ fn expand_sensitive_display(
     let (display_impl_generics, display_ty_generics, display_where_clause) =
         redacted_display_generics.split_for_impl();
     let redacted_display_body = redacted_display_output.body;
+    let check_name = fresh.fresh("__redactable_check_display_declaration");
+    let declaration = declaration_check(
+        &ident,
+        &generics,
+        quote! {
+            fn #check_name(&self, #formatter: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+                #redacted_display_body
+            }
+        },
+    );
     let redacted_display_impl = quote! {
         impl #display_impl_generics #crate_root::RedactableWithFormatter for #ident #display_ty_generics #display_where_clause {
             fn fmt_redacted(&self, #formatter: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
@@ -207,6 +218,7 @@ fn expand_sensitive_display(
     };
 
     let generated = quote! {
+        #declaration
         #redacted_display_impl
         #to_redacted_impl
         #debug_impl
@@ -257,11 +269,26 @@ fn expand_sensitive(
     let (impl_generics, ty_generics, where_clause) = policy_generics.split_for_impl();
     #[cfg(feature = "slog")]
     let slog_base_generics = generics.clone();
-    let debug_generics = add_predicates(generics, &derive_output.debug_generics, &ident);
+    let debug_generics = add_predicates(
+        policy_generics.clone(),
+        &derive_output.debug_generics,
+        &ident,
+    );
     let (debug_impl_generics, debug_ty_generics, debug_where_clause) =
         debug_generics.split_for_impl();
     let redaction_body = &derive_output.redaction_body;
     let debug_redacted_body = &derive_output.debug_redacted_body;
+    let check_name = fresh.fresh("__redactable_check_structural_declaration");
+    let declaration = declaration_check(
+        &ident,
+        &generics,
+        quote! {
+            fn #check_name<#mapper_type: #crate_root::RedactableMapper>(self, #mapper: &#mapper_type) -> Self {
+                use #crate_root::RedactableWithMapper as _;
+                #redaction_body
+            }
+        },
+    );
     // Dual gets Debug from its display expansion; standalone Sensitive retains
     // its annotation-driven production placeholders in every build mode.
     let debug_impl = if dual {
@@ -295,6 +322,7 @@ fn expand_sensitive(
     let tracing_impl = quote! {};
 
     let trait_impl = quote! {
+        #declaration
         impl #impl_generics #crate_root::RedactableWithMapper for #ident #ty_generics #where_clause {
             fn redact_with<#mapper_type: #crate_root::RedactableMapper>(self, #mapper: &#mapper_type) -> Self {
                 use #crate_root::RedactableWithMapper as _;

@@ -78,7 +78,7 @@ dependencies = [
 
 [[package]]
 name = "redactable"
-version = "0.12.1"
+version = "0.13.0"
 dependencies = [
  "redactable-derive",
  "serde",
@@ -97,7 +97,7 @@ dependencies = [
 
 [[package]]
 name = "redactable-derive"
-version = "0.12.1"
+version = "0.13.0"
 dependencies = [
  "proc-macro-crate",
  "proc-macro2",

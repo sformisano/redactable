@@ -5,13 +5,17 @@ use std::{
     cell::{Cell, RefCell},
     collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque},
     hash::{BuildHasher, Hash},
+    num::{
+        NonZeroI8, NonZeroI16, NonZeroI32, NonZeroI64, NonZeroI128, NonZeroIsize, NonZeroU8,
+        NonZeroU16, NonZeroU32, NonZeroU64, NonZeroU128, NonZeroUsize,
+    },
     rc::Rc,
     sync::Arc,
 };
 
 use crate::{
-    __private::PolicyFormattingOutput, IpAddressPolicyKind, RedactableMapper, RedactionPolicy,
-    SensitiveValue, SensitiveWithPolicy,
+    __private::PolicyFormattingOutput, IpAddressPolicyKind, RedactableMapper, RedactableWithMapper,
+    RedactionPolicy, SensitiveValue, SensitiveWithPolicy,
 };
 
 /// Sealed positive allowlist for map keys under an IP-address policy kind.
@@ -79,18 +83,18 @@ impl_safe_keys!(
     u64,
     u128,
     usize,
-    std::num::NonZeroI8,
-    std::num::NonZeroI16,
-    std::num::NonZeroI32,
-    std::num::NonZeroI64,
-    std::num::NonZeroI128,
-    std::num::NonZeroIsize,
-    std::num::NonZeroU8,
-    std::num::NonZeroU16,
-    std::num::NonZeroU32,
-    std::num::NonZeroU64,
-    std::num::NonZeroU128,
-    std::num::NonZeroUsize,
+    NonZeroI8,
+    NonZeroI16,
+    NonZeroI32,
+    NonZeroI64,
+    NonZeroI128,
+    NonZeroIsize,
+    NonZeroU8,
+    NonZeroU16,
+    NonZeroU32,
+    NonZeroU64,
+    NonZeroU128,
+    NonZeroUsize,
 );
 
 #[diagnostic::on_unimplemented(
@@ -203,7 +207,7 @@ where
     T: SensitiveWithPolicy<P>,
 {
     fn apply_ip_policy<M: RedactableMapper>(self, mapper: &M) -> Self {
-        crate::RedactableWithMapper::redact_with(self, mapper)
+        RedactableWithMapper::redact_with(self, mapper)
     }
 }
 

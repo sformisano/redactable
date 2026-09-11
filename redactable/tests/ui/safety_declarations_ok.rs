@@ -31,7 +31,7 @@ fn formatting_set_bounds<T: DeclaredFormatting, S>() {
 
 #[derive(Clone, serde::Serialize, SensitiveDual)]
 #[error("{children}")]
-struct Node<T> {
+struct Node<T: Redactable> {
     children: Vec<Node<T>>,
     leaf: T,
 }

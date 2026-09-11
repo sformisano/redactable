@@ -1,5 +1,8 @@
 //! External-consumer regressions for policy-backed `RefCell` formatting.
 
+use redactable::__private::PolicyMapper;
+use redactable::{PolicyDebug, PolicyDisplay};
+use serde::{Serialize, Serializer};
 use std::{
     cell::RefCell as StdRefCell,
     collections::{BTreeMap, BTreeSet},
@@ -29,8 +32,8 @@ struct ArcRefCellPolicyField {
     value: Arc<StdRefCell<String>>,
 }
 
-impl serde::Serialize for ArcRefCellPolicyField {
-    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+impl Serialize for ArcRefCellPolicyField {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         serializer.serialize_str("arc-refcell-policy-field")
     }
 }
@@ -41,7 +44,7 @@ fn arc_refcell_policy_fields_build_and_redact_when_consumed() {
     let output = ArcRefCellPolicyField {
         value: Arc::new(StdRefCell::new(CANARY.to_owned())),
     }
-    .redact_with(&redactable::__private::PolicyMapper);
+    .redact_with(&PolicyMapper);
     assert_eq!(&*output.value.borrow(), "[REDACTED]");
 }
 
@@ -103,7 +106,10 @@ fn nested_refcell_conflicts_propagate_through_recursive_policy_formatting() {
 
 #[derive(SensitiveDisplay)]
 #[error("{value} | {value:?}")]
-struct GenericRefCellDisplay<T> {
+struct GenericRefCellDisplay<T>
+where
+    StdRefCell<T>: PolicyDisplay<Secret> + PolicyDebug<Secret>,
+{
     #[sensitive(Secret)]
     value: StdRefCell<T>,
 }
@@ -135,7 +141,10 @@ fn generated_formatting_handles_all_refcell_borrow_states_without_leaking() {
 
 #[derive(SensitiveDisplay)]
 #[error("{value}")]
-struct GenericPolicyRefCellDisplay<P: RedactionPolicy> {
+struct GenericPolicyRefCellDisplay<P: RedactionPolicy>
+where
+    CellAlias<String>: PolicyDisplay<P>,
+{
     #[sensitive(P)]
     #[redactable(generated_formatting)]
     value: CellAlias<String>,
@@ -159,7 +168,10 @@ fn generic_policy_instantiation_selects_conflict_safe_refcell_formatting() {
 }
 
 #[derive(SensitiveDisplay)]
-enum GenericNestedRefCellDisplay<T> {
+enum GenericNestedRefCellDisplay<T>
+where
+    NestedCellAlias<T>: PolicyDisplay<Secret>,
+{
     #[error("{value}")]
     Value {
         #[sensitive(Secret)]
@@ -213,7 +225,10 @@ fn concrete_refcell_alias_selects_conflict_safe_formatting() {
 
 #[derive(SensitiveDisplay)]
 #[error("{value}")]
-struct GenericNestedAliasPolicyDisplay<P: RedactionPolicy, T> {
+struct GenericNestedAliasPolicyDisplay<P: RedactionPolicy, T>
+where
+    NestedCellAlias<T>: PolicyDisplay<P>,
+{
     #[sensitive(P)]
     value: NestedCellAlias<T>,
     marker: PhantomData<P>,
@@ -222,7 +237,7 @@ struct GenericNestedAliasPolicyDisplay<P: RedactionPolicy, T> {
 fn assert_generic_nested_alias_borrow_conflict<P>()
 where
     P: RedactionPolicy,
-    GenericNestedAliasPolicyDisplay<P, String>: RedactableWithFormatter,
+    NestedCellAlias<String>: PolicyDisplay<P>,
 {
     let display = GenericNestedAliasPolicyDisplay::<P, String> {
         value: Some(StdRefCell::new(CANARY.to_owned())),
@@ -284,7 +299,7 @@ struct NestedBorrowedMapDisplay {
 
 #[derive(SensitiveDisplay)]
 #[error("{values}")]
-struct GenericBorrowedMapDisplay<T> {
+struct GenericBorrowedMapDisplay<T: PolicyDisplay<Secret>> {
     #[sensitive(Secret)]
     values: T,
 }
@@ -384,8 +399,13 @@ fn generic_nested_alias_resolves_under_ip_address_policy() {
 }
 
 mod unrelated {
-    use super::*;
-    use redactable::{RedactableMapper, policy::RecursivePolicyKind};
+    use redactable::__private::{
+        PolicyApplicableRefForFormatting, PolicyApplicableRefForGeneratedFormatting,
+        PolicyFormattingOutput,
+    };
+    use redactable::{
+        PolicyApplicableRef, RedactableMapper, RedactionPolicy, policy::RecursivePolicyKind,
+    };
 
     #[derive(Debug)]
     pub struct RefCell<T>(pub T);
@@ -404,25 +424,23 @@ mod unrelated {
         }
     }
 
-    impl<T> redactable::__private::PolicyApplicableRefForGeneratedFormatting for RefCell<T> {
+    impl<T> PolicyApplicableRefForGeneratedFormatting for RefCell<T> {
         type FormattingOutput = &'static str;
 
         fn apply_policy_ref_for_generated_formatting<P, M>(
             &self,
             mapper: &M,
-        ) -> redactable::__private::PolicyFormattingOutput<Self::FormattingOutput>
+        ) -> PolicyFormattingOutput<Self::FormattingOutput>
         where
             P: RedactionPolicy,
             P::Kind: RecursivePolicyKind,
             M: RedactableMapper,
         {
-            redactable::__private::PolicyFormattingOutput::Value(
-                self.apply_policy_ref::<P, M>(mapper),
-            )
+            PolicyFormattingOutput::Value(self.apply_policy_ref::<P, M>(mapper))
         }
     }
 
-    impl<T> redactable::__private::PolicyApplicableRefForFormatting for RefCell<T> {}
+    impl<T> PolicyApplicableRefForFormatting for RefCell<T> {}
 }
 
 use unrelated::RefCell;
@@ -430,14 +448,20 @@ use unrelated::RefCell as RenamedRefCell;
 
 #[derive(SensitiveDisplay)]
 #[error("{value}")]
-struct UnrelatedSameNameRefCellDisplay<T> {
+struct UnrelatedSameNameRefCellDisplay<T>
+where
+    RefCell<T>: PolicyDisplay<Secret>,
+{
     #[sensitive(Secret)]
     value: RefCell<T>,
 }
 
 #[derive(SensitiveDisplay)]
 #[error("{value}")]
-struct RenamedUnrelatedSameNameRefCellDisplay<T> {
+struct RenamedUnrelatedSameNameRefCellDisplay<T>
+where
+    RenamedRefCell<T>: PolicyDisplay<Secret>,
+{
     #[sensitive(Secret)]
     value: RenamedRefCell<T>,
 }

@@ -3,20 +3,20 @@ use redactable::{Redactable, RedactableWithFormatter, Sensitive, SensitiveDispla
 use redactable::{Secret, SensitiveValue};
 
 mod other {
-    use redactable::Sensitive;
+    use redactable::{Redactable, Sensitive};
 
     #[derive(Clone, serde::Serialize, Sensitive)]
-    pub struct Node<T> {
+    pub struct Node<T: Redactable> {
         pub value: T,
     }
 }
 
 #[derive(Clone, serde::Serialize, Sensitive)]
-struct Node<T> {
+struct Node<T: Redactable> {
     child: crate::recursion_complements::other::Node<T>,
 }
 
-fn redact_unrelated<T>(value: Node<T>) -> Node<T>
+fn redact_unrelated<T: Redactable>(value: Node<T>) -> Node<T>
 where
     crate::recursion_complements::other::Node<T>: Redactable,
 {

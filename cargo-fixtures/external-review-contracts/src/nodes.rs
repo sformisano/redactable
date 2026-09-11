@@ -1,3 +1,4 @@
+use redactable::Redactable;
 use redactable::{Secret, Sensitive, SensitiveDisplay, SensitiveDual};
 use serde::Serialize;
 
@@ -56,7 +57,7 @@ pub struct Right {
 }
 
 #[derive(Clone, serde::Serialize, Sensitive)]
-pub struct GenericNode<T> {
+pub struct GenericNode<T: Redactable> {
     pub value: T,
     pub next: Option<Box<GenericNode<T>>>,
 }

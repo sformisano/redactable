@@ -1,3 +1,5 @@
+use redactable::__private::PolicyFieldRef;
+use redactable::{PolicyDebug, PolicyDisplay, RedactableWithFormatter};
 use std::boxed::Box as RenamedBox;
 use std::net::Ipv4Addr as RenamedPeer;
 use std::primitive::u32 as RenamedCount;
@@ -18,7 +20,10 @@ pub type ConcreteBox = Box<String>;
 
 #[derive(SensitiveDisplay)]
 #[error("{value} {value:?}")]
-pub struct GenericPolicyScalar<P: RedactionPolicy> {
+pub struct GenericPolicyScalar<P: RedactionPolicy>
+where
+    u32: PolicyDisplay<P> + PolicyDebug<P>,
+{
     #[sensitive(P)]
     pub value: u32,
     pub marker: PhantomData<P>,
@@ -26,7 +31,10 @@ pub struct GenericPolicyScalar<P: RedactionPolicy> {
 
 #[derive(SensitiveDisplay)]
 #[error("{value} {value:?}")]
-pub struct GenericPolicyIp<P: RedactionPolicy> {
+pub struct GenericPolicyIp<P: RedactionPolicy>
+where
+    Ipv4Addr: PolicyDisplay<P> + PolicyDebug<P>,
+{
     #[sensitive(P)]
     pub value: Ipv4Addr,
     pub marker: PhantomData<P>,
@@ -34,7 +42,10 @@ pub struct GenericPolicyIp<P: RedactionPolicy> {
 
 #[derive(SensitiveDisplay)]
 #[error("{value} {value:?}")]
-pub struct GenericPolicyBox<P: RedactionPolicy> {
+pub struct GenericPolicyBox<P: RedactionPolicy>
+where
+    Box<String>: PolicyDisplay<P> + PolicyDebug<P>,
+{
     #[sensitive(P)]
     #[redactable(generated_formatting)]
     pub value: Box<String>,
@@ -43,7 +54,10 @@ pub struct GenericPolicyBox<P: RedactionPolicy> {
 
 #[derive(SensitiveDisplay)]
 #[error("{value} {value:?}")]
-pub struct GenericPolicyBoxAlias<P: RedactionPolicy> {
+pub struct GenericPolicyBoxAlias<P: RedactionPolicy>
+where
+    BoxAlias<String>: PolicyDisplay<P> + PolicyDebug<P>,
+{
     #[sensitive(P)]
     #[redactable(generated_formatting)]
     pub value: BoxAlias<String>,
@@ -52,7 +66,10 @@ pub struct GenericPolicyBoxAlias<P: RedactionPolicy> {
 
 #[derive(SensitiveDisplay)]
 #[error("{value} {value:?}")]
-pub struct GenericPolicyConcreteBox<P: RedactionPolicy> {
+pub struct GenericPolicyConcreteBox<P: RedactionPolicy>
+where
+    ConcreteBox: PolicyDisplay<P> + PolicyDebug<P>,
+{
     #[sensitive(P)]
     #[redactable(generated_formatting)]
     pub value: ConcreteBox,
@@ -61,7 +78,10 @@ pub struct GenericPolicyConcreteBox<P: RedactionPolicy> {
 
 #[derive(SensitiveDisplay)]
 #[error("{value} {value:?}")]
-pub struct GenericPolicyRenamedBox<P: RedactionPolicy> {
+pub struct GenericPolicyRenamedBox<P: RedactionPolicy>
+where
+    RenamedBox<String>: PolicyDisplay<P> + PolicyDebug<P>,
+{
     #[sensitive(P)]
     #[redactable(generated_formatting)]
     pub value: RenamedBox<String>,
@@ -93,8 +113,14 @@ impl Debug for LocalLeaf<u8> {
 
 #[derive(SensitiveDisplay)]
 #[error("{value} {value:?}")]
-pub struct GenericPolicyLocalLeaf<P: RedactionPolicy> {
+pub struct GenericPolicyLocalLeaf<P: RedactionPolicy>
+where
+    P::Kind: RecursivePolicyKind,
+    LocalLeaf<u8>: PolicyFieldRef<P>,
+    <LocalLeaf<u8> as PolicyFieldRef<P>>::Output: RedactableWithFormatter + Debug,
+{
     #[sensitive(P)]
+    #[redactable(legacy_formatting)]
     pub value: LocalLeaf<u8>,
     pub marker: PhantomData<P>,
 }
@@ -103,7 +129,10 @@ macro_rules! generic_policy_scalar_shape {
     ($name:ident, $ty:ty) => {
         #[derive(SensitiveDisplay)]
         #[error("{value} {value:?}")]
-        pub struct $name<P: RedactionPolicy> {
+        pub struct $name<P: RedactionPolicy>
+        where
+            $ty: PolicyDisplay<P> + PolicyDebug<P>,
+        {
             #[sensitive(P)]
             pub value: $ty,
             pub marker: PhantomData<P>,
@@ -119,7 +148,10 @@ macro_rules! generic_policy_ip_shape {
     ($name:ident, $ty:ty) => {
         #[derive(SensitiveDisplay)]
         #[error("{value} {value:?}")]
-        pub struct $name<P: RedactionPolicy> {
+        pub struct $name<P: RedactionPolicy>
+        where
+            $ty: PolicyDisplay<P> + PolicyDebug<P>,
+        {
             #[sensitive(P)]
             pub value: $ty,
             pub marker: PhantomData<P>,
@@ -132,7 +164,10 @@ generic_policy_ip_shape!(GenericPolicyIpRenamed, RenamedPeer);
 generic_policy_ip_shape!(GenericPolicyIpQualified, std::net::Ipv4Addr);
 
 #[derive(SensitiveDisplay)]
-pub enum GenericPolicyScalarEnum<P: RedactionPolicy> {
+pub enum GenericPolicyScalarEnum<P: RedactionPolicy>
+where
+    Count: PolicyDisplay<P> + PolicyDebug<P>,
+{
     #[error("{value} {value:?}")]
     Alias {
         #[sensitive(P)]
@@ -144,7 +179,10 @@ pub enum GenericPolicyScalarEnum<P: RedactionPolicy> {
 }
 
 #[derive(SensitiveDisplay)]
-pub enum GenericPolicyIpEnum<P: RedactionPolicy> {
+pub enum GenericPolicyIpEnum<P: RedactionPolicy>
+where
+    Peer: PolicyDisplay<P> + PolicyDebug<P>,
+{
     #[error("{value} {value:?}")]
     Alias {
         #[sensitive(P)]

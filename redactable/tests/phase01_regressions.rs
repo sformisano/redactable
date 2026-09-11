@@ -19,7 +19,7 @@ struct SecretLeaf {
 }
 
 #[derive(Clone, Sensitive, serde::Serialize)]
-struct PhantomData<T> {
+struct PhantomData<T: Redactable> {
     value: T,
 }
 

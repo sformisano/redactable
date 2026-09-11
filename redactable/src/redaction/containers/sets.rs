@@ -2,7 +2,7 @@
 
 use std::{
     collections::{BTreeSet, HashSet},
-    hash::Hash,
+    hash::{BuildHasher, Hash},
 };
 
 use crate::redaction::{redact::RedactableMapper, traits::RedactableWithMapper};
@@ -14,7 +14,7 @@ use crate::redaction::{redact::RedactableMapper, traits::RedactableWithMapper};
 impl<T, S> RedactableWithMapper for HashSet<T, S>
 where
     T: RedactableWithMapper + Hash + Eq,
-    S: std::hash::BuildHasher + Clone,
+    S: BuildHasher + Clone,
 {
     fn redact_with<M: RedactableMapper>(self, mapper: &M) -> Self {
         // NOTE: Redaction can collapse distinct values into equal ones, which may

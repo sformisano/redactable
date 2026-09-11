@@ -110,9 +110,9 @@ pub use policy::{
 #[cfg(feature = "redaction")]
 pub use redaction::{
     BypassDebugRedaction, BypassDisplayRedaction, BypassJsonRedaction, BypassRedaction,
-    BypassRedactionMarker, BypassTextRedaction, Redactable, RedactableWithFormatter,
-    RedactedFormatterRef, RedactedList, RedactedValue, SensitiveValue, SensitiveWithPolicy,
-    ToRedacted,
+    BypassRedactionMarker, BypassTextRedaction, PolicyDebug, PolicyDisplay, Redactable,
+    RedactableWithFormatter, RedactedFormatterRef, RedactedList, RedactedValue, SensitiveValue,
+    SensitiveWithPolicy, ToRedacted,
 };
 // Re-exports from redaction module: internal machinery (used by derive-generated code)
 #[doc(hidden)]

@@ -1,17 +1,18 @@
+use redactable::__private::DeclaredFormatting;
 // Qualified type paths intentionally exercise derive name resolution.
 use redactable::BypassRedaction;
 use redactable::{Redactable, RedactableWithFormatter, Sensitive, SensitiveDisplay, SensitiveDual};
 use redactable::{Secret, SensitiveValue};
 
 #[derive(Clone, serde::Serialize, Sensitive)]
-pub struct QualifiedNode<T> {
+pub struct QualifiedNode<T: Redactable> {
     value: T,
     #[redactable(recursive)]
     next: Option<Box<crate::explicit_recursion::QualifiedNode<T>>>,
 }
 
 #[derive(Clone, serde::Serialize, Sensitive)]
-pub enum QualifiedEnum<T> {
+pub enum QualifiedEnum<T: Redactable> {
     Next(
         T,
         #[redactable(recursive)] Box<crate::explicit_recursion::QualifiedEnum<T>>,
@@ -22,21 +23,21 @@ pub enum QualifiedEnum<T> {
 type Alias<T> = AliasNode<T>;
 
 #[derive(Clone, serde::Serialize, Sensitive)]
-pub struct AliasNode<T> {
+pub struct AliasNode<T: Redactable> {
     value: T,
     #[redactable(recursive)]
     next: Option<Box<Alias<T>>>,
 }
 
 #[derive(Clone, serde::Serialize, Sensitive)]
-pub struct MutualA<T> {
+pub struct MutualA<T: Redactable> {
     value: T,
     #[redactable(recursive)]
     next: Option<Box<MutualB<T>>>,
 }
 
 #[derive(Clone, serde::Serialize, Sensitive)]
-pub struct MutualB<T> {
+pub struct MutualB<T: Redactable> {
     value: T,
     #[redactable(recursive)]
     next: Option<Box<MutualA<T>>>,
@@ -44,14 +45,14 @@ pub struct MutualB<T> {
 
 #[derive(SensitiveDisplay)]
 #[error("qualified {value:?} {next:?}")]
-pub struct QualifiedDisplayNode<T> {
+pub struct QualifiedDisplayNode<T: DeclaredFormatting> {
     value: T,
     #[redactable(recursive)]
     next: Option<Box<crate::explicit_recursion::QualifiedDisplayNode<T>>>,
 }
 
 #[derive(SensitiveDisplay)]
-pub enum QualifiedDisplayEnum<T> {
+pub enum QualifiedDisplayEnum<T: DeclaredFormatting> {
     #[error("next {0:?} {1:?}")]
     Next(
         T,
@@ -65,7 +66,7 @@ type DisplayAlias<T> = AliasDisplayNode<T>;
 
 #[derive(SensitiveDisplay)]
 #[error("alias {value:?} {next:?}")]
-pub struct AliasDisplayNode<T> {
+pub struct AliasDisplayNode<T: DeclaredFormatting> {
     value: T,
     #[redactable(recursive)]
     next: Option<Box<DisplayAlias<T>>>,
@@ -73,7 +74,7 @@ pub struct AliasDisplayNode<T> {
 
 #[derive(SensitiveDisplay)]
 #[error("a {value:?} {next:?}")]
-pub struct DisplayMutualA<T> {
+pub struct DisplayMutualA<T: DeclaredFormatting> {
     value: T,
     #[redactable(recursive)]
     next: Option<Box<DisplayMutualB<T>>>,
@@ -81,7 +82,7 @@ pub struct DisplayMutualA<T> {
 
 #[derive(SensitiveDisplay)]
 #[error("b {value:?} {next:?}")]
-pub struct DisplayMutualB<T> {
+pub struct DisplayMutualB<T: DeclaredFormatting> {
     value: T,
     #[redactable(recursive)]
     next: Option<Box<DisplayMutualA<T>>>,
@@ -89,7 +90,7 @@ pub struct DisplayMutualB<T> {
 
 #[derive(Clone, serde::Serialize, SensitiveDual)]
 #[error("dual {value:?} {next:?}")]
-pub struct QualifiedDualNode<T> {
+pub struct QualifiedDualNode<T: Redactable + DeclaredFormatting> {
     value: T,
     #[redactable(recursive)]
     next: Option<Box<crate::explicit_recursion::QualifiedDualNode<T>>>,

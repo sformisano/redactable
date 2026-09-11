@@ -359,28 +359,28 @@ macro_rules! grouped_display {
 
 fn push_generic_policy_rejections(source: &mut String, cells: &mut Vec<MatrixCell>) {
     source.push_str(
-        "#[derive(Clone, Sensitive, serde::Serialize)] struct GenericHashPolicy<P: safe::RedactionPolicy> { #[sensitive(P)] #[serde(skip)] value: std::collections::HashMap<std::net::IpAddr, String>, marker: std::marker::PhantomData<P> }\n",
+        "#[derive(Clone, Sensitive, serde::Serialize)] struct GenericHashPolicy<P: safe::RedactionPolicy> where std::collections::HashMap<std::net::IpAddr, String>: safe::__private::PolicyField<P> { #[sensitive(P)] #[serde(skip)] value: std::collections::HashMap<std::net::IpAddr, String>, marker: std::marker::PhantomData<P> }\n",
     );
     source.push_str(
-        "#[derive(SensitiveDisplay)] #[error(\"{value:?}\")] struct GenericHashPolicyDisplay<P: safe::RedactionPolicy> { #[sensitive(P)] value: std::collections::HashMap<std::net::IpAddr, String>, marker: std::marker::PhantomData<P> }\n",
+        "#[derive(SensitiveDisplay)] #[error(\"{value:?}\")] struct GenericHashPolicyDisplay<P: safe::RedactionPolicy> where std::collections::HashMap<std::net::IpAddr, String>: safe::PolicyDebug<P> { #[sensitive(P)] value: std::collections::HashMap<std::net::IpAddr, String>, marker: std::marker::PhantomData<P> }\n",
     );
     source.push_str(
-        "#[derive(Clone, Sensitive, serde::Serialize)] struct GenericTreePolicy<P: safe::RedactionPolicy> { #[sensitive(P)] #[serde(skip)] value: std::collections::BTreeMap<std::net::IpAddr, String>, marker: std::marker::PhantomData<P> }\n",
+        "#[derive(Clone, Sensitive, serde::Serialize)] struct GenericTreePolicy<P: safe::RedactionPolicy> where std::collections::BTreeMap<std::net::IpAddr, String>: safe::__private::PolicyField<P> { #[sensitive(P)] #[serde(skip)] value: std::collections::BTreeMap<std::net::IpAddr, String>, marker: std::marker::PhantomData<P> }\n",
     );
     source.push_str(
-        "#[derive(SensitiveDisplay)] #[error(\"{value:?}\")] struct GenericTreePolicyDisplay<P: safe::RedactionPolicy> { #[sensitive(P)] value: std::collections::BTreeMap<std::net::IpAddr, String>, marker: std::marker::PhantomData<P> }\n",
+        "#[derive(SensitiveDisplay)] #[error(\"{value:?}\")] struct GenericTreePolicyDisplay<P: safe::RedactionPolicy> where std::collections::BTreeMap<std::net::IpAddr, String>: safe::PolicyDebug<P> { #[sensitive(P)] value: std::collections::BTreeMap<std::net::IpAddr, String>, marker: std::marker::PhantomData<P> }\n",
     );
     source.push_str(
-        "#[derive(Clone, Sensitive, serde::Serialize)] struct GenericHashKey<K> { #[sensitive(safe::IpAddress)] #[serde(skip)] value: std::collections::HashMap<K, String> }\n",
+        "#[derive(Clone, Sensitive, serde::Serialize)] struct GenericHashKey<K> where std::collections::HashMap<K, String>: safe::__private::PolicyField<safe::IpAddress> { #[sensitive(safe::IpAddress)] #[serde(skip)] value: std::collections::HashMap<K, String> }\n",
     );
     source.push_str(
-        "#[derive(SensitiveDisplay)] #[error(\"{value:?}\")] struct GenericHashKeyDisplay<K> { #[sensitive(safe::IpAddress)] value: std::collections::HashMap<K, String> }\n",
+        "#[derive(SensitiveDisplay)] #[error(\"{value:?}\")] struct GenericHashKeyDisplay<K> where std::collections::HashMap<K, String>: safe::PolicyDebug<safe::IpAddress> { #[sensitive(safe::IpAddress)] value: std::collections::HashMap<K, String> }\n",
     );
     source.push_str(
-        "#[derive(Clone, Sensitive, serde::Serialize)] struct GenericTreeKey<K> { #[sensitive(safe::IpAddress)] #[serde(skip)] value: std::collections::BTreeMap<K, String> }\n",
+        "#[derive(Clone, Sensitive, serde::Serialize)] struct GenericTreeKey<K> where std::collections::BTreeMap<K, String>: safe::__private::PolicyField<safe::IpAddress> { #[sensitive(safe::IpAddress)] #[serde(skip)] value: std::collections::BTreeMap<K, String> }\n",
     );
     source.push_str(
-        "#[derive(SensitiveDisplay)] #[error(\"{value:?}\")] struct GenericTreeKeyDisplay<K> { #[sensitive(safe::IpAddress)] value: std::collections::BTreeMap<K, String> }\n",
+        "#[derive(SensitiveDisplay)] #[error(\"{value:?}\")] struct GenericTreeKeyDisplay<K> where std::collections::BTreeMap<K, String>: safe::PolicyDebug<safe::IpAddress> { #[sensitive(safe::IpAddress)] value: std::collections::BTreeMap<K, String> }\n",
     );
 
     source.push_str("fn generic_rejections() {\n");

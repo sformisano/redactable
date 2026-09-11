@@ -72,6 +72,7 @@ use syn::{DeriveInput, parse_macro_input};
 
 mod container;
 mod crate_paths;
+mod declaration;
 mod derive_enum;
 mod derive_struct;
 mod fresh_ident;
@@ -122,6 +123,13 @@ use sensitive::{DeriveKind, expand, expand_with_mode};
 ///   for foreign types that don't implement `RedactableWithMapper`. This is the right
 ///   declaration for a foreign field in a struct you own; `BypassRedaction<T>` is only
 ///   for satisfying a `Redactable` bound on a value you cannot annotate.
+///
+/// Field operations are checked against the original declaration bounds, even
+/// when no generated method is called. For an unannotated generic field `T`,
+/// declare `T: Redactable`; complete container bounds may be declared instead.
+/// Policy fields require the corresponding complete-type `PolicyField<P>` bound.
+/// The recursion override omits inferred recursive predicates, but still checks
+/// the actual field operations.
 ///
 /// Unions are rejected at compile time.
 ///
@@ -310,7 +318,14 @@ pub fn derive_not_sensitive_display(input: TokenStream) -> TokenStream {
 /// field. `legacy_formatting` and `generated_formatting` are mutually exclusive,
 /// and standalone `Sensitive` rejects both (they only affect display output).
 ///
+/// Generic policy fields declare `PolicyDisplay<P>` for `{value}`,
+/// `PolicyDebug<P>` for `{value:?}`, or both when both modes are used.
+/// These policy-specific bounds permit supported scalars and typed IP addresses
+/// without requiring structural `Redactable` or `Clone`. Missing capabilities
+/// reject the declaration even when no formatting method is called.
+///
 /// Use `SensitiveDual` instead when the same type also needs structural redaction.
+/// Its declarations must satisfy both structural and template capabilities.
 ///
 /// # Generated Impls
 ///

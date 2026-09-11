@@ -7,6 +7,7 @@
 use proc_macro_crate::{FoundCrate, crate_name};
 use proc_macro2::{Ident, Span, TokenStream};
 use quote::quote;
+use syn::Path;
 
 use crate::fresh_ident::FreshIdentAllocator;
 
@@ -14,7 +15,7 @@ use crate::fresh_ident::FreshIdentAllocator;
 ///
 /// Handles crate renaming (e.g., `my_redact = { package = "redactable", ... }`)
 /// and internal usage (when derive is used inside the redactable crate itself).
-pub(crate) fn crate_root() -> proc_macro2::TokenStream {
+pub(crate) fn crate_root() -> TokenStream {
     match crate_name("redactable") {
         Ok(FoundCrate::Itself) => quote! { crate },
         Ok(FoundCrate::Name(name)) => {
@@ -35,9 +36,9 @@ pub(crate) fn dependency_crate_ident(name: &str) -> Ident {
         .unwrap_or_else(|_| Ident::new("__redactable_invalid_dependency_alias", Span::call_site()))
 }
 
-pub(crate) fn crate_path(item: &str) -> proc_macro2::TokenStream {
+pub(crate) fn crate_path(item: &str) -> TokenStream {
     let root = crate_root();
-    let item_ident = syn::parse_str::<syn::Path>(item).expect("redactable crate path should parse");
+    let item_ident = syn::parse_str::<Path>(item).expect("redactable crate path should parse");
     quote! { #root::#item_ident }
 }
 

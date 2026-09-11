@@ -10,16 +10,16 @@ use redactable::{
 
 #[derive(serde::Serialize, SensitiveDisplay)]
 #[error("named {value}")]
-struct Named<T: Copy + Serialize> {
+struct Named<T: Copy + Serialize> where Cell<T>: DeclaredFormatting {
     value: Cell<T>,
 }
 
 #[derive(serde::Serialize, SensitiveDisplay)]
 #[error("tuple {0}")]
-struct Tuple<T: Copy + Serialize>(Cell<T>);
+struct Tuple<T: Copy + Serialize>(Cell<T>) where Cell<T>: DeclaredFormatting;
 
 #[derive(serde::Serialize, SensitiveDisplay)]
-enum Shapes<T: Copy + Serialize> {
+enum Shapes<T: Copy + Serialize> where Cell<T>: DeclaredFormatting {
     #[error("enum named {value}")]
     Named { value: Cell<T> },
     #[error("enum tuple {0}")]

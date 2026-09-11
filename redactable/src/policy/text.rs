@@ -4,7 +4,7 @@
 //! for transforming sensitive strings. Policies are pure string transformations
 //! that do not traverse structures or make runtime decisions about sensitivity.
 
-use std::borrow::Cow;
+use std::{borrow::Cow, default::Default};
 
 /// Default placeholder used for full redaction.
 pub const REDACTED_PLACEHOLDER: &str = "[REDACTED]";
@@ -414,7 +414,7 @@ impl TextRedactionPolicy {
     }
 }
 
-impl std::default::Default for TextRedactionPolicy {
+impl Default for TextRedactionPolicy {
     fn default() -> Self {
         Self::default_full()
     }

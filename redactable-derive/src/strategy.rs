@@ -201,7 +201,7 @@ mod tests {
     use quote::quote;
     use syn::{Attribute, DeriveInput};
 
-    use super::*;
+    use super::{Strategy, parse_field_strategy};
 
     fn parse_attrs(tokens: TokenStream) -> Vec<Attribute> {
         let input: DeriveInput = syn::parse2(quote! {

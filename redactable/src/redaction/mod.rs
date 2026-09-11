@@ -19,6 +19,7 @@ mod ip_policy;
 mod json;
 mod list;
 mod output;
+mod policy_formatting;
 pub mod redact;
 mod traits;
 mod wrappers;
@@ -38,6 +39,7 @@ pub use output::{
     generated_redacted_dual, generated_redacted_json, serialize_redacted_json,
 };
 // Re-export redaction machinery
+pub use policy_formatting::{PolicyDebug, PolicyDisplay};
 pub use redact::{
     PolicyApplicable, PolicyApplicableRef, PolicyFormattingMapper, PolicyMapper, RedactableMapper,
     ScalarRedaction, apply_policy, apply_policy_ref, redact,

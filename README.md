@@ -38,12 +38,12 @@ types and logging adapters.
 
 ### Quick examples
 
-Redactable 0.12 requires Rust 1.97 or later. The structured example also uses
+Redactable 0.13 requires Rust 1.97 or later. The structured example also uses
 Serde to make the redacted value serializable:
 
 ```toml
 [dependencies]
-redactable = "0.12"
+redactable = "0.13"
 serde = { version = "1", features = ["derive"] }
 ```
 
@@ -250,6 +250,44 @@ own fields, the choice depends on whether you own the type:
   ```
 
   `#[not_sensitive]` is the declaration for a non-sensitive foreign field. When the foreign value is sensitive, [Wrapper types for foreign types](#foreign-types) shows the `SensitiveValue<T, P>` route.
+
+### Generic fields
+
+A generic type must state the redaction requirements of its fields. The compiler
+checks the definition even if you never call `.redact()` or log a value.
+
+For an unannotated `value: T`, require `T: Redactable`:
+
+```rust
+use redactable::{Redactable, Secret, Sensitive, SensitiveValue, ToRedacted};
+
+#[derive(Clone, Sensitive, serde::Serialize)]
+struct Envelope<T: Redactable> {
+    value: T,
+}
+
+let event = Envelope {
+    value: SensitiveValue::<String, Secret>::from("hidden".to_owned()),
+};
+assert!(!format!("{event:?}").contains("hidden"));
+assert!(!event.to_redacted().text().contains("hidden"));
+```
+
+Removing that bound rejects the definition itself:
+
+```compile_fail
+use redactable::Sensitive;
+
+#[derive(Clone, Sensitive, serde::Serialize)]
+struct Envelope<T> {
+    value: T,
+}
+
+fn main() {}
+```
+
+Bounds apply to the complete field type. A `std::marker::PhantomData<T>` field
+does not require `T: Redactable`. Map keys keep their exemption from traversal.
 
 ### The `#[sensitive(Policy)]` attribute
 
@@ -488,6 +526,34 @@ For raw leaves, choose a policy or `#[not_sensitive]`. For other types:
   ```
 
   `#[not_sensitive]` is the declaration for a non-sensitive foreign field. See [Wrapper types for foreign types](#foreign-types) for the sensitive case.
+
+### Generic template fields
+
+A policy-marked generic field needs a bound for the redacted formatting used by
+its template. `PolicyDisplay<Secret>` lets a generic field use `Secret` with `{}`:
+
+```rust
+use redactable::{PolicyDisplay, Secret, SensitiveDisplay, ToRedacted};
+
+#[derive(SensitiveDisplay)]
+#[error("{value}")]
+struct Generic<T: PolicyDisplay<Secret>> {
+    #[sensitive(Secret)]
+    value: T,
+}
+
+let record = Generic { value: 42_u32 };
+assert_eq!(record.to_redacted().text(), "0");
+```
+
+Use `PolicyDebug<Secret>` for `{value:?}`, or both bounds when the template uses
+both forms. The bounds describe the redacted output, so the original field
+does not need to implement ordinary `Display` or `Debug`.
+
+The compiler rejects a missing required bound at the type definition. A policy
+field does not need `T: Redactable`: the field's annotation supplies its policy.
+See the [generic declaration contracts](docs/reference.md#generic-declarations)
+for complete-type bounds and custom formatters.
 
 ### The `#[sensitive(Policy)]` attribute in templates
 
@@ -845,7 +911,7 @@ The `slog` feature makes derived types and `SensitiveValue` implement
 
 ```toml
 [dependencies]
-redactable = { version = "0.12", features = ["slog"] }
+redactable = { version = "0.13", features = ["slog"] }
 serde = { version = "1", features = ["derive"] }
 slog = "2.8"
 ```
@@ -916,7 +982,7 @@ feature and log the redacted `Debug` form:
 
 ```toml
 [dependencies]
-redactable = { version = "0.12", features = ["tracing"] }
+redactable = { version = "0.13", features = ["tracing"] }
 serde = { version = "1", features = ["derive"] }
 tracing = "0.1"
 ```
@@ -957,7 +1023,7 @@ and the field expression must pass a reference through that adapter:
 
 ```toml
 [dependencies]
-redactable = { version = "0.12", features = ["tracing-valuable"] }
+redactable = { version = "0.13", features = ["tracing-valuable"] }
 serde = { version = "1", features = ["derive"] }
 tracing = "0.1"
 valuable = { version = "0.1", features = ["derive"] }
@@ -995,6 +1061,10 @@ macro, tracing's `Value` trait is sealed. The `valuable` crate provides the
 structured data path, but `TracingRedactedValue<T>` is not itself a tracing field
 value. `.tracing_redacted_valuable()` redacts first; `tracing::field::valuable`
 adapts the binding for subscribers that support `valuable`.
+
+The wrapper forwards borrowed `Valuable` projections from its redacted contents.
+These projections can expose inner objects, including errors. If you mutate an
+exposed object, later projections can include the newly inserted data.
 
 **For flat display values** (without `valuable`):
 

@@ -149,10 +149,7 @@ pub trait TracingRedactedExt {
     fn tracing_redacted(&self) -> DisplayValue<String>;
 }
 
-impl<T> TracingRedactedExt for T
-where
-    T: ToRedacted,
-{
+impl<T: ToRedacted + ?Sized> TracingRedactedExt for T {
     fn tracing_redacted(&self) -> DisplayValue<String> {
         display(self.to_redacted().text())
     }
@@ -181,13 +178,11 @@ impl<T> TracingRedacted for BypassJsonRedaction<'_, T> where T: Serialize + ?Siz
 /// so callers cannot build structured tracing payloads without first applying
 /// redaction. Pass a reference to the wrapper through `tracing::field::valuable`
 /// when compiling with `RUSTFLAGS="--cfg tracing_unstable"`.
-/// Deliberately NOT `Clone`. Cloning the wrapper would hand out a second handle
-/// to the same redacted value; if that value has shared interior mutability
-/// (e.g. an `Arc`/`Rc` over a `Cell`/`Mutex`), a caller could clone the wrapper,
-/// mutate the shared inner through the clone to insert a *fresh* secret, and
-/// have the original wrapper log it. Without `Clone`, the only way to reach the
-/// inner value is the consuming [`Self::into_inner`], which leaves no original
-/// wrapper behind to log.
+/// The wrapper deliberately does not implement `Clone`, so it cannot be
+/// duplicated through that trait. Its [`Valuable`] implementation forwards
+/// borrowed projections from the redacted inner value, including [`std::error::Error`]
+/// projections. A caller that can mutate through such a projection can change
+/// what a later projection observes.
 #[cfg(feature = "tracing-valuable")]
 #[derive(Debug)]
 pub struct TracingRedactedValue<T> {
@@ -203,11 +198,10 @@ impl<T> TracingRedactedValue<T> {
 
     /// Consumes the wrapper and returns the redacted inner value.
     ///
-    /// This is deliberately consuming rather than a borrowing `inner(&self)`.
-    /// The original secret is already gone by the time a `TracingRedactedValue`
-    /// exists, but a shared reference to an interior-mutable inner value would
-    /// let a caller write a *fresh* secret into the wrapper after redaction and
-    /// before it is logged. Taking `self` closes that window.
+    /// The wrapper has no direct borrowing accessor, and this method leaves no
+    /// wrapper behind. Its [`Valuable`] implementation can still forward
+    /// borrowed projections from the inner value. Caller mutation through such
+    /// a projection can affect later projections; the wrapper is not a snapshot.
     #[must_use]
     pub fn into_inner(self) -> T {
         self.redacted

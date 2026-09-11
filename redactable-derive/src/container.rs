@@ -113,7 +113,7 @@ mod tests {
     use quote::quote;
     use syn::{Attribute, DeriveInput};
 
-    use super::*;
+    use super::{parse_container_options, reject_field_only_container_attrs};
 
     fn parse_attrs(tokens: TokenStream) -> Vec<Attribute> {
         let input: DeriveInput = syn::parse2(quote! {

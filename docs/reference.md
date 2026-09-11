@@ -71,6 +71,43 @@ A handwritten formatter declares itself by implementing the hidden
 Constant templates and omitted fields need no formatting declaration.
 `SensitiveDual` also checks every structural field, including fields its template omits.
 
+## Generic declarations
+
+`Sensitive`, `SensitiveDisplay`, and `SensitiveDual` check their required field
+operations under the type's declared bounds. Missing capabilities reject the
+definition, even when no method or formatting operation is called.
+
+Common declaration bounds are:
+
+| Field use | Declaration bound |
+|---|---|
+| Unannotated structural `value: T` | `T: Redactable` |
+| Unannotated referenced template field | Complete field type implements `__private::DeclaredFormatting` |
+| `#[sensitive(P)]` with `{value}` | Complete field type implements `PolicyDisplay<P>` |
+| `#[sensitive(P)]` with `{value:?}` | Complete field type implements `PolicyDebug<P>` |
+| Policy field used in both template forms | Both policy formatting bounds |
+| Explicitly public template field | Ordinary `Display`, `Debug`, or both, as used |
+
+`PolicyDisplay<P>` and `PolicyDebug<P>` describe the policy's redacted output.
+They do not require the original payload to implement those ordinary formatters.
+For a generic policy on a concrete field, use a complete-type bound such as
+`u32: PolicyDisplay<P>`. Scalars support `Secret`; bare typed IPs support
+`IpAddress`, including `SocketAddr` with its port preserved.
+
+The structural half of `SensitiveDual` also needs each annotated field's
+consuming policy operation, expressed by `__private::PolicyField<P>`.
+Formatting bounds alone do not supply that operation.
+
+Existing custom `PolicyApplicableRef` projections can select
+`#[redactable(legacy_formatting)]`. Their declarations must provide the policy
+and projected-output bounds required by that route. The projection retains its
+existing cloning and borrowing behavior.
+
+Requirements apply to complete field types. `std::marker::PhantomData<T>` does
+not impose redaction on `T`. Map keys remain exempt from value traversal.
+`#[redactable(recursive)]` suppresses cyclic inferred predicates; actual field
+operations still need to compile under the original declaration.
+
 ## Types that implement `Drop`
 
 `Sensitive` consumes `self` and moves its fields into a redacted value of the
@@ -106,6 +143,10 @@ public wrapper, or `RedactedList` for a slice of producers.
 | `.tracing_redacted_valuable()` | `Redactable + Clone + Valuable` |
 | `.into_tracing_redacted_debug()` | `Redactable + Debug` |
 | `.into_tracing_redacted_valuable()` | `Redactable + Valuable` |
+
+`.to_redacted()`, `.slog_redacted_json()`, and `.tracing_redacted()` also accept
+unsized producers, including `&dyn ToRedacted`. `.slog_redacted()` retains its
+`Sized` requirement.
 
 ### When adapters run
 
@@ -144,6 +185,18 @@ They call `.redact()` on the owned value and accept every `Redactable` shape.
 Consuming traversal may still clone shared `Arc` or `Rc` referents and map or set hashers.
 A live mutable `RefCell` borrow behind shared ownership can therefore still panic.
 Prefer `Box` when the logged value has unique ownership.
+
+### Valuable projections
+
+`TracingRedactedValue<T>` owns the redacted object and forwards its borrowed
+`Valuable::as_value` and `Valuable::visit` projections. These projections can
+expose borrowed inner objects, including `Value::Error`.
+
+`into_inner(self)` consumes the wrapper to return the owned object. Borrowed
+projections remain available while the wrapper exists. Caller-driven interior
+mutation through an exposed object can affect later projections.
+The adapter applies redaction when it is constructed and does not redact each
+subsequent projection again.
 
 ## Wrapper contracts
 
@@ -325,6 +378,10 @@ Valid paths beneath absent options, empty collections, or scalar parents can rem
 Include populated samples to exercise those paths.
 
 ## Upgrading
+
+In 0.13, generic derives check their required field operations at the type
+definition. Add the bounds described in [Generic declarations](#generic-declarations)
+before upgrading from 0.12.
 
 `SensitiveDual` replaces the 0.10 combination of `Sensitive`, `SensitiveDisplay`,
 and `#[sensitive(dual)]`. The legacy form produces a migration diagnostic.
