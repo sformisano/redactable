@@ -8,6 +8,7 @@ Start there for the derive walkthrough and logging examples.
 - [What each derive generates](#what-each-derive-generates)
 - [Low-level traversal](#low-level-traversal)
 - [Manual formatters](#manual-formatters)
+- [Generic declarations](#generic-declarations)
 - [Types that implement `Drop`](#types-that-implement-drop)
 - [Output and adapter contracts](#output-and-adapter-contracts)
 - [Wrapper contracts](#wrapper-contracts)
@@ -20,7 +21,7 @@ Start there for the derive walkthrough and logging examples.
 
 ## What each derive generates
 
-| Derive | Use | Requires on the type | Structured input | `ToRedacted` output | `Debug` |
+| Derive | Use | Requirements for `ToRedacted` | Structured input | `ToRedacted` output | `Debug` |
 |---|---|---|---|---|---|
 | `Sensitive` | Structured values | `Clone + Serialize` | `Redactable` | Redacted JSON | Redacted |
 | `SensitiveDisplay` | Text output | A template | - | Redacted template text | Redacted |
@@ -61,8 +62,8 @@ Bare leaves do not implement `Redactable`, so calling `.redact()` on a `String`
 is a compile error. The free `redact(value)` function uses the lower-level
 mapper and can leave a raw leaf unchanged. It is not a logging boundary.
 Declarations come from derives, supported manual implementations, and explicit wrappers.
-`#[not_sensitive]` skips traversal, but ordinary `Debug` and serialization bounds
-still apply. In particular, `Sensitive` requires `Serialize` on the containing type.
+`#[not_sensitive]` skips traversal. Bounds for the selected output still apply.
+For example, `Sensitive`'s `ToRedacted` implementation requires `Serialize` on the containing type.
 
 ## Manual formatters
 
@@ -76,6 +77,11 @@ Constant templates and omitted fields need no formatting declaration.
 `Sensitive`, `SensitiveDisplay`, and `SensitiveDual` check their required field
 operations under the type's declared bounds. Missing capabilities reject the
 definition, even when no method or formatting operation is called.
+
+These checks cover field operations. For generic `Sensitive` and `SensitiveDual`
+types, the generated `ToRedacted` implementation requires `Clone + Serialize` on
+the complete type. Consuming `.redact()` can remain available when those output
+bounds are unmet. Concrete types must satisfy these bounds when the derive expands.
 
 Common declaration bounds are:
 
