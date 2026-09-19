@@ -12,7 +12,7 @@ readme = "../README.md"
 keywords = ["redaction", "privacy", "security", "logging", "telemetry"]
 categories = ["development-tools", "data-structures"]
 # Explicitly include only what should be published to crates.io
-include = ["src/**/*.rs", "Cargo.toml", "../README.md", "../LICENSE.md"]
+include = ["src/**/*.rs", "Cargo.toml", "docs/**/*.md", "CONTRIBUTING.md", "CHANGELOG.md", "../README.md", "../LICENSE.md"]
 
 # Build docs.rs with every feature so the slog/tracing/json/extras APIs are
 # visible in the rendered documentation.

@@ -1,0 +1,6 @@
+# Documentation links verified inside the published archive.
+# One line per (source file, link destination, occurrences), tab separated,
+# sorted, generated from the .crate by
+# .github/scripts/check-packaged-doc-links.py --regenerate.
+# Counts are load-bearing: deleting one of several identical links is a real
+# change to the shipped document and must show up as a diff here.

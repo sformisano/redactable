@@ -43,4 +43,14 @@ for crate in redactable-derive redactable; do
     fi
 
     tar -xOzf "$archive" "${package_root}/LICENSE.md" | cmp - LICENSE.md
+
+    # Every documentation link the archive ships must resolve inside the
+    # archive. This reads the .crate rather than the checkout: a file that is
+    # present here and not packaged is a dead link for everyone who installs
+    # the crate.
+    python3 .github/scripts/check-packaged-doc-links.py \
+        --archive "$archive" \
+        --package-root "$package_root" \
+        --version "$version" \
+        --inventory ".github/packaged-doc-links/${crate}.txt"
 done
