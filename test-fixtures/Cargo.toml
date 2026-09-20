@@ -7,6 +7,9 @@ license.workspace = true
 publish = false
 description = "Non-test fixture types for asserting production Debug behavior"
 
+[lints]
+workspace = true
+
 [dependencies]
 redactable = { path = "../redactable" }
 serde = { version = "1", features = ["derive"] }

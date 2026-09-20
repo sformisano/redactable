@@ -27,6 +27,9 @@ slog = []
 # When enabled, generates tracing marker impls for derived types
 tracing = []
 
+[lints]
+workspace = true
+
 [dependencies]
 proc-macro2 = { workspace = true }
 proc-macro-crate = "2.0"

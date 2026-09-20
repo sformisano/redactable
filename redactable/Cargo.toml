@@ -38,6 +38,9 @@ ip-address = ["redaction"]
 uuid = ["dep:uuid"]
 extras = ["chrono", "time", "uuid", "ip-address"]
 
+[lints]
+workspace = true
+
 [dependencies]
 # Exact pin: the derive generates code against this crate's internal items, so
 # the pair must always ship and resolve together.
