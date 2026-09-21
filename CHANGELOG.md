@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.13.1 - Unreleased
+
+### Documentation
+
+- Include the reference, contributor guide, and changelog linked by the README
+  in the runtime crate archive. Package verification checks those links inside
+  the built archives.
+- Clarify the README's 0.13 guidance and upgrade links.
+
 ## 0.13.0 - 2026-09-12
 
 ### Breaking
