@@ -38,7 +38,7 @@ types and logging adapters.
 
 ### Quick examples
 
-These examples target the unreleased 0.14 series and require Rust 1.97 or later.
+These examples use the 0.14 series and require Rust 1.97 or later.
 The structured example also uses Serde to make the redacted value serializable:
 
 ```toml
