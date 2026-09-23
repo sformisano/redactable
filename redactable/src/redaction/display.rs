@@ -11,9 +11,9 @@
 //! `String`, `str`, `bool`, `char`, integers, floats, `Cow<str>`, `PhantomData`, `()`.
 //!
 //! Container implementations format inner values recursively. Library-owned
-//! `RefCell` formatting, including the generated policy companion route, uses a
-//! non-panicking borrow attempt and emits `<borrowed>` on a conflicting borrow.
-//! Explicit downstream companion fallbacks retain their implementor's behavior.
+//! `RefCell` formatting uses a non-panicking borrow attempt and emits
+//! `<borrowed>` on a conflicting borrow. Policy formatting propagates the same
+//! marker through nested containers.
 //! `Mutex` and `RwLock` use non-blocking lock attempts so display redaction does
 //! not wait behind a writer.
 //!
@@ -96,32 +96,6 @@ impl<T: RedactableWithFormatter + ?Sized> Display for RedactedFormatterRef<'_, T
 impl<T: RedactableWithFormatter + ?Sized> Debug for RedactedFormatterRef<'_, T> {
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         self.0.fmt_redacted(f)
-    }
-}
-
-/// Formatting wrapper for values after a field-level policy was applied.
-///
-/// Display formatting uses redacted container formatting so policy-redacted
-/// containers can appear in `{field}` templates. Debug formatting stays aligned
-/// with Rust's ordinary `Debug` output for the already-redacted value.
-#[doc(hidden)]
-pub struct PolicyRedactedFormatterRef<'a, T: ?Sized>(&'a T);
-
-impl<'a, T: ?Sized> PolicyRedactedFormatterRef<'a, T> {
-    pub fn new(value: &'a T) -> Self {
-        Self(value)
-    }
-}
-
-impl<T: RedactableWithFormatter + ?Sized> Display for PolicyRedactedFormatterRef<'_, T> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
-        self.0.fmt_redacted(f)
-    }
-}
-
-impl<T: Debug + ?Sized> Debug for PolicyRedactedFormatterRef<'_, T> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
-        Debug::fmt(self.0, f)
     }
 }
 

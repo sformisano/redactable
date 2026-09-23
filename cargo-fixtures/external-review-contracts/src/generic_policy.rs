@@ -1,5 +1,4 @@
-use redactable::__private::PolicyFieldRef;
-use redactable::{PolicyDebug, PolicyDisplay, RedactableWithFormatter};
+use redactable::{PolicyDebug, PolicyDisplay};
 use std::boxed::Box as RenamedBox;
 use std::net::Ipv4Addr as RenamedPeer;
 use std::primitive::u32 as RenamedCount;
@@ -9,9 +8,10 @@ use std::{
     net::Ipv4Addr,
 };
 
-use redactable::__private::PolicyApplicableRefForFormatting as FormattingMarker;
 use redactable::policy::RecursivePolicyKind;
-use redactable::{PolicyApplicableRef, RedactableMapper, RedactionPolicy, SensitiveDisplay};
+use redactable::{
+    PolicyFormat, PolicyFormattingOutput, RedactableMapper, RedactionPolicy, SensitiveDisplay,
+};
 
 pub type Count = u32;
 pub type Peer = Ipv4Addr;
@@ -47,7 +47,6 @@ where
     Box<String>: PolicyDisplay<P> + PolicyDebug<P>,
 {
     #[sensitive(P)]
-    #[redactable(generated_formatting)]
     pub value: Box<String>,
     pub marker: PhantomData<P>,
 }
@@ -59,7 +58,6 @@ where
     BoxAlias<String>: PolicyDisplay<P> + PolicyDebug<P>,
 {
     #[sensitive(P)]
-    #[redactable(generated_formatting)]
     pub value: BoxAlias<String>,
     pub marker: PhantomData<P>,
 }
@@ -71,7 +69,6 @@ where
     ConcreteBox: PolicyDisplay<P> + PolicyDebug<P>,
 {
     #[sensitive(P)]
-    #[redactable(generated_formatting)]
     pub value: ConcreteBox,
     pub marker: PhantomData<P>,
 }
@@ -83,27 +80,24 @@ where
     RenamedBox<String>: PolicyDisplay<P> + PolicyDebug<P>,
 {
     #[sensitive(P)]
-    #[redactable(generated_formatting)]
     pub value: RenamedBox<String>,
     pub marker: PhantomData<P>,
 }
 
 pub struct LocalLeaf<T>(pub T);
 
-impl PolicyApplicableRef for LocalLeaf<u8> {
+impl PolicyFormat for LocalLeaf<u8> {
     type Output = String;
 
-    fn apply_policy_ref<P, M>(&self, _mapper: &M) -> Self::Output
+    fn apply_policy_for_formatting<P, M>(&self, _mapper: &M) -> PolicyFormattingOutput<String>
     where
         P: RedactionPolicy,
         P::Kind: RecursivePolicyKind,
         M: RedactableMapper,
     {
-        P::policy().apply_to(&self.0.to_string())
+        PolicyFormattingOutput::Value(P::policy().apply_to(&self.0.to_string()))
     }
 }
-
-impl FormattingMarker for LocalLeaf<u8> {}
 
 impl Debug for LocalLeaf<u8> {
     fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
@@ -115,12 +109,9 @@ impl Debug for LocalLeaf<u8> {
 #[error("{value} {value:?}")]
 pub struct GenericPolicyLocalLeaf<P: RedactionPolicy>
 where
-    P::Kind: RecursivePolicyKind,
-    LocalLeaf<u8>: PolicyFieldRef<P>,
-    <LocalLeaf<u8> as PolicyFieldRef<P>>::Output: RedactableWithFormatter + Debug,
+    LocalLeaf<u8>: PolicyDisplay<P> + PolicyDebug<P>,
 {
     #[sensitive(P)]
-    #[redactable(legacy_formatting)]
     pub value: LocalLeaf<u8>,
     pub marker: PhantomData<P>,
 }

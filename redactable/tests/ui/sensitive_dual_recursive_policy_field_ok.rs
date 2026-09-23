@@ -4,7 +4,7 @@ use redactable::{Redactable, RedactableWithFormatter, Secret, SensitiveDual};
 #[error("{value}")]
 struct Combined {
     #[sensitive(Secret)]
-    #[redactable(recursive, legacy_formatting)]
+    #[redactable(recursive)]
     value: Option<String>,
 }
 

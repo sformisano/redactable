@@ -8,7 +8,6 @@ mod declaration;
 mod field;
 mod formatting;
 mod kinds;
-mod output;
 
 #[cfg(feature = "slog")]
 use crate::RedactedValue;
@@ -45,22 +44,12 @@ pub use slog;
 /// Default mapper used by generated private field operations.
 pub use crate::redaction::{PolicyFormattingMapper, PolicyMapper};
 
-pub use field::{
-    PolicyApplicableRefForFormatting, PolicyApplicableRefForGeneratedFormatting, PolicyField,
-    PolicyFieldRef, PolicyFieldRefForFormatting, PolicyKindField, PolicyKindFieldRef,
-    PolicyKindFieldRefForFormatting, RecursivePolicyField,
-};
-pub use formatting::{
-    DeclaredPolicyFormattingRef, ExplicitLegacyPolicyFormattingRef, GeneratedPolicyFormattingRef,
-    LegacyPolicyFormattingRef, PolicyFormattingDispatch, PolicyFormattingProbe,
-    PolicyFormattingRef, declared_policy_formatting_ref, legacy_policy_formatting_ref,
-    policy_formatting_probe, policy_formatting_ref,
-};
-pub use kinds::{
-    GeneratedPolicyKindDebugFormatting, GeneratedPolicyKindDisplayFormatting,
-    PolicyKindDebugFormatting, PolicyKindDisplayFormatting,
-};
-pub use output::{PolicyFormattingOutput, PolicyRefCellOutput};
+/// Public since the formatting trait became the custom-leaf extension point;
+/// re-exported here for generated code that still addresses it privately.
+pub use crate::redaction::PolicyFormattingOutput;
+pub use field::{PolicyField, PolicyFieldRef, PolicyKindField, PolicyKindFieldRef};
+pub use formatting::{PolicyFormattingRef, policy_formatting_ref};
+pub use kinds::{PolicyKindDebugFormatting, PolicyKindDisplayFormatting};
 
 /// Constructs generated borrowed slog output without exposing internal constructors.
 ///

@@ -1,12 +1,11 @@
-use std::num::NonZeroU32 as ImportedNonZero;
-
 use redactable::SensitiveDisplay;
 
 #[derive(SensitiveDisplay)]
 #[error("{value}")]
-struct Invalid {
+struct Removed {
     #[sensitive(redactable::Secret)]
-    value: ImportedNonZero,
+    #[redactable(generated_formatting)]
+    value: Vec<String>,
 }
 
 fn main() {}

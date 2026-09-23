@@ -1,41 +1,40 @@
-//! Type-directed redaction for structured data.
+//! Redaction for structured values and formatted text.
 //!
-//! This crate separates:
-//! - **Policy markers**: what kind of sensitive data this is (e.g., `Pii`, `Token`, `Email`).
-//! - **Redaction policies**: how that data should be redacted.
+//! Mark sensitive data with a policy marker such as `Pii`, `Token`, or `Email`.
+//! Each marker selects a redaction policy that defines how to transform the data.
 //!
-//! `Redactable::redact()` transforms a declared structural input. The free
-//! `redact()` function uses lower-level mapper support and can leave raw leaves
-//! unchanged. Use `ToRedacted` at a logging boundary.
+//! Use `Redactable::redact()` to transform a value whose type declares redaction
+//! behavior. Use `ToRedacted` to produce owned text or JSON for logging.
 //!
-//! What this crate does:
-//! - defines policy marker types (e.g., `Pii`, `Token`, `Email`)
-//! - defines redaction policies and structural traversal operations
-//! - provides integrations behind feature flags (e.g. `slog`)
+//! Choose a derive for the `ToRedacted` output you need:
 //!
-//! What it does not do:
-//! - perform I/O or logging
-//! - validate your policy choices
+//! - `Sensitive` produces redacted JSON and requires `Clone + Serialize`.
+//! - `SensitiveDisplay` produces redacted template text.
+//! - `SensitiveDual` produces both and requires `Clone + Serialize` and a template.
+//! - `NotSensitive` produces the raw JSON you declare public and requires `Serialize`.
+//! - `NotSensitiveDisplay` produces the raw `Display` text you declare public.
 //!
-//! Each derive decides the shape of the value its type produces: `Sensitive`
-//! and `SensitiveDual` require `Clone + Serialize` and produce redacted JSON,
-//! the display derives produce text, and `NotSensitive` requires `Serialize`
-//! and produces the raw JSON its author declared public. Use `SensitiveValue`
-//! for a leaf policy.
+//! Use `SensitiveValue` to apply a policy to an individual value.
 //!
-//! Bypassing redaction remains an exceptional opt-in, spelled by the Bypass
-//! family: `BypassDisplayRedaction`, `BypassDebugRedaction`,
-//! `BypassJsonRedaction`, `BypassTextRedaction` and `BypassRedactionMarker`,
-//! with `BypassRedaction` for `Redactable`-bounded boundaries. The Serde
-//! implementations of `BypassDisplayRedaction`, `BypassDebugRedaction` and
-//! `BypassRedaction` expose the raw inner value for transport or storage; Serde
-//! output is not redaction, and the other three wrappers implement no Serde
-//! traits themselves. A handwritten `ToRedacted`
-//! implementation can select a different projection or summary. These APIs
-//! require `redaction`, which carries `serde` and `serde_json`.
+//! Use a bypass wrapper only when its complete output is public.
+//! `BypassDisplayRedaction`, `BypassDebugRedaction`, and `BypassJsonRedaction`
+//! select an output format. `BypassRedactionMarker` declares a value public
+//! without choosing a format. `BypassRedaction` satisfies a `Redactable` bound.
 //!
-//! The `Sensitive` derive macro lives in `redactable-derive` and is re-exported
-//! from this crate.
+//! Serde on `BypassDisplayRedaction`, `BypassDebugRedaction`, and
+//! `BypassRedaction` exposes the raw inner value for transport or storage.
+//! It does not redact that value. `BypassJsonRedaction` and
+//! `BypassRedactionMarker` do not implement Serde traits themselves.
+//! A handwritten `ToRedacted` implementation can select different fields or
+//! compose summary text. These APIs require `redaction`, which enables `serde`
+//! and `serde_json`.
+//!
+//! The free `redact()` function uses the lower-level mapper and can leave raw
+//! leaves unchanged. It is not a logging boundary. Logging integrations such
+//! as `slog` have their own feature flags. This crate performs no I/O or logging
+//! and does not validate your policy choices.
+//!
+//! The five derive macros live in `redactable-derive` and are re-exported here.
 
 // <https://doc.rust-lang.org/rustc/lints/listing/allowed-by-default.html>
 #![warn(
@@ -108,21 +107,23 @@ pub use policy::{
 };
 // Re-exports from redaction module: public API
 #[cfg(feature = "redaction")]
+pub use __private::DeclaredFormatting;
+#[cfg(feature = "redaction")]
+#[allow(deprecated)]
+pub use redaction::BypassTextRedaction;
+#[cfg(feature = "redaction")]
 pub use redaction::{
     BypassDebugRedaction, BypassDisplayRedaction, BypassJsonRedaction, BypassRedaction,
-    BypassRedactionMarker, BypassTextRedaction, PolicyDebug, PolicyDisplay, Redactable,
-    RedactableWithFormatter, RedactedFormatterRef, RedactedList, RedactedValue, SensitiveValue,
-    SensitiveWithPolicy, ToRedacted,
+    BypassRedactionMarker, PolicyDebug, PolicyDisplay, PolicyFormat, PolicyFormattingOutput,
+    Redactable, RedactableMapper, RedactableWithFormatter, RedactedFormatterRef, RedactedList,
+    RedactedValue, ScalarRedaction, SensitiveValue, SensitiveWithPolicy, ToRedacted,
 };
 // Re-exports from redaction module: internal machinery (used by derive-generated code)
 #[doc(hidden)]
 #[cfg(feature = "redaction")]
-pub use redaction::PolicyRedactedFormatterRef;
-#[doc(hidden)]
-#[cfg(feature = "redaction")]
 pub use redaction::{
-    PolicyApplicable, PolicyApplicableRef, RedactableMapper, RedactableWithMapper, ScalarRedaction,
-    apply_policy, apply_policy_ref, redact,
+    PolicyApplicable, PolicyApplicableRef, RedactableWithMapper, apply_policy, apply_policy_ref,
+    redact,
 };
 #[cfg(feature = "slog")]
 pub use slog::{RedactedDisplayValue, SlogRedactedExt};

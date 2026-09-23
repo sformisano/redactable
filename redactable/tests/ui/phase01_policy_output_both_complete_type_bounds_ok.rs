@@ -1,9 +1,8 @@
 use std::{fmt, marker::PhantomData};
 
 use redactable::{
-    __private::{PolicyApplicableRefForGeneratedFormatting, PolicyFormattingOutput},
-    PolicyApplicableRef, RedactableMapper, RedactableWithFormatter, RedactionPolicy, Secret,
-    SensitiveDisplay, policy::RecursivePolicyKind,
+    PolicyFormat, PolicyFormattingOutput, RedactableMapper,
+    RedactableWithFormatter, RedactionPolicy, Secret, SensitiveDisplay, policy::RecursivePolicyKind,
 };
 
 #[derive(serde::Serialize)]
@@ -23,36 +22,21 @@ impl fmt::Debug for BothOutput {
     }
 }
 
-impl<T> PolicyApplicableRef for Opaque<T> {
+impl<T> PolicyFormat for Opaque<T> {
     type Output = BothOutput;
 
-    fn apply_policy_ref<P, M>(&self, _mapper: &M) -> Self::Output
-    where
-        P: RedactionPolicy,
-        P::Kind: RecursivePolicyKind,
-        M: RedactableMapper,
-    {
-        BothOutput
-    }
-}
-
-impl<T> PolicyApplicableRefForGeneratedFormatting for Opaque<T> {
-    type FormattingOutput = BothOutput;
-
-    fn apply_policy_ref_for_generated_formatting<P, M>(
+    fn apply_policy_for_formatting<P, M>(
         &self,
-        mapper: &M,
-    ) -> PolicyFormattingOutput<Self::FormattingOutput>
+        _mapper: &M,
+    ) -> PolicyFormattingOutput<Self::Output>
     where
         P: RedactionPolicy,
         P::Kind: RecursivePolicyKind,
         M: RedactableMapper,
     {
-        PolicyFormattingOutput::Value(self.apply_policy_ref::<P, M>(mapper))
+        PolicyFormattingOutput::Value(BothOutput)
     }
 }
-
-impl<T> redactable::__private::PolicyApplicableRefForFormatting for Opaque<T> {}
 
 enum InputWithoutFormattingTraits {}
 

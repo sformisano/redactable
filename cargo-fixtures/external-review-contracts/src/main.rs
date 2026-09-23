@@ -51,6 +51,12 @@ fn main() {
     use crate::qualified::Node as QualifiedLeafNode;
     use slog::Level;
 
+    let reviewed = ReviewedManualFormatting {
+        value: ReviewedFormatter,
+    };
+    require_legacy_declaration(&reviewed.value);
+    assert_eq!(reviewed.redacted_display().to_string(), "[REDACTED]");
+
     assert_eq!(
         GenericPolicyScalar::<Secret> {
             value: 42,

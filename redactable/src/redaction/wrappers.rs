@@ -19,11 +19,7 @@ use super::{
 };
 use crate::policy::RedactionPolicy;
 use crate::{
-    __private::{
-        PolicyApplicableRefForFormatting, PolicyApplicableRefForGeneratedFormatting,
-        PolicyFormattingOutput, PolicyMapper,
-    },
-    PolicyApplicableRef, RedactableWithFormatter,
+    PolicyApplicableRef, PolicyFormat, PolicyFormattingOutput, RedactableWithFormatter,
     policy::RecursivePolicyKind,
 };
 
@@ -91,17 +87,14 @@ where
     }
 }
 
-impl<T, P> PolicyApplicableRefForGeneratedFormatting for SensitiveValue<T, P>
+impl<T, P> PolicyFormat for SensitiveValue<T, P>
 where
     T: SensitiveWithPolicy<P>,
     P: RedactionPolicy,
 {
-    type FormattingOutput = String;
+    type Output = String;
 
-    fn apply_policy_ref_for_generated_formatting<Q, M>(
-        &self,
-        _mapper: &M,
-    ) -> PolicyFormattingOutput<Self::FormattingOutput>
+    fn apply_policy_for_formatting<Q, M>(&self, _mapper: &M) -> PolicyFormattingOutput<Self::Output>
     where
         Q: RedactionPolicy,
         Q::Kind: RecursivePolicyKind,
@@ -125,36 +118,6 @@ where
         M: RedactableMapper,
     {
         self.redacted()
-    }
-}
-
-impl<T, P> PolicyApplicableRefForFormatting for SensitiveValue<T, P>
-where
-    T: SensitiveWithPolicy<P>,
-    P: RedactionPolicy,
-{
-    fn fmt_policy_display<Q>(&self, formatter: &mut Formatter<'_>) -> FmtResult
-    where
-        Q: RedactionPolicy,
-        Q::Kind: RecursivePolicyKind,
-        Self: PolicyApplicableRef,
-        <Self as PolicyApplicableRef>::Output: RedactableWithFormatter,
-    {
-        self.apply_policy_ref_for_generated_formatting::<Q, _>(&PolicyMapper)
-            .fmt_redacted(formatter)
-    }
-
-    fn fmt_policy_debug<Q>(&self, formatter: &mut Formatter<'_>) -> FmtResult
-    where
-        Q: RedactionPolicy,
-        Q::Kind: RecursivePolicyKind,
-        Self: PolicyApplicableRef,
-        <Self as PolicyApplicableRef>::Output: Debug,
-    {
-        Debug::fmt(
-            &self.apply_policy_ref_for_generated_formatting::<Q, _>(&PolicyMapper),
-            formatter,
-        )
     }
 }
 

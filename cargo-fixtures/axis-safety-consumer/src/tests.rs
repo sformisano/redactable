@@ -1,8 +1,8 @@
 use std::panic::catch_unwind;
 
 use redactable::{
-    BypassDebugRedaction, BypassDisplayRedaction, BypassJsonRedaction, BypassTextRedaction,
-    Redactable, RedactableWithFormatter, RedactedValue, ToRedacted,
+    BypassDebugRedaction, BypassDisplayRedaction, BypassJsonRedaction, Redactable,
+    RedactableWithFormatter, RedactedValue, ToRedacted,
 };
 use serde::Serialize;
 use serde_json::{Value, json};
@@ -217,7 +217,7 @@ fn deliberate_summaries_suppress_canaries_and_option_presence() {
             json!({"value": 42, "allowed": allowed})
         );
     }
-    let empty = BypassTextRedaction(String::new());
+    let empty = BypassDisplayRedaction(String::new());
     assert_eq!(
         capture_fields(axis_fields!(summary = @empty)),
         json!({"summary": {"message": ""}})
@@ -268,7 +268,7 @@ enum BadProducer {
 impl ToRedacted for BadProducer {
     fn to_redacted(&self) -> RedactedValue {
         match self {
-            Self::Blank => BypassTextRedaction(String::new()).to_redacted(),
+            Self::Blank => BypassDisplayRedaction(String::new()).to_redacted(),
             Self::WholePlaceholder => BypassJsonRedaction(&"[REDACTED]").to_redacted(),
             Self::MissingField => {
                 BypassJsonRedaction(&json!({"owner_name": "[REDACTED]"})).to_redacted()

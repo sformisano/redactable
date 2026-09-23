@@ -40,7 +40,7 @@ fn reject_sensitivity_attrs(attrs: &[Attribute], data: &Data, macro_name: &str) 
         if attr.path().is_ident("redactable") {
             return Err(Error::new_spanned(
                 attr,
-                "`#[redactable(...)]` is not supported on non-sensitive derives; annotate the specific recursive or legacy-formatted field of a `Sensitive` type",
+                "`#[redactable(...)]` is not supported on non-sensitive derives; annotate the specific recursive field of a `Sensitive` type",
             ));
         }
         Ok(())

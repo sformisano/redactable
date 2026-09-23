@@ -3,7 +3,7 @@ use quote::quote;
 
 use crate::{
     not_sensitive::{expand_not_sensitive, expand_not_sensitive_display},
-    sensitive::{DeriveKind, expand},
+    sensitive::{Expansion, expand},
 };
 use syn::DeriveInput;
 
@@ -98,7 +98,7 @@ pub(super) fn run_structural_generated_dependency_roots() {
     // Borrowed sensitive slog output still fails closed without invoking the
     // consumer's `Serialize`, but the generated producer requires it (D1), and
     // it must resolve through `__private::serde`, never the consumer root.
-    assert_private_dependencies(expand(sensitive, DeriveKind::Sensitive).unwrap(), true);
+    assert_private_dependencies(expand(sensitive, Expansion::Sensitive).unwrap(), true);
 
     let sensitive_display: DeriveInput = syn::parse2(quote! {
         #[error("{value}")]
@@ -106,7 +106,7 @@ pub(super) fn run_structural_generated_dependency_roots() {
     })
     .unwrap();
     assert_private_dependencies(
-        expand(sensitive_display, DeriveKind::SensitiveDisplay).unwrap(),
+        expand(sensitive_display, Expansion::SensitiveDisplay).unwrap(),
         false,
     );
 }

@@ -12,15 +12,11 @@ use std::borrow::Cow;
 
 use serde_json::Value;
 
-use crate::{
-    __private::{
-        PolicyApplicableRefForFormatting, PolicyApplicableRefForGeneratedFormatting,
-        PolicyFormattingOutput,
-    },
-    policy::{RecursivePolicyKind, RedactionPolicy},
-};
+use crate::policy::{RecursivePolicyKind, RedactionPolicy};
 
-use super::core::{PolicyApplicable, PolicyApplicableRef, RedactableMapper};
+use super::core::{
+    PolicyApplicable, PolicyApplicableRef, PolicyFormat, PolicyFormattingOutput, RedactableMapper,
+};
 
 // =============================================================================
 // PolicyApplicable: Base case implementations (leaf types)
@@ -97,13 +93,13 @@ impl PolicyApplicableRef for &str {
 
 macro_rules! impl_policy_ref_formatting_leaf {
     ($($ty:ty),+ $(,)?) => {$ (
-        impl PolicyApplicableRefForGeneratedFormatting for $ty {
-            type FormattingOutput = <Self as PolicyApplicableRef>::Output;
+        impl PolicyFormat for $ty {
+            type Output = <Self as PolicyApplicableRef>::Output;
 
-            fn apply_policy_ref_for_generated_formatting<P, M>(
+            fn apply_policy_for_formatting<P, M>(
                 &self,
                 mapper: &M,
-            ) -> PolicyFormattingOutput<Self::FormattingOutput>
+            ) -> PolicyFormattingOutput<Self::Output>
             where
                 P: RedactionPolicy,
                 P::Kind: RecursivePolicyKind,
@@ -115,12 +111,4 @@ macro_rules! impl_policy_ref_formatting_leaf {
     )+ };
 }
 
-impl_policy_ref_formatting_leaf!(String, Cow<'_, str>, &str);
-
-impl PolicyApplicableRefForFormatting for String {}
-impl PolicyApplicableRefForFormatting for Cow<'_, str> {}
-impl PolicyApplicableRefForFormatting for &str {}
-
-impl_policy_ref_formatting_leaf!(Value);
-
-impl PolicyApplicableRefForFormatting for Value {}
+impl_policy_ref_formatting_leaf!(String, Cow<'_, str>, &str, Value);

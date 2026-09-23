@@ -1,7 +1,7 @@
 use std::hash::Hash;
 
 use redactable::{
-    BypassDebugRedaction, BypassDisplayRedaction, BypassTextRedaction, Redactable, Secret,
+    BypassDebugRedaction, BypassDisplayRedaction, Redactable, Secret,
     Sensitive, SensitiveDisplay, SensitiveValue, ToRedacted,
 };
 use serde::Serialize;
@@ -43,7 +43,7 @@ fn main() {
     let token = SensitiveValue::<String, Secret>::from(String::from("secret"));
     let public = String::from("ok");
     let output =
-        BypassTextRedaction(String::from("already redacted")).to_redacted();
+        BypassDisplayRedaction(String::from("already redacted")).to_redacted();
 
     assert_redacted_output(&account);
     assert_redacted_output(&err);

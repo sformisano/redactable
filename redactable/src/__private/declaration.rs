@@ -15,13 +15,14 @@ use serde_json::Value;
 /// An explicit declaration about a type's redacted formatting.
 ///
 /// Sensitive display derives implement this companion automatically. A reviewed
-/// manual formatter can opt in with an empty implementation. This declaration
-/// does not verify the formatter's policy or the contents it selects.
+/// manual formatter can opt in through [`crate::DeclaredFormatting`] with an
+/// empty implementation. This declaration does not verify the formatter's
+/// policy or the contents it selects.
 #[diagnostic::on_unimplemented(
     message = "`{Self}` has no declared redacted formatting",
     label = "this formatted field needs a redaction declaration",
     note = "select `#[sensitive(Policy)]`, use a declared type, or explicitly mark the field `#[not_sensitive]`",
-    note = "for a local container, derive `SensitiveDisplay` or `SensitiveDual` and declare its formatted fields; reviewed manual formatters may implement `redactable::__private::DeclaredFormatting`"
+    note = "for a local container, derive `SensitiveDisplay` or `SensitiveDual` and declare its formatted fields; reviewed manual formatters may implement `redactable::DeclaredFormatting`"
 )]
 pub trait DeclaredFormatting: RedactableWithFormatter {}
 

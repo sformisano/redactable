@@ -11,10 +11,6 @@ use syn::{Attribute, Error, Meta, Path, Result, spanned::Spanned};
 pub(crate) struct RedactableFieldOptions {
     /// Suppress inferred complete-type bounds for a semantically recursive field.
     pub(crate) recursive: bool,
-    /// Use the normal borrowed policy projection instead of the built-in safe formatter route.
-    pub(crate) legacy_formatting: bool,
-    /// Select the library-owned recursive formatting projection.
-    pub(crate) generated_formatting: bool,
 }
 
 /// Parses explicit code-generation overrides for one field.
@@ -23,8 +19,8 @@ pub(crate) struct RedactableFieldOptions {
 /// back to the type currently being derived. `#[redactable(recursive)]` is the
 /// explicit contract for those recursive fields; it suppresses only the inferred
 /// bounds for that field and leaves every unannotated field on the precise default
-/// route. `#[redactable(legacy_formatting)]` explicitly selects the ordinary
-/// `PolicyApplicableRef` projection for opaque downstream container compositions.
+/// route. The former formatting-route options are rejected with migration
+/// messages: every policy field now formats through one borrowed route.
 pub(crate) fn parse_redactable_field_options(
     attrs: &[Attribute],
 ) -> Result<RedactableFieldOptions> {
@@ -43,20 +39,16 @@ pub(crate) fn parse_redactable_field_options(
                         options.recursive = true;
                         Ok(())
                     } else if meta.path.is_ident("legacy_formatting") {
-                        if options.legacy_formatting {
-                            return Err(meta.error("duplicate `legacy_formatting` override"));
-                        }
-                        options.legacy_formatting = true;
-                        Ok(())
+                        Err(meta.error(
+                            "`legacy_formatting` was removed; custom leaves implement `redactable::PolicyFormat` and format through the default route, so delete the option",
+                        ))
                     } else if meta.path.is_ident("generated_formatting") {
-                        if options.generated_formatting {
-                            return Err(meta.error("duplicate `generated_formatting` override"));
-                        }
-                        options.generated_formatting = true;
-                        Ok(())
+                        Err(meta.error(
+                            "`generated_formatting` was removed; the default route already selects the library formatter, so delete the option",
+                        ))
                     } else {
                         Err(meta.error(
-                            "unknown redactable field option; expected `recursive`, `legacy_formatting`, or `generated_formatting`",
+                            "unknown redactable field option; expected `recursive`",
                         ))
                     }
                 })?;
@@ -64,7 +56,7 @@ pub(crate) fn parse_redactable_field_options(
             Meta::Path(_) | Meta::NameValue(_) => {
                 return Err(Error::new(
                     attr.span(),
-                    "expected `#[redactable(recursive)]`, `#[redactable(legacy_formatting)]`, or `#[redactable(generated_formatting)]`",
+                    "expected `#[redactable(recursive)]`",
                 ));
             }
         }

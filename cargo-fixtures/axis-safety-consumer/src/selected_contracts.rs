@@ -1,5 +1,5 @@
 use redactable::{
-    BypassJsonRedaction, BypassTextRedaction, RedactedValue, Sensitive, SensitiveDisplay,
+    BypassJsonRedaction, BypassDisplayRedaction, RedactedValue, Sensitive, SensitiveDisplay,
     ToRedacted,
 };
 use serde::{Serialize, Serializer, ser::Error};
@@ -31,7 +31,7 @@ pub struct RecordedDecision(pub Option<String>);
 
 impl ToRedacted for RecordedDecision {
     fn to_redacted(&self) -> RedactedValue {
-        BypassTextRedaction("[REDACTED:recorded-decision]".to_owned())
+        BypassDisplayRedaction("[REDACTED:recorded-decision]".to_owned())
             .to_redacted()
     }
 }
@@ -40,7 +40,7 @@ pub struct AccountDetailsValidation(pub String);
 
 impl ToRedacted for AccountDetailsValidation {
     fn to_redacted(&self) -> RedactedValue {
-        BypassTextRedaction("[REDACTED:account-details-validation]".to_owned())
+        BypassDisplayRedaction("[REDACTED:account-details-validation]".to_owned())
             .to_redacted()
     }
 }
@@ -56,7 +56,7 @@ pub struct AccountOwnership(pub Option<AccountView>);
 
 impl ToRedacted for AccountOwnership {
     fn to_redacted(&self) -> RedactedValue {
-        BypassTextRedaction("[REDACTED:account-ownership]".to_owned())
+        BypassDisplayRedaction("[REDACTED:account-ownership]".to_owned())
             .to_redacted()
     }
 }

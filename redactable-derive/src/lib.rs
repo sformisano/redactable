@@ -67,7 +67,6 @@
 extern crate proc_macro;
 
 use proc_macro::TokenStream;
-use quote::quote;
 use syn::{DeriveInput, parse_macro_input};
 
 mod container;
@@ -87,25 +86,18 @@ mod transform;
 pub(crate) use crate_paths::{crate_path, crate_root};
 use not_sensitive::{expand_not_sensitive, expand_not_sensitive_display};
 pub(crate) use sensitive::DeriveOutput;
-use sensitive::{DeriveKind, expand, expand_with_mode};
+use sensitive::{Expansion, expand};
 
 /// Derives `redactable::RedactableWithMapper` (and related impls) for structs and enums.
-///
-/// # Container Attributes
-///
-/// These attributes are placed on the struct/enum itself:
 ///
 /// `Sensitive` and `SensitiveDisplay` are standalone derives. Use `SensitiveDual` when a type
 /// needs both structural and display redaction.
 ///
+/// # Recursive Fields
+///
 /// Use `#[redactable(recursive)]` on a field whose crate-qualified, aliased, or
 /// mutually recursive type would otherwise create a self-referential inferred
 /// bound. Unannotated fields retain their exact complete-type bounds.
-/// `#[redactable(legacy_formatting)]` and `#[redactable(generated_formatting)]`
-/// are display-only formatting options; standalone `Sensitive` rejects **both**.
-/// Apply them on `SensitiveDisplay` or `SensitiveDual` (which is what to use when
-/// a type needs structural and display redaction together); those derives
-/// document what each option selects.
 ///
 /// # Field Attributes
 ///
@@ -140,8 +132,8 @@ use sensitive::{DeriveKind, expand, expand_with_mode};
 ///   `Clone` and `serde::Serialize` on the type; a missing bound is reported on the
 ///   generated impl.
 /// - `RedactableWithMapper`: always generated.
-/// - `Redactable`: always generated. Provides `.redact()` and certifies the type for
-///   `SlogRedactedExt`.
+/// - `Redactable`: always generated. Provides `.redact()` and allows the type
+///   inside `Sensitive` containers.
 /// - `Debug`: uses the production redacted representation in every build mode.
 /// - `slog::Value` + `SlogRedacted` (requires `slog` feature): borrowed generated output is a
 ///   fixed fail-closed placeholder and never clones or serializes the raw reference. Owned values
@@ -150,13 +142,13 @@ use sensitive::{DeriveKind, expand, expand_with_mode};
 #[proc_macro_derive(Sensitive, attributes(sensitive, not_sensitive, redactable))]
 pub fn derive_sensitive_container(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
-    match expand(input, DeriveKind::Sensitive) {
+    match expand(input, Expansion::Sensitive) {
         Ok(tokens) => tokens.into(),
         Err(err) => err.into_compile_error().into(),
     }
 }
 
-/// Derives structural and display redaction as one authenticated expansion.
+/// Derives structural redaction and redacted template text for the same type.
 ///
 /// Use this instead of combining `Sensitive` and `SensitiveDisplay` with the
 /// legacy `#[sensitive(dual)]` coordination attribute. Every structural field is checked,
@@ -166,15 +158,9 @@ pub fn derive_sensitive_container(input: TokenStream) -> TokenStream {
 #[proc_macro_derive(SensitiveDual, attributes(sensitive, not_sensitive, redactable, error))]
 pub fn derive_sensitive_dual(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
-    let sensitive = expand_with_mode(input.clone(), DeriveKind::Sensitive, true);
-    let display = expand_with_mode(input, DeriveKind::SensitiveDisplay, true);
-    match (sensitive, display) {
-        (Ok(sensitive), Ok(display)) => quote!(#sensitive #display).into(),
-        (Err(mut first), Err(second)) => {
-            first.combine(second);
-            first.into_compile_error().into()
-        }
-        (Err(err), _) | (_, Err(err)) => err.into_compile_error().into(),
+    match expand(input, Expansion::Dual) {
+        Ok(tokens) => tokens.into(),
+        Err(err) => err.into_compile_error().into(),
     }
 }
 
@@ -188,15 +174,14 @@ pub fn derive_sensitive_dual(input: TokenStream) -> TokenStream {
 /// # Generated Impls
 ///
 /// - `RedactableWithMapper`: no-op passthrough (the type has no sensitive data)
-/// - `Redactable`: deriving `NotSensitive` is an explicit declaration, so the type is
-///   certified for the redacting adapters. Generated slog serialization borrows rather
-///   than clones; serde's `RefCell` implementation
-///   reports an active mutable borrow as an error, which is converted to `"[REDACTED]"`.
+/// - `Redactable`: declares the type public and allows it inside `Sensitive` containers.
 /// - `ToRedacted`: always generated; emits the raw `Serialize` output the author
 ///   declared public. This is why `NotSensitive` requires `serde::Serialize`; `Clone`
 ///   is not required, because nothing is redacted.
 /// - `slog::Value` and `SlogRedacted` (behind `cfg(feature = "slog")`): serializes the explicitly
 ///   non-sensitive value directly as structured JSON. Requires `Serialize` on the type.
+///   Serialization borrows the value without cloning it. Serde reports an active
+///   mutable `RefCell` borrow as an error, which becomes `"[REDACTED]"`.
 /// - `TracingRedacted` (behind `cfg(feature = "tracing")`): marker trait
 ///
 /// `NotSensitive` does **not** generate a `Debug` impl - there's nothing to redact.
@@ -234,11 +219,9 @@ pub fn derive_not_sensitive(input: TokenStream) -> TokenStream {
 /// # Generated Impls
 ///
 /// - `RedactableWithMapper`: no-op passthrough (allows use inside `Sensitive` containers)
-/// - `Redactable`: deriving `NotSensitiveDisplay` is an explicit declaration, so the type is
-///   certified for the redacting adapters.
+/// - `Redactable`: declares the type public and allows it inside `Sensitive` containers.
 /// - `RedactableWithFormatter`: delegates to `Display::fmt`
-/// - `ToRedacted`: emits the `Display` text; certifies the type for
-///   `slog_redacted()` and `tracing_redacted()`
+/// - `ToRedacted`: emits the `Display` text for `slog_redacted()` and `tracing_redacted()`
 /// - `slog::Value` and `SlogRedacted` (behind `cfg(feature = "slog")`): uses `RedactableWithFormatter` output
 /// - `TracingRedacted` (behind `cfg(feature = "tracing")`): marker trait
 ///
@@ -294,32 +277,23 @@ pub fn derive_not_sensitive_display(input: TokenStream) -> TokenStream {
 ///
 /// # Field Annotations
 ///
-/// - *(none)*: Uses `RedactableWithFormatter` and its hidden `DeclaredFormatting` companion
+/// - *(none)*: Uses `RedactableWithFormatter` and the public
+///   `redactable::DeclaredFormatting` declaration
 /// - `#[sensitive(Policy)]`: Apply the policy's redaction rules
 /// - `#[not_sensitive]`: Render raw via `Display` (use for types without `RedactableWithFormatter`)
 ///
 /// The display template is taken from `#[error("...")]` (thiserror-style) or from
 /// doc comments (displaydoc-style). If neither is present, the derive fails.
 ///
-/// Formatting borrows the source. Individual policy projections can require `Clone`,
-/// including IP-map formatting and ordinary borrowed map projections that clone keys.
-/// A custom `PolicyApplicableRef` leaf nested inside a container can explicitly
-/// select its ordinary borrowed projection with
-/// `#[redactable(legacy_formatting)]`. The explicit route does not require the
-/// direct-leaf formatting marker; it requires `PolicyApplicableRef` on the whole
-/// field and the selected format capability on its output. It inherits the
-/// projection's `Clone` requirements and borrow behavior; library-owned fields
-/// should stay on the default conflict-safe route. It composes with
-/// `#[redactable(recursive)]`, retaining the projection/output bounds while
-/// suppressing the cyclic inferred field bound.
+/// # Policy Formatting
 ///
-/// `#[redactable(generated_formatting)]` instead selects the library-owned
-/// recursive formatter for an alias-hidden or otherwise ambiguous container
-/// field. `legacy_formatting` and `generated_formatting` are mutually exclusive,
-/// and standalone `Sensitive` rejects both (they only affect display output).
+/// A custom leaf supports policy formatting by implementing
+/// `redactable::PolicyFormat`. Supported containers forward
+/// to their contents. A nested `RefCell` borrow conflict renders as `<borrowed>`.
 ///
 /// Generic policy fields declare `PolicyDisplay<P>` for `{value}`,
 /// `PolicyDebug<P>` for `{value:?}`, or both when both modes are used.
+/// The same requirements apply to concrete policy fields.
 /// These policy-specific bounds permit supported scalars and typed IP addresses
 /// without requiring structural `Redactable` or `Clone`. Missing capabilities
 /// reject the declaration even when no formatting method is called.
@@ -330,8 +304,8 @@ pub fn derive_not_sensitive_display(input: TokenStream) -> TokenStream {
 /// # Generated Impls
 ///
 /// - `RedactableWithFormatter`: always generated.
-/// - `ToRedacted`: always generated; emits the redacted display text and certifies the
-///   type for `slog_redacted()` and `tracing_redacted()`.
+/// - `ToRedacted`: always generated; emits the redacted display text for
+///   `slog_redacted()` and `tracing_redacted()`.
 /// - `Debug`: uses the production redacted representation in every build mode.
 /// - `slog::Value` + `SlogRedacted`: emits the redacted display string (requires `slog` feature).
 /// - `TracingRedacted`: marker trait (requires `tracing` feature).
@@ -341,7 +315,7 @@ pub fn derive_not_sensitive_display(input: TokenStream) -> TokenStream {
 )]
 pub fn derive_sensitive_display(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
-    match expand(input, DeriveKind::SensitiveDisplay) {
+    match expand(input, Expansion::SensitiveDisplay) {
         Ok(tokens) => tokens.into(),
         Err(err) => err.into_compile_error().into(),
     }

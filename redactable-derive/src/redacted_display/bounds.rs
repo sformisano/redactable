@@ -1,17 +1,12 @@
-//! Collects complete-field predicates for the selected formatting route.
+//! Collects complete-field predicates for the formatted fields of a template.
 
 use syn::WherePredicate;
 
-use super::model::{FieldInfo, FormatMode, FormattingRoute};
+use super::model::{FieldInfo, FormatMode};
 use crate::{
     generics::{
-        push_debug_predicate, push_direct_marker_debug_formatting_predicates,
-        push_direct_marker_display_formatting_predicates, push_display_predicate,
-        push_generated_policy_debug_formatting_predicate,
-        push_generated_policy_display_formatting_predicate,
-        push_legacy_policy_debug_formatting_predicates,
-        push_legacy_policy_display_formatting_predicates, push_policy_debug_formatting_predicate,
-        push_policy_display_formatting_predicate, push_redacted_display_predicate,
+        push_debug_predicate, push_display_predicate, push_policy_debug_predicate,
+        push_policy_display_predicate, push_redacted_display_predicate,
     },
     strategy::Strategy,
 };
@@ -19,70 +14,30 @@ use crate::{
 pub(super) fn collect_bounds(
     field: &FieldInfo<'_>,
     mode: FormatMode,
-    display_generics: &mut Vec<WherePredicate>,
-    debug_generics: &mut Vec<WherePredicate>,
-    policy_ref_generics: &mut Vec<WherePredicate>,
-    nested_generics: &mut Vec<WherePredicate>,
+    predicates: &mut Vec<WherePredicate>,
 ) {
-    if field.recursive_bound_override && field.formatting_route != FormattingRoute::Legacy {
+    if field.recursive_bound_override {
         return;
     }
     let display = mode != FormatMode::Debug;
     let debug = mode != FormatMode::Display;
     match &field.strategy {
-        Strategy::WalkDefault => push_redacted_display_predicate(nested_generics, field.ty),
+        Strategy::WalkDefault => push_redacted_display_predicate(predicates, field.ty),
         Strategy::NotSensitive => {
             if display {
-                push_display_predicate(display_generics, field.ty);
+                push_display_predicate(predicates, field.ty);
             }
             if debug {
-                push_debug_predicate(debug_generics, field.ty);
+                push_debug_predicate(predicates, field.ty);
             }
         }
-        Strategy::Policy(policy) => match field.formatting_route {
-            FormattingRoute::Legacy => {
-                if display {
-                    push_legacy_policy_display_formatting_predicates(
-                        policy_ref_generics,
-                        field.ty,
-                        policy,
-                    );
-                }
-                if debug {
-                    push_legacy_policy_debug_formatting_predicates(
-                        policy_ref_generics,
-                        field.ty,
-                        policy,
-                    );
-                }
+        Strategy::Policy(policy) => {
+            if display {
+                push_policy_display_predicate(predicates, field.ty, policy);
             }
-            FormattingRoute::Declared => {
-                if display {
-                    push_generated_policy_display_formatting_predicate(
-                        policy_ref_generics,
-                        field.ty,
-                        policy,
-                    );
-                }
-                if debug {
-                    push_generated_policy_debug_formatting_predicate(
-                        policy_ref_generics,
-                        field.ty,
-                        policy,
-                    );
-                }
+            if debug {
+                push_policy_debug_predicate(predicates, field.ty, policy);
             }
-            FormattingRoute::DirectMarker => {
-                if display {
-                    push_direct_marker_display_formatting_predicates(policy_ref_generics, field.ty);
-                    push_policy_display_formatting_predicate(policy_ref_generics, field.ty, policy);
-                }
-                if debug {
-                    push_direct_marker_debug_formatting_predicates(policy_ref_generics, field.ty);
-                    push_policy_debug_formatting_predicate(policy_ref_generics, field.ty, policy);
-                }
-            }
-            FormattingRoute::Nominal => {}
-        },
+        }
     }
 }

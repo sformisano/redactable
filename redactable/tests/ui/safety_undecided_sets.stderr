@@ -56,10 +56,10 @@ error[E0277]: `String` has no declared redacted formatting
 14 |     value: HashSet<String>,
    |            ^^^^^^^^^^^^^^^ this formatted field needs a redaction declaration
    |
-   = help: the trait `redactable::__private::DeclaredFormatting` is not implemented for `String`
+   = help: the trait `DeclaredFormatting` is not implemented for `String`
    = note: select `#[sensitive(Policy)]`, use a declared type, or explicitly mark the field `#[not_sensitive]`
-   = note: for a local container, derive `SensitiveDisplay` or `SensitiveDual` and declare its formatted fields; reviewed manual formatters may implement `redactable::__private::DeclaredFormatting`
-   = help: the following other types implement trait `redactable::__private::DeclaredFormatting`:
+   = note: for a local container, derive `SensitiveDisplay` or `SensitiveDual` and declare its formatted fields; reviewed manual formatters may implement `redactable::DeclaredFormatting`
+   = help: the following other types implement trait `DeclaredFormatting`:
              &T
              (T0, T1)
              (T0, T1, T2)
@@ -69,7 +69,7 @@ error[E0277]: `String` has no declared redacted formatting
              BTreeMap<K, V>
              BTreeSet<T>
            and $N others
-   = note: required for `HashSet<String>` to implement `redactable::__private::DeclaredFormatting`
+   = note: required for `HashSet<String>` to implement `DeclaredFormatting`
 note: required by a bound in `redactable::__private::require_declared_formatting`
   --> src/__private/declaration.rs
    |
@@ -82,10 +82,10 @@ error[E0277]: `String` has no declared redacted formatting
 19 |     value: BTreeSet<String>,
    |            ^^^^^^^^^^^^^^^^ this formatted field needs a redaction declaration
    |
-   = help: the trait `redactable::__private::DeclaredFormatting` is not implemented for `String`
+   = help: the trait `DeclaredFormatting` is not implemented for `String`
    = note: select `#[sensitive(Policy)]`, use a declared type, or explicitly mark the field `#[not_sensitive]`
-   = note: for a local container, derive `SensitiveDisplay` or `SensitiveDual` and declare its formatted fields; reviewed manual formatters may implement `redactable::__private::DeclaredFormatting`
-   = help: the following other types implement trait `redactable::__private::DeclaredFormatting`:
+   = note: for a local container, derive `SensitiveDisplay` or `SensitiveDual` and declare its formatted fields; reviewed manual formatters may implement `redactable::DeclaredFormatting`
+   = help: the following other types implement trait `DeclaredFormatting`:
              &T
              (T0, T1)
              (T0, T1, T2)
@@ -95,7 +95,7 @@ error[E0277]: `String` has no declared redacted formatting
              BTreeMap<K, V>
              BTreeSet<T>
            and $N others
-   = note: required for `BTreeSet<String>` to implement `redactable::__private::DeclaredFormatting`
+   = note: required for `BTreeSet<String>` to implement `DeclaredFormatting`
 note: required by a bound in `redactable::__private::require_declared_formatting`
   --> src/__private/declaration.rs
    |

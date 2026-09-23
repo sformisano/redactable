@@ -12,34 +12,27 @@ mod model;
 mod template;
 
 use proc_macro2::{Ident, TokenStream};
-use syn::{Attribute, Data, Error, Generics, Result, WherePredicate, spanned::Spanned};
+use syn::{Attribute, Result, WherePredicate};
 
-use crate::fresh_ident::FreshIdentAllocator;
+use crate::{container::Body, fresh_ident::FreshIdentAllocator};
 
 use self::codegen::{derive_enum_display, derive_struct_display};
 
 pub(crate) struct RedactedDisplayOutput {
     pub(crate) body: TokenStream,
-    pub(crate) display_generics: Vec<WherePredicate>,
-    pub(crate) debug_generics: Vec<WherePredicate>,
-    pub(crate) policy_ref_generics: Vec<WherePredicate>,
-    pub(crate) nested_generics: Vec<WherePredicate>,
+    /// Every bound the referenced template fields require, in template order.
+    pub(crate) predicates: Vec<WherePredicate>,
 }
 
 pub(crate) fn derive_redacted_display(
     name: &Ident,
-    data: &Data,
+    body: &Body,
     attrs: &[Attribute],
-    generics: &Generics,
     formatter: &Ident,
     fresh: &mut FreshIdentAllocator,
 ) -> Result<RedactedDisplayOutput> {
-    match data {
-        Data::Struct(data) => derive_struct_display(name, data, attrs, generics, formatter, fresh),
-        Data::Enum(data) => derive_enum_display(name, data, generics, formatter, fresh),
-        Data::Union(u) => Err(Error::new(
-            u.union_token.span(),
-            "`SensitiveDisplay` cannot be derived for unions",
-        )),
+    match body {
+        Body::Struct(data) => derive_struct_display(name, data, attrs, formatter, fresh),
+        Body::Enum(data) => derive_enum_display(name, data, formatter, fresh),
     }
 }

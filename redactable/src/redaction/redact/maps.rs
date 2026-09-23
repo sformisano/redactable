@@ -16,14 +16,13 @@ use std::{
 };
 
 use crate::{
-    __private::{PolicyApplicableRefForGeneratedFormatting, PolicyFormattingOutput},
     RedactableWithFormatter,
     policy::{RecursivePolicyKind, RedactionPolicy},
 };
 
 use super::core::{
-    PolicyApplicable, PolicyApplicableRef, RedactableMapper, apply_child_policy_ref_for_formatting,
-    collect_policy_formatting,
+    PolicyApplicable, PolicyApplicableRef, PolicyFormat, PolicyFormattingOutput, RedactableMapper,
+    apply_child_policy_ref_for_formatting, collect_policy_formatting,
 };
 
 /// Owned generated text/secret formatting output for maps.
@@ -130,18 +129,15 @@ where
     }
 }
 
-impl<K, V, S> PolicyApplicableRefForGeneratedFormatting for HashMap<K, V, S>
+impl<K, V, S> PolicyFormat for HashMap<K, V, S>
 where
     K: Hash + Eq + Debug,
-    V: PolicyApplicableRefForGeneratedFormatting,
+    V: PolicyFormat,
     S: BuildHasher,
 {
-    type FormattingOutput = PolicyMapOutput<V::FormattingOutput>;
+    type Output = PolicyMapOutput<V::Output>;
 
-    fn apply_policy_ref_for_generated_formatting<P, M>(
-        &self,
-        mapper: &M,
-    ) -> PolicyFormattingOutput<Self::FormattingOutput>
+    fn apply_policy_for_formatting<P, M>(&self, mapper: &M) -> PolicyFormattingOutput<Self::Output>
     where
         P: RedactionPolicy,
         P::Kind: RecursivePolicyKind,
@@ -184,17 +180,14 @@ where
     }
 }
 
-impl<K, V> PolicyApplicableRefForGeneratedFormatting for BTreeMap<K, V>
+impl<K, V> PolicyFormat for BTreeMap<K, V>
 where
     K: Ord + Debug,
-    V: PolicyApplicableRefForGeneratedFormatting,
+    V: PolicyFormat,
 {
-    type FormattingOutput = PolicyMapOutput<V::FormattingOutput>;
+    type Output = PolicyMapOutput<V::Output>;
 
-    fn apply_policy_ref_for_generated_formatting<P, M>(
-        &self,
-        mapper: &M,
-    ) -> PolicyFormattingOutput<Self::FormattingOutput>
+    fn apply_policy_for_formatting<P, M>(&self, mapper: &M) -> PolicyFormattingOutput<Self::Output>
     where
         P: RedactionPolicy,
         P::Kind: RecursivePolicyKind,

@@ -1,6 +1,6 @@
-use redactable::{BypassTextRedaction, RedactedOutputView, ToRedacted};
+use redactable::{BypassDisplayRedaction, RedactedOutputView, ToRedacted};
 fn main() {
-    let value = BypassTextRedaction(String::from("declared")).to_redacted();
+    let value = BypassDisplayRedaction(String::from("declared")).to_redacted();
     match value.view() {
         RedactedOutputView::Text(_) => {}
         _ => {}

@@ -9,6 +9,7 @@ Start there for the derive walkthrough and logging examples.
 - [Low-level traversal](#low-level-traversal)
 - [Manual formatters](#manual-formatters)
 - [Generic declarations](#generic-declarations)
+- [Custom policy formatting](#custom-policy-formatting)
 - [Types that implement `Drop`](#types-that-implement-drop)
 - [Output and adapter contracts](#output-and-adapter-contracts)
 - [Wrapper contracts](#wrapper-contracts)
@@ -52,7 +53,7 @@ The sensitive derives also generate the integrations enabled by `slog` and
 - `Redactable`: the derive is an explicit declaration, so the type may be
   redacted and used inside sensitive containers
 - `RedactableWithFormatter`: delegates to `Display::fmt` (allows use inside `SensitiveDisplay` containers)
-- `ToRedacted`: emits the `Display` text, certifying the type for `slog_redacted()` and `tracing_redacted()`
+- `ToRedacted`: emits the `Display` text for `slog_redacted()` and `tracing_redacted()`
 - `slog::Value` and `SlogRedacted`: when `slog` feature is enabled
 - `TracingRedacted`: when `tracing` feature is enabled
 
@@ -67,10 +68,40 @@ For example, `Sensitive`'s `ToRedacted` implementation requires `Serialize` on t
 
 ## Manual formatters
 
-A handwritten formatter declares itself by implementing the hidden
-`redactable::__private::DeclaredFormatting` marker trait.
+A handwritten formatter declares itself by implementing the public
+`redactable::DeclaredFormatting` marker trait with `RedactableWithFormatter`.
 Constant templates and omitted fields need no formatting declaration.
 `SensitiveDual` also checks every structural field, including fields its template omits.
+
+The declaration is an author assertion. It admits the local type as an
+unannotated template field. It does not inspect the formatter or validate what
+the formatter writes. A declaration also does not admit raw values at a logging
+or producer boundary.
+
+```rust
+use std::fmt::{Formatter, Result as FmtResult};
+
+use redactable::{DeclaredFormatting, RedactableWithFormatter, SensitiveDisplay};
+
+struct PublicSummary(&'static str);
+
+impl RedactableWithFormatter for PublicSummary {
+    fn fmt_redacted(&self, f: &mut Formatter<'_>) -> FmtResult {
+        f.write_str(self.0)
+    }
+}
+
+impl DeclaredFormatting for PublicSummary {}
+
+#[derive(SensitiveDisplay)]
+#[error("{summary}")]
+struct Event {
+    summary: PublicSummary,
+}
+
+let event = Event { summary: PublicSummary("request accepted") };
+assert_eq!(event.redacted_display().to_string(), "request accepted");
+```
 
 ## Generic declarations
 
@@ -88,7 +119,7 @@ Common declaration bounds are:
 | Field use | Declaration bound |
 |---|---|
 | Unannotated structural `value: T` | `T: Redactable` |
-| Unannotated referenced template field | Complete field type implements `__private::DeclaredFormatting` |
+| Unannotated referenced template field | Complete field type implements `DeclaredFormatting` |
 | `#[sensitive(P)]` with `{value}` | Complete field type implements `PolicyDisplay<P>` |
 | `#[sensitive(P)]` with `{value:?}` | Complete field type implements `PolicyDebug<P>` |
 | Policy field used in both template forms | Both policy formatting bounds |
@@ -104,24 +135,101 @@ The structural half of `SensitiveDual` also needs each annotated field's
 consuming policy operation, expressed by `__private::PolicyField<P>`.
 Formatting bounds alone do not supply that operation.
 
-Existing custom `PolicyApplicableRef` projections can select
-`#[redactable(legacy_formatting)]`. Their declarations must provide the policy
-and projected-output bounds required by that route. The projection retains its
-existing cloning and borrowing behavior.
-
 Requirements apply to complete field types. `std::marker::PhantomData<T>` does
 not impose redaction on `T`. Map keys remain exempt from value traversal.
 `#[redactable(recursive)]` suppresses cyclic inferred predicates; actual field
 operations still need to compile under the original declaration.
 
+## Custom policy formatting
+
+The [README custom-policy example](../README.md#custom-policies) defines a
+custom `RedactionPolicy`. The [foreign-type example](../README.md#foreign-types)
+shows the supported wrapper route: implement `SensitiveWithPolicy<P>` for the
+custom value, then carry it as `SensitiveValue<T, P>`.
+
+Use `PolicyFormat` for a custom leaf in a `#[sensitive(P)]` template field.
+Its `Output` must implement
+`RedactableWithFormatter` for `{value}` or `Debug` for `{value:?}`. Each mode
+must render already-redacted data.
+
+```rust
+use std::fmt::{Debug, Formatter, Result as FmtResult};
+
+use redactable::{
+    PolicyFormat, PolicyFormattingOutput, RedactableMapper, RedactableWithFormatter,
+    RedactionPolicy, Secret, SensitiveDisplay,
+    policy::RecursivePolicyKind,
+};
+
+struct AccountNumber(String);
+struct RedactedAccount(String);
+
+impl RedactableWithFormatter for RedactedAccount {
+    fn fmt_redacted(&self, f: &mut Formatter<'_>) -> FmtResult {
+        write!(f, "account({})", self.0)
+    }
+}
+
+impl Debug for RedactedAccount {
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
+        f.debug_tuple("RedactedAccount").field(&self.0).finish()
+    }
+}
+
+impl PolicyFormat for AccountNumber {
+    type Output = RedactedAccount;
+
+    fn apply_policy_for_formatting<P, M>(
+        &self,
+        _mapper: &M,
+    ) -> PolicyFormattingOutput<Self::Output>
+    where
+        P: RedactionPolicy,
+        P::Kind: RecursivePolicyKind,
+        M: RedactableMapper,
+    {
+        PolicyFormattingOutput::Value(RedactedAccount(P::policy().apply_to(&self.0)))
+    }
+}
+
+#[derive(SensitiveDisplay)]
+#[error("{number}")]
+struct Transfer {
+    #[sensitive(Secret)]
+    number: AccountNumber,
+}
+
+let transfer = Transfer { number: AccountNumber("12345678".into()) };
+let rendered = transfer.redacted_display().to_string();
+assert_eq!(rendered, "account([REDACTED])");
+assert!(!rendered.contains("12345678"));
+```
+
+`PolicyFormat` supports the sealed text and secret recursive policy kinds.
+`IpAddressPolicyKind` is not a recursive policy kind. `RedactableMapper` is a
+public support trait for the method bound. Its `map_scalar` method has a
+`ScalarRedaction` bound. That bound governs scalar mapping inside a mapper. It
+does not declare custom values eligible for derive fields, producers, or logging.
+
+Library containers forward to their contents and propagate a nested `RefCell`
+borrow conflict as `<borrowed>`. Custom containers must preserve
+`PolicyFormattingOutput::Borrowed`. Use `PolicyFormattingOutput::map` to
+transform successful output while preserving that state.
+`PolicyFormat` does not validate custom output or catch panics.
+
+To migrate an older `fmt_policy_display` or `fmt_policy_debug` override, apply
+the policy first and return an owned output newtype. Implement
+`RedactableWithFormatter` for `{value}` or `Debug` for `{value:?}`, according to
+the modes you support. Keep only the redacted projection in that newtype.
+Display and Debug may use different redacted representations.
+
 ## Types that implement `Drop`
 
-`Sensitive` consumes `self` and moves its fields into a redacted value of the
-same type. Container types that implement `Drop` are unsupported, including
-Copy-only shapes that happen to compile: `.redact()` drops the consumed original
-and later drops the replacement, which is not a supported container lifecycle.
-This limitation also applies to `SensitiveDual`. A non-`Copy` field usually
-makes the unsupported shape fail earlier with E0509.
+`Sensitive` and `SensitiveDual` do not support containers that implement `Drop`.
+This restriction also applies when every field implements `Copy` and the derive
+compiles. Consuming `.redact()` drops the original container; the returned
+container is dropped separately. A non-`Copy` field usually causes compilation
+to fail with E0509.
 
 The restriction is on the derived container itself. A type that does not
 implement `Drop` can still derive `Sensitive` when its fields have their own
@@ -129,9 +237,11 @@ drop behavior, provided those fields satisfy the usual traversal bounds.
 
 ## Output and adapter contracts
 
-All five derives implement `ToRedacted`. A custom implementation can delegate to
-`BypassDisplayRedaction`, `BypassDebugRedaction`, `BypassJsonRedaction`, or
-`BypassTextRedaction(String)`, including for empty summary text.
+Values that implement `ToRedacted` are called producers. All five derives
+provide this implementation. A custom implementation can delegate to
+`BypassDisplayRedaction`, `BypassDebugRedaction` or `BypassJsonRedaction`.
+Use `BypassDisplayRedaction(text)` for public summary text you compose yourself,
+including empty text.
 A type with a derive-generated implementation cannot also define a handwritten one.
 Use a separate log-view type for a different projection.
 
@@ -180,9 +290,10 @@ Structural producers inherit every `Clone` panic. A traversed `RefCell` with a
 live mutable borrow therefore panics when the producer runs.
 This applies through `.slog_redacted()`, `.slog_redacted_json()`, and `.tracing_redacted()`.
 
-The display producers need no `Clone`. `SensitiveDisplay` renders a mutably borrowed
-`RefCell` as `<borrowed>` through the crate's formatter. `NotSensitiveDisplay`
-inherits its own `Display` implementation's borrow behavior.
+Display producers borrow the source. Generated text/secret formatting needs no
+`Clone`; IP-map projections still clone keys and hashers. `SensitiveDisplay`
+renders a mutably borrowed `RefCell` as `<borrowed>` through the crate's formatter.
+`NotSensitiveDisplay` inherits its own `Display` implementation's borrow behavior.
 
 There is no consuming route to a `RedactedValue`. The consuming
 `into_tracing_*` adapters remain for the `Debug` and `Valuable` paths.
@@ -224,20 +335,32 @@ the wrapper's policy is authoritative.
   - Implements `ToRedacted`, common value traits, `inner()`, and `into_inner()`
 - **`BypassDisplayRedaction<T>`**
   - Owns a value explicitly declared safe to log through `Display`
+  - Also carries summary text you composed yourself: `BypassDisplayRedaction(text)`
   - Implements `ToRedacted`, common value traits, `inner()`, and `into_inner()`
+- **`BypassTextRedaction` (deprecated)**
+  - Owns one public `String` and keeps the original `ToRedacted` text and
+    `{"message": text}` JSON fallback, including empty text
+  - Keeps derived tuple `Debug`, so newlines are escaped and output includes
+    `BypassTextRedaction("...")`
+  - Does not directly implement `Display`, Serde, slog marker, or tracing
+    marker traits; prefer `BypassDisplayRedaction` for new code
 - **`BypassJsonRedaction<'_, T>`**
   - Borrows a `Serialize` value and logs it as raw JSON
-- **`BypassTextRedaction(String)`**
-  - Carries summary text you composed yourself
 - **`BypassRedactionMarker<T>`**
   - Declares a value non-sensitive without choosing a logging format
   - Accepted by slog's native typed emitter, which keeps the emitted type instead of flattening it to a string; also accepts a type with neither `Display` nor `Debug`
 
 Every Bypass wrapper is a tuple struct with a public field, so
-`BypassJsonRedaction(&value)` or `BypassTextRedaction(text)` is the whole
+`BypassJsonRedaction(&value)` or `BypassDisplayRedaction(text)` is the whole
 construction. `BypassRedaction<T>` and `BypassRedactionMarker<T>` do not
 implement `ToRedacted`: they carry raw application data without choosing a
 logging format.
+
+`BypassDisplayRedaction<String>` is a deliberate replacement with a broader
+trait set. Migrating to it changes `Debug`: it delegates to the inner
+`Display`, so a newline is emitted literally and the tuple name and quotes are
+absent. If you deny deprecation warnings, existing uses stop compiling. Check
+any `Debug` output your callers rely on when replacing the wrapper.
 
 ## Migrating a local compatibility wrapper
 
@@ -274,8 +397,8 @@ cannot be policy-annotated because redaction may need to produce zero.
 
 Supported containers are walked automatically. Policy annotations recurse
 through options, sequences, arrays, results, maps, and sets. Map keys are not
-redacted. Generated formatting invokes each key's compact or alternate `Debug`
-implementation exactly once.
+redacted. Each rendered map key uses its compact or alternate `Debug`
+implementation once.
 
 Built-in mapper and formatter support covers:
 
@@ -310,8 +433,10 @@ segment. IPv4-mapped IPv6 uses the IPv4 rule. `SocketAddr` preserves its port.
 Under the `redaction` feature, `serde_json::Value` is an opaque traversal leaf.
 It redacts to `Value::String("[REDACTED]")` during `.redact()` and adapters that
 invoke it, even when unannotated. Generated `Debug` remains annotation-driven.
-`redaction` is a default feature and now pulls in `serde` and `serde_json`;
-`json` is kept as a compatibility alias that enables it.
+`redaction` is a default feature and pulls in `serde` and `serde_json`.
+The `json` feature remains a compatibility alias for `redaction`; use
+`redaction` in new manifests, while existing `json` selections continue to
+enable the same capability even with default features disabled.
 
 The API trait implementation lists are authoritative for individual types and
 feature gates.
@@ -319,21 +444,16 @@ feature gates.
 ## Advanced derive options
 
 Most types need no `#[redactable(...)]` field option. The derive macros expose
-three narrow overrides for shapes that procedural macros cannot infer on stable
-Rust:
+one narrow override for a shape that procedural macros cannot infer on stable
+Rust: `recursive` suppresses a cyclic inferred bound on a recursive field. It
+applies only to fields.
 
-- `recursive` suppresses a cyclic inferred bound on a recursive field.
-- `generated_formatting` selects the library formatter for an alias-hidden
-  built-in container.
-- `legacy_formatting` selects a custom `PolicyApplicableRef` projection.
-
-These three options apply only to fields, and the formatting options require
-`#[sensitive(Policy)]` on the same field. `legacy_formatting` inherits the
-custom projection's `Clone` and `RefCell` behavior. Generated text/secret
-formatting borrows map keys. Custom `PolicyApplicableRef` leaves used directly
-by `SensitiveDisplay` must also implement the formatting companion described in
-the [`SensitiveDisplay` API
-documentation](https://docs.rs/redactable/latest/redactable/derive.SensitiveDisplay.html).
+The former `legacy_formatting` and `generated_formatting` options were removed.
+Every `#[sensitive(Policy)]` template field now formats through one borrowed
+route, and the derive reports a migration error if either option is still
+present. Generated text/secret formatting borrows map keys. A custom leaf used
+by `SensitiveDisplay` implements `PolicyFormat`, described
+under [Custom policy formatting](#custom-policy-formatting).
 
 Direct generic calls to the legacy `PolicyApplicable` methods require
 `P::Kind: RecursivePolicyKind`. Use the kind-aware `apply_policy` and
@@ -360,9 +480,7 @@ nested `Sensitive` type.
 
 **Code-generation helpers are per-field, with no exception.** Container options,
 container-level `#[not_sensitive]`, and `#[redactable(...)]` on variants are
-rejected, and each rejection names the field placement that would be valid. The
-removed `#[redactable(output = json)]` has its own migration diagnostic:
-`Sensitive` and `SensitiveDual` now produce JSON without it.
+rejected, and each rejection names the field placement that would be valid.
 
 **Sets can collapse:** redacted elements are collected back into a set. If
 several values become equal, the result shrinks. Use a `Vec` when cardinality
@@ -384,6 +502,12 @@ Valid paths beneath absent options, empty collections, or scalar parents can rem
 Include populated samples to exercise those paths.
 
 ## Upgrading
+
+For the 0.14 upgrade, remove `#[redactable(legacy_formatting)]` and
+`#[redactable(generated_formatting)]`. Migrate custom policy-formatting
+implementations as described in [Migration from 0.13](../CHANGELOG.md#migration-from-013).
+`BypassTextRedaction` is deprecated; check its
+[replacement's formatting differences](#wrapper-contracts) before migrating.
 
 In 0.13, generic derives check their required field operations at the type
 definition. Add the bounds described in [Generic declarations](#generic-declarations)

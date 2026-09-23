@@ -1,6 +1,6 @@
 //! Sink-value contracts: what each producer builds, and what both accessors answer.
 
-use redactable::{BypassDebugRedaction, BypassDisplayRedaction, BypassTextRedaction, ToRedacted};
+use redactable::{BypassDebugRedaction, BypassDisplayRedaction, ToRedacted};
 
 #[test]
 fn explicit_text_values_preserve_bytes_and_debug() {
@@ -12,9 +12,12 @@ fn explicit_text_values_preserve_bytes_and_debug() {
         BypassDebugRedaction("public").to_redacted().text(),
         "\"public\""
     );
-    assert_eq!(BypassTextRedaction(String::new()).to_redacted().text(), "");
     assert_eq!(
-        BypassTextRedaction("declined".into()).to_redacted().text(),
+        BypassDisplayRedaction(String::new()).to_redacted().text(),
+        ""
+    );
+    assert_eq!(
+        BypassDisplayRedaction("declined").to_redacted().text(),
         "declined"
     );
 }
@@ -23,7 +26,7 @@ mod json_value {
     use std::collections::{BTreeMap, BTreeSet};
 
     use redactable::{
-        BypassJsonRedaction, BypassTextRedaction, Redactable, RedactableMapper,
+        BypassDisplayRedaction, BypassJsonRedaction, Redactable, RedactableMapper,
         RedactableWithFormatter, RedactableWithMapper, RedactedValue, Secret, Sensitive,
         SensitiveDual, ToRedacted,
     };
@@ -87,13 +90,13 @@ mod json_value {
 
     #[test]
     fn text_only_and_json_only_values_adapt_instead_of_refusing() {
-        let text = BypassTextRedaction("declined".into()).to_redacted();
+        let text = BypassDisplayRedaction("declined").to_redacted();
         assert_eq!(text.text(), "declined");
         assert_eq!(text.json(), json!({"message": "declined"}));
         // Not a bare JSON string, which is what the 0.11 encoding produced.
         assert_ne!(text.json(), json!("declined"));
         assert_eq!(
-            BypassTextRedaction(String::new()).to_redacted().json(),
+            BypassDisplayRedaction(String::new()).to_redacted().json(),
             json!({"message": ""})
         );
 
@@ -113,10 +116,8 @@ mod json_value {
     fn selected_value_assertion_rejects_blank_missing_and_placeholder_results() {
         use std::panic::catch_unwind;
 
-        assert!(catch_unwind(|| assert_decision(&BypassTextRedaction(String::new()))).is_err());
-        assert!(
-            catch_unwind(|| assert_decision(&BypassTextRedaction("[REDACTED]".into()))).is_err()
-        );
+        assert!(catch_unwind(|| assert_decision(&BypassDisplayRedaction(String::new()))).is_err());
+        assert!(catch_unwind(|| assert_decision(&BypassDisplayRedaction("[REDACTED]"))).is_err());
         for wrong in [
             json!({"approved":true}),
             json!({"owner":"[REDACTED]"}),
@@ -277,7 +278,7 @@ mod slog_value {
     };
 
     use redactable::{
-        BypassJsonRedaction, BypassTextRedaction, RedactableWithFormatter, RedactedValue,
+        BypassDisplayRedaction, BypassJsonRedaction, RedactableWithFormatter, RedactedValue,
         ToRedacted, slog::SlogRedactedExt,
     };
     use serde_json::json;
@@ -302,7 +303,7 @@ mod slog_value {
             if self.json {
                 BypassJsonRedaction(&json!({"selected":true})).to_redacted()
             } else {
-                BypassTextRedaction("SELECTED".into()).to_redacted()
+                BypassDisplayRedaction("SELECTED").to_redacted()
             }
         }
     }

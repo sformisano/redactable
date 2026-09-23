@@ -9,7 +9,6 @@
 //! - [`BypassDisplayRedaction`]: log the value's `Display` form as is
 //! - [`BypassDebugRedaction`]: log the value's `Debug` form as is
 //! - [`BypassJsonRedaction`]: log the value's `Serialize` form as is
-//! - [`BypassTextRedaction`]: log author-composed text
 //!
 //! Every member is a tuple struct with a public field, so construction is
 //! `BypassDebugRedaction(&value)`. There is no eligibility bound and no reason
@@ -98,6 +97,10 @@ where
 /// to log. Construct it over a reference for a borrowed logging view
 /// (`BypassDisplayRedaction(&value)`) or over the value itself when the wrapper
 /// must own it. Consume an owned wrapper with [`Self::into_inner`].
+///
+/// Use `BypassDisplayRedaction(text)` for summary text you have reviewed as
+/// public. The wrapper performs no redaction or check that every field appears
+/// in the summary. Empty text is allowed.
 ///
 /// # Raw serialization warning
 ///
@@ -317,9 +320,14 @@ where
 /// This wrapper performs no redaction and makes no promise that the summary
 /// includes every field. Empty summaries are allowed; assert the intended
 /// summary separately in logging tests.
+#[deprecated(
+    since = "0.14.0",
+    note = "use BypassDisplayRedaction for new code; its Debug output and trait support differ"
+)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct BypassTextRedaction(pub String);
 
+#[allow(deprecated)]
 impl ToRedacted for BypassTextRedaction {
     fn to_redacted(&self) -> RedactedValue {
         RedactedValue::from_text(self.0.clone())

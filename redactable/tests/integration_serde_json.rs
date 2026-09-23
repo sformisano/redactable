@@ -3,8 +3,6 @@
 //! serde_json::Value is treated as an opaque leaf type. Supported recursive policy application
 //! fully redacts it to Value::String("[REDACTED]"). This is safe-by-default.
 
-#![cfg(feature = "json")]
-
 mod policy_application {
     use redactable::{Redactable, Secret, Sensitive, Token};
     use serde_json::{Value, json};

@@ -2,39 +2,31 @@
 //!
 //! This module handles attributes on the struct/enum itself, not on fields.
 
-use syn::{Attribute, Error, Meta, Result};
+use syn::{Attribute, Data, DataEnum, DataStruct, Error, Meta, Result, spanned::Spanned};
 
-/// The advice both surviving container branches give: `#[redactable(...)]`
+/// The advice every container-level rejection gives: `#[redactable(...)]`
 /// carries field options, so it belongs on the field it describes.
-const FIELD_PLACEMENT: &str = "`#[redactable(...)]` options belong on fields; annotate the specific recursive or legacy-formatted field";
+const FIELD_PLACEMENT: &str =
+    "`#[redactable(...)]` options belong on fields; annotate the specific recursive field";
 
-/// The migration message for the removed structured-output selection.
-const REMOVED_OUTPUT: &str = "`#[redactable(output = json)]` was removed; `Sensitive` and `SensitiveDual` always produce JSON";
+/// The two data shapes a derive expands; unions are rejected once, up front.
+pub(crate) enum Body {
+    Struct(DataStruct),
+    Enum(DataEnum),
+}
 
-/// Rejects every container-level `#[redactable(...)]`, naming the valid fix.
-///
-/// Three branches survive, and they differ in span and in what the author
-/// actually wrote. A bare `#[redactable()]` never reaches `parse_nested_meta`
-/// (it iterates nothing for an empty token list), so dropping its check would
-/// silently accept the attribute. A non-`output` option and an empty list both
-/// name the field-placement fix, because their author never wrote `output`.
-/// Only an `output` option gets the removal message.
-pub(crate) fn reject_removed_output_option(attrs: &[Attribute]) -> Result<()> {
-    for attr in attrs {
-        if !attr.path().is_ident("redactable") {
-            continue;
+impl Body {
+    /// Classifies the input, rejecting unions with the derive's own message.
+    pub(crate) fn new(data: Data, derive: &str) -> Result<Self> {
+        match data {
+            Data::Struct(data) => Ok(Self::Struct(data)),
+            Data::Enum(data) => Ok(Self::Enum(data)),
+            Data::Union(union) => Err(Error::new(
+                union.union_token.span(),
+                format!("`{derive}` cannot be derived for unions"),
+            )),
         }
-        if matches!(&attr.meta, Meta::List(list) if list.tokens.is_empty()) {
-            return Err(Error::new_spanned(attr, FIELD_PLACEMENT));
-        }
-        attr.parse_nested_meta(|meta| {
-            if meta.path.is_ident("output") {
-                return Err(meta.error(REMOVED_OUTPUT));
-            }
-            Err(meta.error(FIELD_PLACEMENT))
-        })?;
     }
-    Ok(())
 }
 
 /// Rejects field-only helpers when they are attached to a derived container.

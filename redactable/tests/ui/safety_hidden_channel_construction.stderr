@@ -7,7 +7,7 @@ error[E0308]: mismatched types
    |             arguments to this function are incorrect
    |
    = note: expected reference `&_`
-                   found enum `Value`
+                   found enum `serde_json::Value`
 note: function defined here
   --> src/redaction/output.rs
    |
@@ -22,7 +22,7 @@ error[E0061]: this function takes 1 argument but 2 arguments were supplied
   --> tests/ui/safety_hidden_channel_construction.rs:18:13
    |
 18 |     let _ = generated_redacted_dual(&arbitrary, arbitrary.clone());
-   |             ^^^^^^^^^^^^^^^^^^^^^^^             ----------------- unexpected argument #2 of type `Value`
+   |             ^^^^^^^^^^^^^^^^^^^^^^^             ----------------- unexpected argument #2 of type `serde_json::Value`
    |
 note: function defined here
   --> src/redaction/output.rs
@@ -43,10 +43,10 @@ error[E0277]: `str` has no declared redacted formatting
    |             |
    |             required by a bound introduced by this call
    |
-   = help: the trait `redactable::__private::DeclaredFormatting` is not implemented for `str`
+   = help: the trait `DeclaredFormatting` is not implemented for `str`
    = note: select `#[sensitive(Policy)]`, use a declared type, or explicitly mark the field `#[not_sensitive]`
-   = note: for a local container, derive `SensitiveDisplay` or `SensitiveDual` and declare its formatted fields; reviewed manual formatters may implement `redactable::__private::DeclaredFormatting`
-   = help: the following other types implement trait `redactable::__private::DeclaredFormatting`:
+   = note: for a local container, derive `SensitiveDisplay` or `SensitiveDual` and declare its formatted fields; reviewed manual formatters may implement `redactable::DeclaredFormatting`
+   = help: the following other types implement trait `DeclaredFormatting`:
              &T
              (T0, T1)
              (T0, T1, T2)

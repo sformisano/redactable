@@ -26,11 +26,12 @@ mod wrappers;
 
 // Re-export core traits
 // Re-export display types
-pub use display::{PolicyRedactedFormatterRef, RedactableWithFormatter, RedactedFormatterRef};
+pub use display::{RedactableWithFormatter, RedactedFormatterRef};
 // Re-export the Bypass family
+#[allow(deprecated)]
+pub use escape_hatches::BypassTextRedaction;
 pub use escape_hatches::{
     BypassDebugRedaction, BypassDisplayRedaction, BypassJsonRedaction, BypassRedactionMarker,
-    BypassTextRedaction,
 };
 pub use list::RedactedList;
 // Re-export the sink value and its producer trait
@@ -41,8 +42,9 @@ pub use output::{
 // Re-export redaction machinery
 pub use policy_formatting::{PolicyDebug, PolicyDisplay};
 pub use redact::{
-    PolicyApplicable, PolicyApplicableRef, PolicyFormattingMapper, PolicyMapper, RedactableMapper,
-    ScalarRedaction, apply_policy, apply_policy_ref, redact,
+    PolicyApplicable, PolicyApplicableRef, PolicyFormat, PolicyFormattingMapper,
+    PolicyFormattingOutput, PolicyMapper, RedactableMapper, ScalarRedaction, apply_policy,
+    apply_policy_ref, redact,
 };
 pub use traits::{Redactable, RedactableWithMapper, SensitiveWithPolicy};
 // Re-export wrapper types

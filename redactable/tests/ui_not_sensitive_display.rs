@@ -47,8 +47,6 @@ mod not_sensitive_display {
     fn direct_display_and_clone_json_keep_refcell_api_available() {
         let t = TestCases::new();
         t.pass("tests/ui/not_sensitive_display_clone_safe_ok.rs");
-        if cfg!(feature = "json") {
-            t.pass("tests/ui/not_sensitive_display_refcell_clone_ok.rs");
-        }
+        t.pass("tests/ui/not_sensitive_display_refcell_clone_ok.rs");
     }
 }

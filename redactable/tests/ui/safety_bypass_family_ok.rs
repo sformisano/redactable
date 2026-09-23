@@ -3,7 +3,7 @@
 
 use redactable::{
     BypassDebugRedaction, BypassDisplayRedaction, BypassJsonRedaction, BypassRedaction,
-    BypassRedactionMarker, BypassTextRedaction, Redactable, ToRedacted,
+    BypassRedactionMarker, Redactable, ToRedacted,
 };
 
 fn sink<T: ToRedacted>(value: &T) -> String {
@@ -23,14 +23,15 @@ fn main() {
         "(\"public\", 7)"
     );
     assert_eq!(sink(&BypassJsonRedaction(&raw)), "{\"public\":true}");
-    assert_eq!(sink(&BypassTextRedaction(String::from("summary"))), "summary");
-    assert_eq!(sink(&BypassTextRedaction(String::new())), "");
+    // Author-composed summary text, including empty text, is the Display member.
+    assert_eq!(sink(&BypassDisplayRedaction(String::from("summary"))), "summary");
+    assert_eq!(sink(&BypassDisplayRedaction(String::new())), "");
 
-    // The two members whose fields were private now construct by tuple syntax.
+    // The JSON member, whose field was private, constructs by tuple syntax.
     let json_bypass = BypassJsonRedaction(&raw);
     assert_eq!(json_bypass.0, &raw);
     assert_eq!(json_bypass.inner(), &raw);
-    let text_bypass = BypassTextRedaction(String::from("named"));
+    let text_bypass = BypassDisplayRedaction(String::from("named"));
     assert_eq!(text_bypass.0, "named");
 
     // A foreign value satisfies a `Redactable` bound without a producer.

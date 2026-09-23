@@ -1,14 +1,14 @@
 //! Both accessors always answer, whichever representation was built.
 
-use redactable::{BypassJsonRedaction, BypassTextRedaction, ToRedacted};
+use redactable::{BypassDisplayRedaction, BypassJsonRedaction, ToRedacted};
 use serde_json::json;
 
 fn main() {
-    let text = BypassTextRedaction(String::from("summary")).to_redacted();
+    let text = BypassDisplayRedaction(String::from("summary")).to_redacted();
     assert_eq!(text.text(), "summary");
     assert_eq!(text.json(), json!({"message": "summary"}));
 
-    let empty = BypassTextRedaction(String::new()).to_redacted();
+    let empty = BypassDisplayRedaction(String::new()).to_redacted();
     assert_eq!(empty.text(), "");
     assert_eq!(empty.json(), json!({"message": ""}));
 

@@ -1,0 +1,59 @@
+error[E0277]: `BypassTextRedaction` doesn't implement `std::fmt::Display`
+  --> tests/ui/legacy_text_display_serde_rejected.rs:13:21
+   |
+13 |     needs_display::<BypassTextRedaction>();
+   |                     ^^^^^^^^^^^^^^^^^^^ the trait `std::fmt::Display` is not implemented for `BypassTextRedaction`
+   |
+note: required by a bound in `needs_display`
+  --> tests/ui/legacy_text_display_serde_rejected.rs:8:21
+   |
+ 8 | fn needs_display<T: Display>() {}
+   |                     ^^^^^^^ required by this bound in `needs_display`
+
+error[E0277]: the trait bound `BypassTextRedaction: serde::Serialize` is not satisfied
+  --> tests/ui/legacy_text_display_serde_rejected.rs:14:23
+   |
+14 |     needs_serialize::<BypassTextRedaction>();
+   |                       ^^^^^^^^^^^^^^^^^^^ the trait `Serialize` is not implemented for `BypassTextRedaction`
+   |
+   = note: for local types consider adding `#[derive(serde::Serialize)]` to your `BypassTextRedaction` type
+   = note: for types from other crates check whether the crate offers a `serde` feature flag
+   = help: the following other types implement trait `Serialize`:
+             &'a T
+             &'a mut T
+             ()
+             (T,)
+             (T0, T1)
+             (T0, T1, T2)
+             (T0, T1, T2, T3)
+             (T0, T1, T2, T3, T4)
+           and $N others
+note: required by a bound in `needs_serialize`
+  --> tests/ui/legacy_text_display_serde_rejected.rs:9:23
+   |
+ 9 | fn needs_serialize<T: Serialize>() {}
+   |                       ^^^^^^^^^ required by this bound in `needs_serialize`
+
+error[E0277]: the trait bound `BypassTextRedaction: serde::Deserialize<'de>` is not satisfied
+  --> tests/ui/legacy_text_display_serde_rejected.rs:15:25
+   |
+15 |     needs_deserialize::<BypassTextRedaction>();
+   |                         ^^^^^^^^^^^^^^^^^^^ the trait `for<'de> Deserialize<'de>` is not implemented for `BypassTextRedaction`
+   |
+   = note: for local types consider adding `#[derive(serde::Deserialize)]` to your `BypassTextRedaction` type
+   = note: for types from other crates check whether the crate offers a `serde` feature flag
+   = help: the following other types implement trait `Deserialize<'de>`:
+             &'a Path
+             &'a [u8]
+             &'a str
+             ()
+             (T,)
+             (T0, T1)
+             (T0, T1, T2)
+             (T0, T1, T2, T3)
+           and $N others
+note: required by a bound in `needs_deserialize`
+  --> tests/ui/legacy_text_display_serde_rejected.rs:10:25
+   |
+10 | fn needs_deserialize<T: for<'de> Deserialize<'de>>() {}
+   |                         ^^^^^^^^^^^^^^^^^^^^^^^^^ required by this bound in `needs_deserialize`

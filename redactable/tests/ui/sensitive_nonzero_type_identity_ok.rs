@@ -1,10 +1,10 @@
 use std::num::{NonZeroU8, NonZeroU16 as ImportedNonZero};
 
-use redactable::__private::PolicyApplicableRefForFormatting;
 use redactable::policy::RecursivePolicyKind;
 use redactable::{
-    PolicyApplicable, PolicyApplicableRef, Redactable, RedactableMapper, RedactableWithFormatter,
-    RedactionPolicy, Sensitive, SensitiveDisplay,
+    PolicyApplicable, PolicyApplicableRef, PolicyFormat,
+    PolicyFormattingOutput, Redactable, RedactableMapper, RedactableWithFormatter, RedactionPolicy,
+    Sensitive, SensitiveDisplay,
 };
 
 type NonZeroU32 = String;
@@ -37,7 +37,18 @@ impl PolicyApplicableRef for NonZeroU64 {
     }
 }
 
-impl PolicyApplicableRefForFormatting for NonZeroU64 {}
+impl PolicyFormat for NonZeroU64 {
+    type Output = String;
+
+    fn apply_policy_for_formatting<P, M>(&self, _mapper: &M) -> PolicyFormattingOutput<String>
+    where
+        P: RedactionPolicy,
+        P::Kind: RecursivePolicyKind,
+        M: RedactableMapper,
+    {
+        PolicyFormattingOutput::Value("custom-nonzero".into())
+    }
+}
 
 #[derive(Clone, Sensitive)]
 #[derive(serde::Serialize)]

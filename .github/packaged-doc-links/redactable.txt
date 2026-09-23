@@ -4,13 +4,15 @@
 # .github/scripts/check-packaged-doc-links.py --regenerate.
 # Counts are load-bearing: deleting one of several identical links is a real
 # change to the shipped document and must show up as a diff here.
+CHANGELOG.md	docs/reference.md#custom-policy-formatting	1
+CHANGELOG.md	docs/reference.md#wrapper-contracts	1
 CONTRIBUTING.md	CHANGELOG.md	1
 CONTRIBUTING.md	README.md	1
 CONTRIBUTING.md	docs/reference.md	1
 README.md	#choosing-what-to-use	2
 README.md	#custom-policies	1
 README.md	#design-principles	1
-README.md	#foreign-types	2
+README.md	#foreign-types	3
 README.md	#getting-started	1
 README.md	#how-sensitive-works	1
 README.md	#how-sensitivedisplay-works	1
@@ -22,8 +24,9 @@ README.md	#when-you-need-both-sensitivedual	2
 README.md	#wrapper-types	1
 README.md	CONTRIBUTING.md	1
 README.md	docs/reference.md	2
+README.md	docs/reference.md#custom-policy-formatting	2
 README.md	docs/reference.md#generic-declarations	1
-README.md	docs/reference.md#manual-formatters	1
+README.md	docs/reference.md#manual-formatters	2
 README.md	docs/reference.md#output-and-adapter-contracts	1
 README.md	docs/reference.md#precedence-and-edge-cases	1
 README.md	docs/reference.md#supported-types	1
@@ -32,6 +35,7 @@ README.md	docs/reference.md#upgrading	1
 README.md	docs/reference.md#what-each-derive-generates	1
 README.md	docs/reference.md#wrapper-contracts	1
 docs/reference.md	#advanced-derive-options	1
+docs/reference.md	#custom-policy-formatting	2
 docs/reference.md	#generic-declarations	2
 docs/reference.md	#low-level-traversal	1
 docs/reference.md	#manual-formatters	1
@@ -43,6 +47,9 @@ docs/reference.md	#testing-redacted-output	1
 docs/reference.md	#types-that-implement-drop	1
 docs/reference.md	#upgrading	1
 docs/reference.md	#what-each-derive-generates	1
-docs/reference.md	#wrapper-contracts	1
+docs/reference.md	#wrapper-contracts	2
 docs/reference.md	../CHANGELOG.md#migration-from-011	1
+docs/reference.md	../CHANGELOG.md#migration-from-013	1
 docs/reference.md	../README.md	1
+docs/reference.md	../README.md#custom-policies	1
+docs/reference.md	../README.md#foreign-types	1

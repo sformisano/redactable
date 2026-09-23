@@ -1,0 +1,65 @@
+error: `#[redactable(...)]` options belong on fields; annotate the specific recursive field
+ --> tests/ui/safety_container_redactable_rejected.rs:3:1
+  |
+3 | #[redactable()]
+  | ^^^^^^^^^^^^^^^
+
+error: `#[redactable(...)]` options belong on fields; annotate the specific recursive field
+ --> tests/ui/safety_container_redactable_rejected.rs:6:1
+  |
+6 | #[redactable(output = text)]
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error: `#[redactable(...)]` options belong on fields; annotate the specific recursive field
+ --> tests/ui/safety_container_redactable_rejected.rs:9:1
+  |
+9 | #[redactable(output = "json")]
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error: `#[redactable(...)]` options belong on fields; annotate the specific recursive field
+  --> tests/ui/safety_container_redactable_rejected.rs:12:1
+   |
+12 | #[redactable(output = json, output = json)]
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error: `#[redactable(...)]` options belong on fields; annotate the specific recursive field
+  --> tests/ui/safety_container_redactable_rejected.rs:15:1
+   |
+15 | #[redactable(output = json)]
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error: `#[redactable(...)]` options belong on fields; annotate the specific recursive field
+  --> tests/ui/safety_container_redactable_rejected.rs:19:1
+   |
+19 | #[redactable(output = json)]
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error: `#[redactable(...)]` is not supported on non-sensitive derives; annotate the specific recursive field of a `Sensitive` type
+  --> tests/ui/safety_container_redactable_rejected.rs:23:1
+   |
+23 | #[redactable(output = json)]
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error: `#[redactable(...)]` is not supported on non-sensitive derives; annotate the specific recursive field of a `Sensitive` type
+  --> tests/ui/safety_container_redactable_rejected.rs:26:1
+   |
+26 | #[redactable(output = json)]
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error: `#[redactable(...)]` options belong on fields; annotate the specific recursive field
+  --> tests/ui/safety_container_redactable_rejected.rs:29:1
+   |
+29 | #[redactable(output = json)]
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error: unknown redactable field option; expected `recursive`
+  --> tests/ui/safety_container_redactable_rejected.rs:34:18
+   |
+34 |     #[redactable(output = json)]
+   |                  ^^^^^^
+
+error: `#[redactable(...)]` is not supported on enum variants; annotate the specific field
+  --> tests/ui/safety_container_redactable_rejected.rs:40:5
+   |
+40 |     #[redactable(output = json)]
+   |     ^

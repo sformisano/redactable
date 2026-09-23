@@ -2,10 +2,10 @@
 //!
 //! [`PolicyApplicableRef`] implementations apply a policy through `&self`,
 //! producing owned redacted output without consuming the source container.
-//! [`PolicyApplicableRefForGeneratedFormatting`] implementations render the
+//! [`PolicyFormat`] implementations render the
 //! same container family for generated `Display`/`Debug` output, using
 //! [`PolicyFormattingOutput`] to distinguish rendered values from
-//! pass-through borrows. Both families are written out explicitly per
+//! borrow conflicts. Both families are written out explicitly per
 //! container — never blanket — so unsupported borrowed shapes are rejected
 //! at compile time rather than silently passed through.
 
@@ -16,14 +16,11 @@ use std::{
     sync::Arc,
 };
 
-use crate::{
-    __private::{PolicyApplicableRefForGeneratedFormatting, PolicyFormattingOutput},
-    policy::{RecursivePolicyKind, RedactionPolicy},
-};
+use crate::policy::{RecursivePolicyKind, RedactionPolicy};
 
 use super::core::{
-    PolicyApplicableRef, RedactableMapper, apply_child_policy_ref_for_formatting,
-    collect_policy_formatting,
+    PolicyApplicableRef, PolicyFormat, PolicyFormattingOutput, RedactableMapper,
+    apply_child_policy_ref_for_formatting, collect_policy_formatting,
 };
 
 // =============================================================================
@@ -46,16 +43,13 @@ where
     }
 }
 
-impl<T> PolicyApplicableRefForGeneratedFormatting for Option<T>
+impl<T> PolicyFormat for Option<T>
 where
-    T: PolicyApplicableRefForGeneratedFormatting,
+    T: PolicyFormat,
 {
-    type FormattingOutput = Option<T::FormattingOutput>;
+    type Output = Option<T::Output>;
 
-    fn apply_policy_ref_for_generated_formatting<P, M>(
-        &self,
-        mapper: &M,
-    ) -> PolicyFormattingOutput<Self::FormattingOutput>
+    fn apply_policy_for_formatting<P, M>(&self, mapper: &M) -> PolicyFormattingOutput<Self::Output>
     where
         P: RedactionPolicy,
         P::Kind: RecursivePolicyKind,
@@ -86,16 +80,13 @@ where
     }
 }
 
-impl<T> PolicyApplicableRefForGeneratedFormatting for Vec<T>
+impl<T> PolicyFormat for Vec<T>
 where
-    T: PolicyApplicableRefForGeneratedFormatting,
+    T: PolicyFormat,
 {
-    type FormattingOutput = Vec<T::FormattingOutput>;
+    type Output = Vec<T::Output>;
 
-    fn apply_policy_ref_for_generated_formatting<P, M>(
-        &self,
-        mapper: &M,
-    ) -> PolicyFormattingOutput<Self::FormattingOutput>
+    fn apply_policy_for_formatting<P, M>(&self, mapper: &M) -> PolicyFormattingOutput<Self::Output>
     where
         P: RedactionPolicy,
         P::Kind: RecursivePolicyKind,
@@ -126,16 +117,13 @@ where
     }
 }
 
-impl<T> PolicyApplicableRefForGeneratedFormatting for VecDeque<T>
+impl<T> PolicyFormat for VecDeque<T>
 where
-    T: PolicyApplicableRefForGeneratedFormatting,
+    T: PolicyFormat,
 {
-    type FormattingOutput = VecDeque<T::FormattingOutput>;
+    type Output = VecDeque<T::Output>;
 
-    fn apply_policy_ref_for_generated_formatting<P, M>(
-        &self,
-        mapper: &M,
-    ) -> PolicyFormattingOutput<Self::FormattingOutput>
+    fn apply_policy_for_formatting<P, M>(&self, mapper: &M) -> PolicyFormattingOutput<Self::Output>
     where
         P: RedactionPolicy,
         P::Kind: RecursivePolicyKind,
@@ -164,16 +152,13 @@ where
     }
 }
 
-impl<T, const N: usize> PolicyApplicableRefForGeneratedFormatting for [T; N]
+impl<T, const N: usize> PolicyFormat for [T; N]
 where
-    T: PolicyApplicableRefForGeneratedFormatting,
+    T: PolicyFormat,
 {
-    type FormattingOutput = [T::FormattingOutput; N];
+    type Output = [T::Output; N];
 
-    fn apply_policy_ref_for_generated_formatting<P, M>(
-        &self,
-        mapper: &M,
-    ) -> PolicyFormattingOutput<Self::FormattingOutput>
+    fn apply_policy_for_formatting<P, M>(&self, mapper: &M) -> PolicyFormattingOutput<Self::Output>
     where
         P: RedactionPolicy,
         P::Kind: RecursivePolicyKind,
@@ -211,16 +196,13 @@ where
     }
 }
 
-impl<T> PolicyApplicableRefForGeneratedFormatting for Box<T>
+impl<T> PolicyFormat for Box<T>
 where
-    T: PolicyApplicableRefForGeneratedFormatting,
+    T: PolicyFormat,
 {
-    type FormattingOutput = Box<T::FormattingOutput>;
+    type Output = Box<T::Output>;
 
-    fn apply_policy_ref_for_generated_formatting<P, M>(
-        &self,
-        mapper: &M,
-    ) -> PolicyFormattingOutput<Self::FormattingOutput>
+    fn apply_policy_for_formatting<P, M>(&self, mapper: &M) -> PolicyFormattingOutput<Self::Output>
     where
         P: RedactionPolicy,
         P::Kind: RecursivePolicyKind,
@@ -246,16 +228,13 @@ where
     }
 }
 
-impl<T> PolicyApplicableRefForGeneratedFormatting for Arc<T>
+impl<T> PolicyFormat for Arc<T>
 where
-    T: PolicyApplicableRefForGeneratedFormatting,
+    T: PolicyFormat,
 {
-    type FormattingOutput = Arc<T::FormattingOutput>;
+    type Output = Arc<T::Output>;
 
-    fn apply_policy_ref_for_generated_formatting<P, M>(
-        &self,
-        mapper: &M,
-    ) -> PolicyFormattingOutput<Self::FormattingOutput>
+    fn apply_policy_for_formatting<P, M>(&self, mapper: &M) -> PolicyFormattingOutput<Self::Output>
     where
         P: RedactionPolicy,
         P::Kind: RecursivePolicyKind,
@@ -281,16 +260,13 @@ where
     }
 }
 
-impl<T> PolicyApplicableRefForGeneratedFormatting for Rc<T>
+impl<T> PolicyFormat for Rc<T>
 where
-    T: PolicyApplicableRefForGeneratedFormatting,
+    T: PolicyFormat,
 {
-    type FormattingOutput = Rc<T::FormattingOutput>;
+    type Output = Rc<T::Output>;
 
-    fn apply_policy_ref_for_generated_formatting<P, M>(
-        &self,
-        mapper: &M,
-    ) -> PolicyFormattingOutput<Self::FormattingOutput>
+    fn apply_policy_for_formatting<P, M>(&self, mapper: &M) -> PolicyFormattingOutput<Self::Output>
     where
         P: RedactionPolicy,
         P::Kind: RecursivePolicyKind,
@@ -316,16 +292,13 @@ where
     }
 }
 
-impl<T> PolicyApplicableRefForGeneratedFormatting for RefCell<T>
+impl<T> PolicyFormat for RefCell<T>
 where
-    T: PolicyApplicableRefForGeneratedFormatting,
+    T: PolicyFormat,
 {
-    type FormattingOutput = RefCell<T::FormattingOutput>;
+    type Output = RefCell<T::Output>;
 
-    fn apply_policy_ref_for_generated_formatting<P, M>(
-        &self,
-        mapper: &M,
-    ) -> PolicyFormattingOutput<Self::FormattingOutput>
+    fn apply_policy_for_formatting<P, M>(&self, mapper: &M) -> PolicyFormattingOutput<Self::Output>
     where
         P: RedactionPolicy,
         P::Kind: RecursivePolicyKind,
@@ -358,17 +331,14 @@ where
     }
 }
 
-impl<T> PolicyApplicableRefForGeneratedFormatting for Cell<T>
+impl<T> PolicyFormat for Cell<T>
 where
-    T: PolicyApplicableRefForGeneratedFormatting + Copy,
-    T::FormattingOutput: Copy,
+    T: PolicyFormat + Copy,
+    T::Output: Copy,
 {
-    type FormattingOutput = Cell<T::FormattingOutput>;
+    type Output = Cell<T::Output>;
 
-    fn apply_policy_ref_for_generated_formatting<P, M>(
-        &self,
-        mapper: &M,
-    ) -> PolicyFormattingOutput<Self::FormattingOutput>
+    fn apply_policy_for_formatting<P, M>(&self, mapper: &M) -> PolicyFormattingOutput<Self::Output>
     where
         P: RedactionPolicy,
         P::Kind: RecursivePolicyKind,
@@ -398,17 +368,14 @@ where
     }
 }
 
-impl<T, E> PolicyApplicableRefForGeneratedFormatting for Result<T, E>
+impl<T, E> PolicyFormat for Result<T, E>
 where
-    T: PolicyApplicableRefForGeneratedFormatting,
-    E: PolicyApplicableRefForGeneratedFormatting,
+    T: PolicyFormat,
+    E: PolicyFormat,
 {
-    type FormattingOutput = Result<T::FormattingOutput, E::FormattingOutput>;
+    type Output = Result<T::Output, E::Output>;
 
-    fn apply_policy_ref_for_generated_formatting<P, M>(
-        &self,
-        mapper: &M,
-    ) -> PolicyFormattingOutput<Self::FormattingOutput>
+    fn apply_policy_for_formatting<P, M>(&self, mapper: &M) -> PolicyFormattingOutput<Self::Output>
     where
         P: RedactionPolicy,
         P::Kind: RecursivePolicyKind,

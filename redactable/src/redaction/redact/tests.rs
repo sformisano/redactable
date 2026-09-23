@@ -7,9 +7,8 @@ use std::{
 
 use super::{PolicyApplicableRef, apply_policy, apply_policy_ref, redact};
 use crate::{
-    __private::{PolicyApplicableRefForGeneratedFormatting, PolicyFormattingOutput, PolicyMapper},
-    RedactableMapper, RedactionPolicy, Secret, Sensitive,
-    policy::RecursivePolicyKind,
+    __private::PolicyMapper, PolicyFormat, PolicyFormattingOutput, RedactableMapper,
+    RedactionPolicy, Secret, Sensitive, policy::RecursivePolicyKind,
 };
 
 #[derive(Clone, Copy, Eq, Hash, Ord, PartialEq, PartialOrd)]
@@ -32,13 +31,10 @@ impl PolicyApplicableRef for SimulatedBorrowConflict {
     }
 }
 
-impl PolicyApplicableRefForGeneratedFormatting for SimulatedBorrowConflict {
-    type FormattingOutput = &'static str;
+impl PolicyFormat for SimulatedBorrowConflict {
+    type Output = &'static str;
 
-    fn apply_policy_ref_for_generated_formatting<P, M>(
-        &self,
-        _mapper: &M,
-    ) -> PolicyFormattingOutput<Self::FormattingOutput>
+    fn apply_policy_for_formatting<P, M>(&self, _mapper: &M) -> PolicyFormattingOutput<Self::Output>
     where
         P: RedactionPolicy,
         P::Kind: RecursivePolicyKind,
@@ -50,10 +46,10 @@ impl PolicyApplicableRefForGeneratedFormatting for SimulatedBorrowConflict {
 
 fn assert_formatting_conflict_propagates<T>(value: &T)
 where
-    T: PolicyApplicableRefForGeneratedFormatting,
+    T: PolicyFormat,
 {
     assert!(matches!(
-        value.apply_policy_ref_for_generated_formatting::<Secret, _>(&PolicyMapper),
+        value.apply_policy_for_formatting::<Secret, _>(&PolicyMapper),
         PolicyFormattingOutput::Borrowed
     ));
 }

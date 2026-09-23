@@ -5,4 +5,4 @@ edition = "2024"
 publish = false
 
 [dependencies]
-safe = { package = "redactable", path = "../../../redactable", features = ["json"] }
+safe = { package = "redactable", path = "../../../redactable", features = ["redaction"] }

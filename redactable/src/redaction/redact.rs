@@ -37,7 +37,8 @@ mod sets;
 mod tests;
 
 pub use core::{
-    PolicyApplicable, PolicyApplicableRef, PolicyFormattingMapper, PolicyMapper, RedactableMapper,
-    ScalarRedaction, apply_policy, apply_policy_ref, redact,
+    PolicyApplicable, PolicyApplicableRef, PolicyFormat, PolicyFormattingMapper,
+    PolicyFormattingOutput, PolicyMapper, RedactableMapper, ScalarRedaction, apply_policy,
+    apply_policy_ref, redact,
 };
 pub use maps::PolicyMapOutput;

@@ -4,14 +4,14 @@ error[E0277]: `Manual` has no declared redacted formatting
   |     manual: Manual,
   |             ^^^^^^ this formatted field needs a redaction declaration
   |
-help: the trait `redactable::__private::DeclaredFormatting` is not implemented for `Manual`
+help: the trait `DeclaredFormatting` is not implemented for `Manual`
  --> tests/ui/safety_missing_companion.rs
   |
   | struct Manual;
   | ^^^^^^^^^^^^^
   = note: select `#[sensitive(Policy)]`, use a declared type, or explicitly mark the field `#[not_sensitive]`
-  = note: for a local container, derive `SensitiveDisplay` or `SensitiveDual` and declare its formatted fields; reviewed manual formatters may implement `redactable::__private::DeclaredFormatting`
-  = help: the following other types implement trait `redactable::__private::DeclaredFormatting`:
+  = note: for a local container, derive `SensitiveDisplay` or `SensitiveDual` and declare its formatted fields; reviewed manual formatters may implement `redactable::DeclaredFormatting`
+  = help: the following other types implement trait `DeclaredFormatting`:
             &T
             (T0, T1)
             (T0, T1, T2)

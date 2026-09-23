@@ -13,11 +13,11 @@
 //! the sibling modules — every type family opts in explicitly so that
 //! unsupported shapes fail closed at compile time.
 
+use std::fmt::{Debug, Formatter, Result as FmtResult};
+
 use crate::{
-    __private::{
-        PolicyApplicableRefForGeneratedFormatting, PolicyField, PolicyFieldRef,
-        PolicyFormattingOutput,
-    },
+    __private::{PolicyField, PolicyFieldRef},
+    RedactableWithFormatter,
     policy::{RecursivePolicyKind, RedactionPolicy},
     redaction::traits::{RedactableWithMapper, SensitiveWithPolicy},
 };
@@ -43,14 +43,15 @@ where
 }
 
 // =============================================================================
-// RedactableMapper - Internal mapping trait
+// RedactableMapper - Mapping trait
 // =============================================================================
 
 /// Maps sensitive and non-sensitive values during traversal.
 ///
-/// This is the internal machinery that applies redaction policies.
-/// Implementations must return the same value type for `map_sensitive`.
-#[doc(hidden)]
+/// Custom [`PolicyFormat`] implementations receive a mapper through
+/// [`PolicyFormat::apply_policy_for_formatting`]. Use its mapping methods when
+/// projecting supported sensitive values or scalars. Implementations must
+/// return the same value type for `map_sensitive`.
 pub trait RedactableMapper {
     /// Maps a sensitive, string-like value.
     fn map_sensitive<V, P>(&self, value: V) -> V
@@ -142,8 +143,11 @@ impl RedactableMapper for PolicyFormattingMapper {
 // ScalarRedaction - Helper for scalar defaults
 // =============================================================================
 
-/// Helper trait to handle scalar redaction, with special cases.
-#[doc(hidden)]
+/// Defines the default redacted value for a supported scalar.
+///
+/// This is the scalar bound exposed by [`RedactableMapper::map_scalar`]. The
+/// crate implements it for its supported primitive scalar types; custom policy
+/// formatting code can use the bound without implementing new scalar behavior.
 pub trait ScalarRedaction: Default {
     #[must_use]
     fn redact(self) -> Self {
@@ -211,12 +215,9 @@ where
 ///
 /// This helper borrows its input and returns the policy field's normal reference
 /// output. Individual projections can clone, including map keys and hashers.
-/// It does not use the formatting-only borrow-conflict channel.
-/// Generated `SensitiveDisplay` implementations instead call the
-/// [`PolicyFieldRefForFormatting`](crate::__private::PolicyFieldRefForFormatting)
-/// facade, backed by
-/// [`PolicyApplicableRefForFormatting`](crate::__private::PolicyApplicableRefForFormatting)
-/// for recursive text and secret policies.
+/// It does not use the formatting-only borrow-conflict channel that generated
+/// `SensitiveDisplay` implementations take through
+/// [`PolicyFormat`] for recursive text and secret policies.
 ///
 /// # Panics
 ///
@@ -279,7 +280,8 @@ pub trait PolicyApplicable {
 ///
 /// This mirrors [`PolicyApplicable`] through a borrowed input. Individual
 /// implementations can clone parts of that input, including map keys and hashers.
-/// Custom legacy formatting can select this ordinary projection.
+/// The [`apply_policy_ref`] function uses this projection. For template
+/// formatting, implement [`PolicyFormat`] instead.
 #[doc(hidden)]
 pub trait PolicyApplicableRef {
     /// The redacted output type.
@@ -294,15 +296,176 @@ pub trait PolicyApplicableRef {
         M: RedactableMapper;
 }
 
+// =============================================================================
+// PolicyFormat - Borrowed policy application for templates
+// =============================================================================
+
+/// Result of applying a policy by reference for template formatting.
+///
+/// Generated templates render a mutably borrowed [`RefCell`](std::cell::RefCell)
+/// as `<borrowed>`. Containers propagate [`Borrowed`](Self::Borrowed) so a nested
+/// conflict reaches the template. This enum carries formatting conflicts
+/// separately from [`PolicyApplicableRef::Output`], which keeps its ordinary
+/// redacted output type.
+pub enum PolicyFormattingOutput<T> {
+    /// The policy was applied and produced the normal output shape.
+    Value(T),
+    /// The source was mutably borrowed; no value or error is retained.
+    Borrowed,
+}
+
+impl<T> PolicyFormattingOutput<T> {
+    /// Transforms a successful formatting value while preserving a borrow conflict.
+    pub fn map<U>(self, f: impl FnOnce(T) -> U) -> PolicyFormattingOutput<U> {
+        match self {
+            Self::Value(value) => PolicyFormattingOutput::Value(f(value)),
+            Self::Borrowed => PolicyFormattingOutput::Borrowed,
+        }
+    }
+}
+
+impl<T: RedactableWithFormatter> RedactableWithFormatter for PolicyFormattingOutput<T> {
+    fn fmt_redacted(&self, f: &mut Formatter<'_>) -> FmtResult {
+        match self {
+            Self::Value(value) => value.fmt_redacted(f),
+            Self::Borrowed => f.write_str("<borrowed>"),
+        }
+    }
+}
+
+impl<T: Debug> Debug for PolicyFormattingOutput<T> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
+        match self {
+            Self::Value(value) => Debug::fmt(value, f),
+            Self::Borrowed => f.write_str("<borrowed>"),
+        }
+    }
+}
+
+/// A type that can have a redaction policy applied by reference for template formatting.
+///
+/// Implement this trait for a custom leaf used as a `#[sensitive(Policy)]`
+/// field in a `SensitiveDisplay` or `SensitiveDual` template.
+///
+/// `String`,
+/// `Cow<str>`, `&str`, `serde_json::Value`, [`SensitiveValue`](crate::SensitiveValue)
+/// and the supported standard containers implement it. Containers forward to
+/// their contents and propagate a nested `RefCell` borrow conflict as
+/// [`PolicyFormattingOutput::Borrowed`].
+///
+/// # Implementor obligations
+///
+/// Apply the selected policy before returning [`PolicyFormattingOutput::Value`].
+/// The output must contain already-redacted data for every supported formatting
+/// mode: [`RedactableWithFormatter`] handles `{}` and [`Debug`] handles `{:?}`,
+/// including alternate Debug. Formatting must never fall back to the raw source.
+///
+/// Custom containers must propagate a child's [`PolicyFormattingOutput::Borrowed`]
+/// instead of unwrapping it or substituting raw data. [`PolicyFormattingOutput::map`]
+/// preserves that state while wrapping a successful projection. If a custom
+/// implementation reads a `RefCell`, use a fallible borrow and return `Borrowed`
+/// on conflict. Both placeholder modes then render `<borrowed>`.
+///
+/// Custom implementations and policies remain responsible for their own redaction
+/// correctness and panic behavior. This trait does not catch their panics or
+/// validate their output.
+///
+/// # Migrating custom formatting
+///
+/// Move previous `fmt_policy_display` and `fmt_policy_debug` overrides into an
+/// owned output newtype implementing [`RedactableWithFormatter`] and [`Debug`].
+/// Apply `P` before constructing it, and store only the redacted projection.
+/// This example preserves distinct display and Debug forms:
+///
+/// ```
+/// # #![allow(hidden_glob_reexports)]
+/// # pub use redactable::*;
+/// use std::fmt::{Debug, Formatter, Result as FmtResult};
+///
+/// use redactable::{
+///     PolicyFormat, PolicyFormattingOutput, RedactableMapper,
+///     RedactableWithFormatter, RedactionPolicy, Secret, SensitiveDisplay,
+///     policy::RecursivePolicyKind,
+/// };
+///
+/// struct AccountNumber(String);
+/// struct RedactedAccount(String);
+///
+/// impl RedactableWithFormatter for RedactedAccount {
+///     fn fmt_redacted(&self, f: &mut Formatter<'_>) -> FmtResult {
+///         write!(f, "account({})", self.0)
+///     }
+/// }
+///
+/// impl Debug for RedactedAccount {
+///     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
+///         f.debug_tuple("RedactedAccount").field(&self.0).finish()
+///     }
+/// }
+///
+/// impl PolicyFormat for AccountNumber {
+///     type Output = RedactedAccount;
+///
+///     fn apply_policy_for_formatting<P, M>(
+///         &self,
+///         _mapper: &M,
+///     ) -> PolicyFormattingOutput<RedactedAccount>
+///     where
+///         P: RedactionPolicy,
+///         P::Kind: RecursivePolicyKind,
+///         M: RedactableMapper,
+///     {
+///         PolicyFormattingOutput::Value(RedactedAccount(P::policy().apply_to(&self.0)))
+///     }
+/// }
+///
+/// #[derive(SensitiveDisplay)]
+/// #[error("{number} | {number:?}")]
+/// struct Transfer {
+///     #[sensitive(Secret)]
+///     number: Option<AccountNumber>,
+/// }
+///
+/// # fn main() {
+/// let transfer = Transfer { number: Some(AccountNumber("12345678".into())) };
+/// let rendered = transfer.redacted_display().to_string();
+/// assert_eq!(rendered, "Some(account([REDACTED])) | Some(RedactedAccount(\"[REDACTED]\"))");
+/// assert!(!rendered.contains("12345678"));
+/// # }
+/// ```
+///
+/// Implement [`PolicyApplicableRef`] as well only when the leaf must also support the
+/// [`apply_policy_ref`] function.
+#[diagnostic::on_unimplemented(
+    message = "`{Self}` cannot be formatted by reference under a redaction policy",
+    label = "this policy field has no borrowed formatting support",
+    note = "text policies format `String`, `Cow<str>`, `&str`, `serde_json::Value`, `SensitiveValue<T, P>`, and supported containers of these",
+    note = "for a generic field, declare `T: PolicyDisplay<P>` for `{{}}` or `T: PolicyDebug<P>` for `{{:?}}`",
+    note = "for a custom leaf type, implement `redactable::PolicyFormat`"
+)]
+pub trait PolicyFormat {
+    /// Already-redacted output rendered by the template placeholder.
+    type Output;
+
+    /// Applies a redaction policy through the type structure by reference.
+    ///
+    /// Return already-redacted data and propagate a child's `Borrowed` state.
+    fn apply_policy_for_formatting<P, M>(&self, mapper: &M) -> PolicyFormattingOutput<Self::Output>
+    where
+        P: RedactionPolicy,
+        P::Kind: RecursivePolicyKind,
+        M: RedactableMapper;
+}
+
 pub(super) fn apply_child_policy_ref_for_formatting<P, T, M>(
     value: &T,
     mapper: &M,
-) -> PolicyFormattingOutput<T::FormattingOutput>
+) -> PolicyFormattingOutput<<T as PolicyFormat>::Output>
 where
     P: RedactionPolicy,
     P::Kind: RecursivePolicyKind,
-    T: PolicyApplicableRefForGeneratedFormatting,
+    T: PolicyFormat,
     M: RedactableMapper,
 {
-    value.apply_policy_ref_for_generated_formatting::<P, M>(mapper)
+    value.apply_policy_for_formatting::<P, M>(mapper)
 }

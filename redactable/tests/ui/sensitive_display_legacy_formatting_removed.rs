@@ -2,9 +2,9 @@ use redactable::SensitiveDisplay;
 
 #[derive(SensitiveDisplay)]
 #[error("{value}")]
-struct DuplicateOption {
+struct Removed {
     #[sensitive(redactable::Secret)]
-    #[redactable(legacy_formatting, legacy_formatting)]
+    #[redactable(legacy_formatting)]
     value: Option<String>,
 }
 

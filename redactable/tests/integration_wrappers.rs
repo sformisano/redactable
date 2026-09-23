@@ -58,7 +58,6 @@ mod sensitive_value {
             assert_eq!(sensitive.to_redacted().text(), "[REDACTED]");
         }
 
-        #[cfg(feature = "json")]
         #[test]
         fn direct_json_serialization_remains_raw() {
             let sensitive = SensitiveValue::<String, Secret>::from("secret".to_string());
@@ -451,7 +450,6 @@ mod combined_wrappers {
     }
 }
 
-#[cfg(feature = "json")]
 mod serde_json_round_trip {
     use redactable::{
         BypassRedaction, RedactionPolicy, SensitiveValue, SensitiveWithPolicy, TextPolicyKind,

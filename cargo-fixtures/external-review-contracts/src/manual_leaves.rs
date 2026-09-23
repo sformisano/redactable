@@ -1,53 +1,75 @@
+//! Downstream policy leaves formatted by `SensitiveDisplay` templates.
+//!
+//! Every leaf implements the public `PolicyFormat` trait and
+//! rides the same borrowed route as `String`: library containers forward to it,
+//! so `Option<ManualLeaf>` or `HashMap<String, ManualLeaf>` needs no field option.
+
 use std::{
     cell::{Cell, RefCell},
     collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque},
-    fmt::Debug,
+    fmt::{Debug, Formatter, Result as FmtResult},
     rc::Rc,
     sync::Arc,
 };
 
-use redactable::__private::{PolicyApplicableRefForFormatting as FormattingMarker, PolicyFieldRef};
+use redactable::__private::DeclaredFormatting as LegacyDeclaredFormatting;
+use redactable::PolicyDisplay as RenamedPolicyDisplay;
 use redactable::policy::RecursivePolicyKind;
 use redactable::{
-    PolicyApplicableRef, RedactableMapper, RedactableWithFormatter, RedactionPolicy, Secret,
-    SensitiveDisplay, SensitiveDual,
+    DeclaredFormatting, PolicyDebug, PolicyDisplay, PolicyFormat, PolicyFormattingOutput,
+    RedactableMapper, RedactableWithFormatter, RedactionPolicy, Secret, SensitiveDisplay,
+    SensitiveDual,
 };
+
+pub struct ReviewedFormatter;
+
+impl RedactableWithFormatter for ReviewedFormatter {
+    fn fmt_redacted(&self, formatter: &mut Formatter<'_>) -> FmtResult {
+        formatter.write_str("[REDACTED]")
+    }
+}
+
+impl DeclaredFormatting for ReviewedFormatter {}
+
+pub fn require_legacy_declaration<T: LegacyDeclaredFormatting + ?Sized>(_: &T) {}
+
+#[derive(SensitiveDisplay)]
+#[error("{value}")]
+pub struct ReviewedManualFormatting {
+    pub value: ReviewedFormatter,
+}
 
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct ManualLeaf(pub String);
 
-impl PolicyApplicableRef for ManualLeaf {
+impl PolicyFormat for ManualLeaf {
     type Output = String;
 
-    fn apply_policy_ref<P, M>(&self, _mapper: &M) -> Self::Output
+    fn apply_policy_for_formatting<P, M>(&self, _mapper: &M) -> PolicyFormattingOutput<String>
     where
         P: RedactionPolicy,
         P::Kind: RecursivePolicyKind,
         M: RedactableMapper,
     {
-        P::policy().apply_to(&self.0)
+        PolicyFormattingOutput::Value(P::policy().apply_to(&self.0))
     }
 }
-
-impl FormattingMarker for ManualLeaf {}
 
 #[derive(Debug)]
 pub struct DownstreamBoxLeaf(pub String);
 
-impl PolicyApplicableRef for DownstreamBoxLeaf {
+impl PolicyFormat for DownstreamBoxLeaf {
     type Output = String;
 
-    fn apply_policy_ref<P, M>(&self, _mapper: &M) -> Self::Output
+    fn apply_policy_for_formatting<P, M>(&self, _mapper: &M) -> PolicyFormattingOutput<String>
     where
         P: RedactionPolicy,
         P::Kind: RecursivePolicyKind,
         M: RedactableMapper,
     {
-        P::policy().apply_to(&self.0)
+        PolicyFormattingOutput::Value(P::policy().apply_to(&self.0))
     }
 }
-
-impl FormattingMarker for Box<DownstreamBoxLeaf> {}
 
 #[derive(SensitiveDisplay)]
 #[error("{value} {value:?}")]
@@ -59,28 +81,28 @@ pub struct DownstreamBoxFormatting {
 #[derive(Clone, Debug)]
 pub struct LegacyOnlyLeaf(pub String);
 
-impl PolicyApplicableRef for LegacyOnlyLeaf {
+impl PolicyFormat for LegacyOnlyLeaf {
     type Output = String;
 
-    fn apply_policy_ref<P, M>(&self, _mapper: &M) -> Self::Output
+    fn apply_policy_for_formatting<P, M>(&self, _mapper: &M) -> PolicyFormattingOutput<String>
     where
         P: RedactionPolicy,
         P::Kind: RecursivePolicyKind,
         M: RedactableMapper,
     {
-        P::policy().apply_to(&self.0)
+        PolicyFormattingOutput::Value(P::policy().apply_to(&self.0))
     }
 }
 
+// `recursive` suppresses the inferred field bound; the declaration states it.
 #[derive(SensitiveDisplay)]
 #[error("{value}")]
 pub struct CombinedLegacyRecursive<T>
 where
-    Option<T>: PolicyFieldRef<Secret>,
-    <Option<T> as PolicyFieldRef<Secret>>::Output: RedactableWithFormatter,
+    Option<T>: PolicyDisplay<Secret>,
 {
     #[sensitive(Secret)]
-    #[redactable(recursive, legacy_formatting)]
+    #[redactable(recursive)]
     pub value: Option<T>,
 }
 
@@ -88,7 +110,7 @@ where
 #[error("{value}")]
 pub struct CombinedLegacyRecursiveDual {
     #[sensitive(Secret)]
-    #[redactable(recursive, legacy_formatting)]
+    #[redactable(recursive)]
     pub value: Option<String>,
 }
 
@@ -98,7 +120,6 @@ macro_rules! legacy_formatting_case {
         #[error("{value}")]
         struct $display {
             #[sensitive(Secret)]
-            #[redactable(legacy_formatting)]
             value: $ty,
         }
 
@@ -106,7 +127,6 @@ macro_rules! legacy_formatting_case {
         #[error("{value:?}")]
         struct $debug {
             #[sensitive(Secret)]
-            #[redactable(legacy_formatting)]
             value: $ty,
         }
 
@@ -214,27 +234,24 @@ legacy_formatting_case!(
 #[derive(Clone, Copy, Debug)]
 pub struct CopyManualLeaf(pub u8);
 
-impl PolicyApplicableRef for CopyManualLeaf {
+impl PolicyFormat for CopyManualLeaf {
     type Output = u8;
 
-    fn apply_policy_ref<P, M>(&self, _mapper: &M) -> Self::Output
+    fn apply_policy_for_formatting<P, M>(&self, _mapper: &M) -> PolicyFormattingOutput<u8>
     where
         P: RedactionPolicy,
         P::Kind: RecursivePolicyKind,
         M: RedactableMapper,
     {
         let _ = self.0;
-        0
+        PolicyFormattingOutput::Value(0)
     }
 }
-
-impl FormattingMarker for CopyManualLeaf {}
 
 #[derive(SensitiveDisplay)]
 #[error("{value}")]
 pub struct LegacyCellDisplay {
     #[sensitive(Secret)]
-    #[redactable(legacy_formatting)]
     pub value: Cell<CopyManualLeaf>,
 }
 
@@ -242,7 +259,6 @@ pub struct LegacyCellDisplay {
 #[error("{value:?}")]
 pub struct LegacyCellDebug {
     #[sensitive(Secret)]
-    #[redactable(legacy_formatting)]
     pub value: Cell<CopyManualLeaf>,
 }
 
@@ -250,7 +266,6 @@ pub struct LegacyCellDebug {
 #[error("{value}")]
 pub struct LegacyShapedPolicy {
     #[sensitive(redactable::Email)]
-    #[redactable(legacy_formatting)]
     pub value: Option<ManualLeaf>,
 }
 
@@ -265,8 +280,7 @@ pub struct ManualFormatting {
 #[error("{leaf}")]
 pub struct GenericManual<T>
 where
-    T: PolicyApplicableRef + FormattingMarker,
-    T::Output: RedactableWithFormatter,
+    T: PolicyDisplay<Secret>,
 {
     #[sensitive(Secret)]
     pub leaf: T,
@@ -276,8 +290,7 @@ where
 #[error("{leaf:?}")]
 pub struct GenericManualDebug<T>
 where
-    T: PolicyApplicableRef + FormattingMarker,
-    T::Output: Debug,
+    T: PolicyDebug<Secret>,
 {
     #[sensitive(Secret)]
     pub leaf: T,
@@ -289,8 +302,7 @@ pub type Transparent<T> = T;
 #[error("{leaf}")]
 pub struct RenamedMarker<T>
 where
-    T: PolicyApplicableRef + FormattingMarker,
-    T::Output: RedactableWithFormatter,
+    T: RenamedPolicyDisplay<Secret>,
 {
     #[sensitive(Secret)]
     pub leaf: T,
@@ -300,8 +312,7 @@ where
 #[error("{leaf}")]
 pub struct TransparentMarker<T>
 where
-    T: PolicyApplicableRef + FormattingMarker,
-    T::Output: RedactableWithFormatter,
+    T: RenamedPolicyDisplay<Secret>,
 {
     #[sensitive(Secret)]
     pub leaf: Transparent<T>,

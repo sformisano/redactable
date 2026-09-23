@@ -1,15 +1,18 @@
-error[E0277]: the trait bound `T: redactable::__private::PolicyApplicableRefForGeneratedFormatting` is not satisfied
+error[E0277]: `T` cannot be formatted by reference under a redaction policy
  --> tests/ui/generic_declaration_debug_missing.rs:2:10
   |
 2 | #[derive(SensitiveDisplay)]
-  |          ^^^^^^^^^^^^^^^^ the trait `redactable::__private::PolicyApplicableRefForGeneratedFormatting` is not implemented for `T`
+  |          ^^^^^^^^^^^^^^^^ this policy field has no borrowed formatting support
 3 | #[error("{value:?}")]
   |          --------- required by this formatting parameter
   |
-  = note: required for `SecretPolicyKind` to implement `redactable::__private::GeneratedPolicyKindDebugFormatting<Secret, T>`
+  = note: text policies format `String`, `Cow<str>`, `&str`, `serde_json::Value`, `SensitiveValue<T, P>`, and supported containers of these
+  = note: for a generic field, declare `T: PolicyDisplay<P>` for `{}` or `T: PolicyDebug<P>` for `{:?}`
+  = note: for a custom leaf type, implement `redactable::PolicyFormat`
+  = note: required for `SecretPolicyKind` to implement `redactable::__private::PolicyKindDebugFormatting<Secret, T>`
   = note: required for `T` to implement `PolicyDebug<Secret>`
-  = note: required for `redactable::__private::DeclaredPolicyFormattingRef<'_, Secret, T>` to implement `Debug`
-help: consider further restricting type parameter `T` with trait `PolicyApplicableRefForGeneratedFormatting`
+  = note: required for `redactable::__private::PolicyFormattingRef<'_, Secret, T>` to implement `Debug`
+help: consider further restricting type parameter `T` with trait `PolicyFormat`
   |
-4 | struct Envelope<T: PolicyDisplay<Secret> + redactable::__private::PolicyApplicableRefForGeneratedFormatting> { #[sensitive(Secret)] value: T }
-  |                                          ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+4 | struct Envelope<T: PolicyDisplay<Secret> + redactable::PolicyFormat> { #[sensitive(Secret)] value: T }
+  |                                          ++++++++++++++++++++++++++

@@ -1,29 +1,42 @@
 use redactable::{NotSensitive, NotSensitiveDisplay, Sensitive, SensitiveDisplay, SensitiveDual};
 #[derive(Sensitive)]
+#[redactable()]
+struct Empty;
+#[derive(Sensitive)]
+#[redactable(output = text)]
+struct WrongFormat;
+#[derive(Sensitive)]
+#[redactable(output = "json")]
+struct Literal;
+#[derive(Sensitive)]
+#[redactable(output = json, output = json)]
+struct Duplicate;
+#[derive(Sensitive)]
 #[redactable(output = json)]
-struct StructuralContainer;
+#[redactable(output = json)]
+struct Repeated;
 #[derive(SensitiveDisplay)]
 #[redactable(output = json)]
 #[error("text")]
-struct DisplayContainer;
+struct DisplayOnly;
+#[derive(NotSensitive)]
+#[redactable(output = json)]
+struct Public;
+#[derive(NotSensitiveDisplay)]
+#[redactable(output = json)]
+struct PublicDisplay;
 #[derive(SensitiveDual)]
 #[redactable(output = json)]
 #[error("text")]
 struct DualContainer;
-#[derive(NotSensitive)]
-#[redactable(output = json)]
-struct PublicContainer;
-#[derive(NotSensitiveDisplay)]
-#[redactable(output = json)]
-struct PublicDisplayContainer;
 #[derive(Sensitive)]
-struct FieldPosition {
+struct Field {
     #[redactable(output = json)]
     #[not_sensitive]
     field: String,
 }
 #[derive(SensitiveDual)]
-enum VariantPosition {
+enum Variant {
     #[redactable(output = json)]
     #[error("unit")]
     Unit,

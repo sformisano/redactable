@@ -1,6 +1,85 @@
 # Changelog
 
-## 0.13.1 - Unreleased
+## 0.14.0 - Unreleased
+
+### Breaking
+
+- `SensitiveDisplay` and `SensitiveDual` format every `#[sensitive(Policy)]`
+  template field through one borrowed route. Custom leaves now implement the
+  public `PolicyFormat` trait. It replaces `PolicyApplicableRef` plus the hidden
+  `__private::PolicyApplicableRefForFormatting` marker.
+- `#[redactable(legacy_formatting)]` and `#[redactable(generated_formatting)]`
+  are removed. The derive reports a migration error if either option remains.
+
+### Migration from 0.13
+
+For a custom leaf used in a policy-formatted template:
+
+1. Implement `PolicyFormat` with `Output` and `apply_policy_for_formatting`.
+2. Remove the empty `__private::PolicyApplicableRefForFormatting` marker implementation.
+3. Return already-redacted data in `PolicyFormattingOutput::Value(redacted)`.
+4. Keep `PolicyApplicableRef` only if the leaf also needs to support `apply_policy_ref`.
+
+Move existing `fmt_policy_display` and `fmt_policy_debug` overrides into an
+owned output newtype. Store only the redacted projection in that newtype.
+Implement `RedactableWithFormatter` for `{value}`, `Debug` for `{value:?}`, or
+both, according to the placeholders used.
+The [custom formatting contract](docs/reference.md#custom-policy-formatting)
+covers output requirements and borrow conflicts.
+
+For generic template fields, declare `PolicyDisplay<P>` for `{value}`,
+`PolicyDebug<P>` for `{value:?}`, or both.
+
+Remove `#[redactable(legacy_formatting)]`. Containers such as `Option<MyLeaf>`
+now use the default formatter once the leaf implements the new trait.
+If the field also uses `recursive`, declare its formatting bounds on the type.
+The `recursive` option still suppresses the inferred bounds.
+
+Remove `#[redactable(generated_formatting)]`. Since 0.13, the derive already
+selects the library formatter for generic policy fields and library-owned
+containers. This option enabled no additional field types and could reject
+otherwise valid declarations.
+
+### Deprecated
+
+- `BypassTextRedaction` retains its `String` constructor, escaped derived `Debug`,
+  `ToRedacted` output, and text-only JSON object fallback. Use
+  `BypassDisplayRedaction(text)` for new code. Its `Debug` output differs, and
+  it adds `Display`, Serde, slog, and tracing support. Check the
+  [wrapper contracts](docs/reference.md#wrapper-contracts) before replacing it.
+  Callers that deny deprecation warnings must migrate or allow the warning.
+
+### Documentation
+
+- Reviewed manual formatters can import `DeclaredFormatting` from the crate root.
+  `redactable::__private::DeclaredFormatting` remains the same trait for
+  generated code and existing implementations.
+- Use `redaction` in new manifests. Existing `json` feature selections remain
+  supported as a compatibility alias, including with default features disabled.
+
+### Removed
+
+- The migration diagnostic for `#[redactable(output = json)]` is removed.
+  A container-level `#[redactable(...)]` on any derive reports the
+  field-placement error.
+- The hidden legacy formatting route is removed.
+  `__private::PolicyKindDisplayFormatting` and `__private::PolicyKindDebugFormatting`
+  now name the sole kind-level formatting traits (formerly `Generated...`).
+  The removed helpers are
+  `LegacyPolicyFormattingRef`, `ExplicitLegacyPolicyFormattingRef`,
+  `GeneratedPolicyFormattingRef`, `DeclaredPolicyFormattingRef`,
+  `PolicyFormattingProbe`, `PolicyFormattingDispatch`,
+  `policy_formatting_probe`, `legacy_policy_formatting_ref` and
+  `declared_policy_formatting_ref`. Generated code addresses
+  `__private::policy_formatting_ref` only.
+- Unreferenced hidden items: `__private::PolicyRefCellOutput`,
+  `__private::PolicyFieldRefForFormatting`,
+  `__private::PolicyKindFieldRefForFormatting`, and the doc-hidden
+  `PolicyRedactedFormatterRef`.
+- `__private::RecursivePolicyField` was a used forwarding layer and is now
+  replaced by direct delegation in the field dispatch path.
+
+## 0.13.1 - 2026-09-21
 
 ### Documentation
 

@@ -1,7 +1,9 @@
-use redactable::__private::DeclaredFormatting;
 // Qualified type paths intentionally exercise derive name resolution.
 use redactable::BypassRedaction;
-use redactable::{Redactable, RedactableWithFormatter, Sensitive, SensitiveDisplay, SensitiveDual};
+use redactable::{
+    DeclaredFormatting, Redactable, RedactableWithFormatter, Sensitive, SensitiveDisplay,
+    SensitiveDual,
+};
 use redactable::{Secret, SensitiveValue};
 
 #[derive(Clone, serde::Serialize, Sensitive)]

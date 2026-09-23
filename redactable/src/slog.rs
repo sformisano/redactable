@@ -121,7 +121,7 @@ impl_slog_redacted!(@ [T] BypassJsonRedaction<'_, T> where T: Serialize + ?Sized
 /// implement - raw passthrough leaves like `String` cannot be certified as
 /// redacted slog output. Every derived type qualifies, as do
 /// [`crate::BypassDisplayRedaction`], [`crate::BypassDebugRedaction`],
-/// [`crate::BypassJsonRedaction`] and [`crate::BypassTextRedaction`].
+/// and [`crate::BypassJsonRedaction`].
 /// [`crate::BypassRedaction`] deliberately does not: wrap the value in
 /// [`crate::BypassJsonRedaction`] to log it as JSON. [`BypassRedactionMarker`]
 /// does not either; it forwards its inner value as a plain slog value.
@@ -162,10 +162,10 @@ pub trait SlogRedactedExt: ToRedacted {
     /// also accepts unsized producers.
     ///
     /// ```compile_fail
-    /// use redactable::{BypassTextRedaction, ToRedacted};
+    /// use redactable::{BypassDisplayRedaction, ToRedacted};
     /// use redactable::slog::SlogRedactedExt;
     ///
-    /// let value = BypassTextRedaction("safe output".to_owned());
+    /// let value = BypassDisplayRedaction("safe output");
     /// let producer: &dyn ToRedacted = &value;
     /// let _ = producer.slog_redacted();
     /// ```

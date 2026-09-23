@@ -3,7 +3,7 @@ use std::fmt::{Debug, Display, Formatter, Result as FmtResult};
 use redactable::{
     __private::DeclaredFormatting, Pii, Redactable, RedactableMapper, RedactableWithFormatter,
     RedactableWithMapper, RedactedValue, Secret, Sensitive, SensitiveDisplay, SensitiveDual,
-    ToRedacted, BypassTextRedaction,
+    ToRedacted, BypassDisplayRedaction,
 };
 use serde::{Serialize, Serializer};
 
@@ -129,7 +129,7 @@ impl RedactableWithFormatter for DivergentOutput {
 
 impl ToRedacted for DivergentOutput {
     fn to_redacted(&self) -> RedactedValue {
-        BypassTextRedaction("SELECTED".to_owned()).to_redacted()
+        BypassDisplayRedaction("SELECTED".to_owned()).to_redacted()
     }
 }
 

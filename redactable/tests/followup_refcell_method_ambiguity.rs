@@ -1,9 +1,12 @@
 //! Source-compatibility regression for downstream traits with a pre-existing formatting hook.
 
 use redactable::{
-    __private::PolicyMapper, PolicyApplicableRef, RedactableMapper, RedactionPolicy, Secret,
+    __private::PolicyMapper, PolicyApplicableRef, PolicyFormat, PolicyFormattingOutput,
+    RedactableMapper, RedactionPolicy, Secret,
 };
 
+// This downstream-owned hook deliberately keeps its pre-existing name. Importing
+// the renamed public trait above must not make calls to this hook ambiguous.
 trait DownstreamPolicyFormatting: PolicyApplicableRef {
     fn apply_policy_ref_for_formatting<P, M>(&self, mapper: &M) -> Self::Output
     where
@@ -52,9 +55,11 @@ where
 
 #[test]
 fn downstream_formatting_hook_remains_unambiguous() {
-    assert_eq!(apply_downstream_hook(&"secret".to_owned()), "[REDACTED]");
-    assert_eq!(
-        apply_downstream_associated_hook(&"secret".to_owned()),
-        "[REDACTED]"
-    );
+    let value = "secret".to_owned();
+    assert_eq!(apply_downstream_hook(&value), "[REDACTED]");
+    assert_eq!(apply_downstream_associated_hook(&value), "[REDACTED]");
+    assert!(matches!(
+        <String as PolicyFormat>::apply_policy_for_formatting::<Secret, _>(&value, &PolicyMapper),
+        PolicyFormattingOutput::Value(output) if output == "[REDACTED]"
+    ));
 }

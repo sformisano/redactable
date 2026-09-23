@@ -12,14 +12,11 @@ use std::{
     hash::{BuildHasher, Hash},
 };
 
-use crate::{
-    __private::{PolicyApplicableRefForGeneratedFormatting, PolicyFormattingOutput},
-    policy::{RecursivePolicyKind, RedactionPolicy},
-};
+use crate::policy::{RecursivePolicyKind, RedactionPolicy};
 
 use super::core::{
-    PolicyApplicable, PolicyApplicableRef, RedactableMapper, apply_child_policy_ref_for_formatting,
-    collect_policy_formatting,
+    PolicyApplicable, PolicyApplicableRef, PolicyFormat, PolicyFormattingOutput, RedactableMapper,
+    apply_child_policy_ref_for_formatting, collect_policy_formatting,
 };
 
 // Sets: apply policy to elements.
@@ -82,18 +79,15 @@ where
     }
 }
 
-impl<T, S> PolicyApplicableRefForGeneratedFormatting for HashSet<T, S>
+impl<T, S> PolicyFormat for HashSet<T, S>
 where
-    T: PolicyApplicableRefForGeneratedFormatting,
-    T::FormattingOutput: Hash + Eq,
+    T: PolicyFormat,
+    T::Output: Hash + Eq,
     S: BuildHasher,
 {
-    type FormattingOutput = HashSet<T::FormattingOutput>;
+    type Output = HashSet<T::Output>;
 
-    fn apply_policy_ref_for_generated_formatting<P, M>(
-        &self,
-        mapper: &M,
-    ) -> PolicyFormattingOutput<Self::FormattingOutput>
+    fn apply_policy_for_formatting<P, M>(&self, mapper: &M) -> PolicyFormattingOutput<Self::Output>
     where
         P: RedactionPolicy,
         P::Kind: RecursivePolicyKind,
@@ -131,17 +125,14 @@ where
     }
 }
 
-impl<T> PolicyApplicableRefForGeneratedFormatting for BTreeSet<T>
+impl<T> PolicyFormat for BTreeSet<T>
 where
-    T: PolicyApplicableRefForGeneratedFormatting,
-    T::FormattingOutput: Ord,
+    T: PolicyFormat,
+    T::Output: Ord,
 {
-    type FormattingOutput = BTreeSet<T::FormattingOutput>;
+    type Output = BTreeSet<T::Output>;
 
-    fn apply_policy_ref_for_generated_formatting<P, M>(
-        &self,
-        mapper: &M,
-    ) -> PolicyFormattingOutput<Self::FormattingOutput>
+    fn apply_policy_for_formatting<P, M>(&self, mapper: &M) -> PolicyFormattingOutput<Self::Output>
     where
         P: RedactionPolicy,
         P::Kind: RecursivePolicyKind,

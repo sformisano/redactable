@@ -101,10 +101,8 @@ where
     BTreeMap<IpAddr, String>: PolicyDebug<P>,
 {
     #[sensitive(P)]
-    #[redactable(generated_formatting)]
     hash: HashMap<IpAddr, String>,
     #[sensitive(P)]
-    #[redactable(generated_formatting)]
     tree: BTreeMap<IpAddr, String>,
     marker: PhantomData<P>,
 }

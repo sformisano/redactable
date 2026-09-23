@@ -52,11 +52,7 @@ mod sensitive {
     #[test]
     fn rejects_nonzero_policy_annotation() {
         let t = TestCases::new();
-        if cfg!(feature = "slog") {
-            t.compile_fail("tests/ui/sensitive_nonzero_secret_rejected_slog.rs");
-        } else {
-            t.compile_fail("tests/ui/sensitive_nonzero_secret_rejected.rs");
-        }
+        t.compile_fail("tests/ui/sensitive_nonzero_secret_rejected.rs");
     }
 
     #[test]
@@ -95,11 +91,7 @@ mod sensitive {
     #[test]
     fn rejects_scalar_non_secret_policy_annotation() {
         let t = TestCases::new();
-        if cfg!(feature = "slog") {
-            t.compile_fail("tests/ui/sensitive_scalar_non_secret_rejected_slog.rs");
-        } else {
-            t.compile_fail("tests/ui/sensitive_scalar_non_secret_rejected.rs");
-        }
+        t.compile_fail("tests/ui/sensitive_scalar_non_secret_rejected.rs");
     }
 
     #[test]
@@ -111,13 +103,8 @@ mod sensitive {
     #[test]
     fn rejects_ip_address_containers_with_targeted_message() {
         let t = TestCases::new();
-        if cfg!(feature = "slog") {
-            t.compile_fail("tests/ui/sensitive_ip_container_rejected_slog.rs");
-            t.compile_fail("tests/ui/sensitive_ip_alias_container_rejected_slog.rs");
-        } else {
-            t.compile_fail("tests/ui/sensitive_ip_container_rejected.rs");
-            t.compile_fail("tests/ui/sensitive_ip_alias_container_rejected.rs");
-        }
+        t.compile_fail("tests/ui/sensitive_ip_container_rejected.rs");
+        t.compile_fail("tests/ui/sensitive_ip_alias_container_rejected.rs");
     }
 
     #[test]
@@ -155,7 +142,7 @@ mod sensitive {
     }
 
     #[test]
-    fn rejects_display_only_legacy_formatting_option() {
+    fn rejects_removed_legacy_formatting_option() {
         let t = TestCases::new();
         t.compile_fail("tests/ui/sensitive_legacy_formatting_rejected.rs");
     }

@@ -1,8 +1,8 @@
 error[E0432]: unresolved import `redactable::RedactedOutputView`
- --> tests/ui/safety_value_no_view.rs:1:39
+ --> tests/ui/safety_value_no_view.rs:1:42
   |
-1 | use redactable::{BypassTextRedaction, RedactedOutputView, ToRedacted};
-  |                                       ^^^^^^^^^^^^^^^^^^ no `RedactedOutputView` in the root
+1 | use redactable::{BypassDisplayRedaction, RedactedOutputView, ToRedacted};
+  |                                          ^^^^^^^^^^^^^^^^^^ no `RedactedOutputView` in the root
 
 error[E0599]: no method named `view` found for struct `RedactedValue` in the current scope
  --> tests/ui/safety_value_no_view.rs:4:17

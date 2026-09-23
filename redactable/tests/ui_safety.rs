@@ -11,11 +11,11 @@ fn declared_fields_preserve_supported_composition() {
 #[test]
 fn undeclared_fields_and_override_siblings_are_rejected() {
     let cases = TestCases::new();
-    if cfg!(feature = "json") {
-        cases.compile_fail("tests/ui/safety_undecided_fields_json.rs");
-        cases.compile_fail("tests/ui/safety_undecided_sets_json.rs");
-        cases.compile_fail("tests/ui/safety_recursive_overrides_json.rs");
-        cases.compile_fail("tests/ui/safety_missing_companion_json.rs");
+    if cfg!(feature = "slog") {
+        cases.compile_fail("tests/ui/safety_undecided_fields_slog.rs");
+        cases.compile_fail("tests/ui/safety_undecided_sets_slog.rs");
+        cases.compile_fail("tests/ui/safety_recursive_overrides_slog.rs");
+        cases.compile_fail("tests/ui/safety_missing_companion_slog.rs");
     } else {
         cases.compile_fail("tests/ui/safety_undecided_fields.rs");
         cases.compile_fail("tests/ui/safety_undecided_sets.rs");
@@ -25,10 +25,9 @@ fn undeclared_fields_and_override_siblings_are_rejected() {
 }
 
 #[test]
-fn the_removed_output_attribute_reports_its_migration() {
+fn container_level_redactable_options_are_rejected() {
     let cases = TestCases::new();
-    cases.compile_fail("tests/ui/safety_output_options.rs");
-    cases.compile_fail("tests/ui/safety_removed_output_attribute.rs");
+    cases.compile_fail("tests/ui/safety_container_redactable_rejected.rs");
 }
 
 #[test]

@@ -69,13 +69,13 @@ error[E0277]: the trait bound `RedactedValue: From<std::string::String>` is not 
    |
    = note: required for `std::string::String` to implement `Into<RedactedValue>`
 
-error[E0277]: the trait bound `RedactedValue: From<Value>` is not satisfied
+error[E0277]: the trait bound `RedactedValue: From<serde_json::Value>` is not satisfied
   --> tests/ui/safety_value_construction.rs:12:40
    |
 12 |     let _: RedactedValue = raw.clone().into();
-   |                                        ^^^^ the trait `From<Value>` is not implemented for `RedactedValue`
+   |                                        ^^^^ the trait `From<serde_json::Value>` is not implemented for `RedactedValue`
    |
-   = note: required for `Value` to implement `Into<RedactedValue>`
+   = note: required for `serde_json::Value` to implement `Into<RedactedValue>`
 
 error[E0277]: the trait bound `RedactedValue: serde::Deserialize<'de>` is not satisfied
   --> tests/ui/safety_value_construction.rs:13:28

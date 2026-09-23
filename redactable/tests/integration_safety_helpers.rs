@@ -3,7 +3,7 @@
 use std::{cell::RefCell, num::NonZeroUsize};
 
 use redactable::{
-    BypassJsonRedaction, BypassTextRedaction, RedactedList, RedactedValue, ToRedacted,
+    BypassDisplayRedaction, BypassJsonRedaction, RedactedList, RedactedValue, ToRedacted,
 };
 use serde_json::{Value, json};
 
@@ -18,7 +18,7 @@ impl ToRedacted for Item<'_> {
         assert!(!self.panic_if_called, "omitted producer must never run");
         self.calls.borrow_mut().push(self.index);
         if self.index.is_multiple_of(2) {
-            BypassTextRedaction(format!("item{}", self.index)).to_redacted()
+            BypassDisplayRedaction(format!("item{}", self.index)).to_redacted()
         } else {
             BypassJsonRedaction(&json!({"index":self.index})).to_redacted()
         }
@@ -81,7 +81,7 @@ fn list_limits_cover_empty_exact_overlarge_and_maximum() {
             assert_eq!(*calls.borrow(), (0..included).collect::<Vec<_>>());
         }
     }
-    let empty_summary = [BypassTextRedaction(String::new())];
+    let empty_summary = [BypassDisplayRedaction(String::new())];
     assert_eq!(
         selected_json(&RedactedList::new(
             &empty_summary,
@@ -96,7 +96,7 @@ mod shape {
     use std::panic::catch_unwind;
 
     use redactable::{
-        BypassJsonRedaction, BypassTextRedaction, ToRedacted, testing::assert_json_shape,
+        BypassDisplayRedaction, BypassJsonRedaction, ToRedacted, testing::assert_json_shape,
     };
     use serde_json::{Value, json};
 
@@ -221,7 +221,7 @@ mod shape {
     #[test]
     fn a_text_only_value_is_compared_through_its_documented_fallback() {
         for text in ["", "[REDACTED]", "{\"owner\":\"masked\"}"] {
-            let summary = BypassTextRedaction(text.into()).to_redacted();
+            let summary = BypassDisplayRedaction(text).to_redacted();
             // The fallback shape is `{"message": text}`, so an object carrying
             // any other key still mismatches.
             assert!(

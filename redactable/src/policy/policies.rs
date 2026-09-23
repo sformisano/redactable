@@ -69,15 +69,17 @@ impl kind_sealed::Sealed for SecretPolicyKind {}
 impl PolicyKind for SecretPolicyKind {}
 impl recursive_kind_sealed::Sealed for SecretPolicyKind {}
 
-/// Policy kinds permitted to use the legacy recursive traversal traits.
+/// Policy kinds permitted to use recursive formatting and traversal.
 ///
-/// This internal capability is sealed and intentionally excludes
-/// [`IpAddressPolicyKind`], whose fail-closed traversal is structurally distinct.
+/// This sealed capability is implemented by [`TextPolicyKind`] and
+/// [`SecretPolicyKind`]. It intentionally excludes [`IpAddressPolicyKind`],
+/// whose fail-closed traversal is structurally distinct. Custom policies use
+/// one of the supported exported kind markers rather than implementing this
+/// trait.
 #[diagnostic::on_unimplemented(
-    message = "`{Self}` cannot use the legacy recursive policy traversal",
+    message = "`{Self}` cannot use recursive policy traversal",
     note = "use `apply_policy` or `apply_policy_ref` for kind-aware dispatch; inside IP containers wrap typed values in `SensitiveValue<T, IpAddress>`"
 )]
-#[doc(hidden)]
 pub trait RecursivePolicyKind: PolicyKind + recursive_kind_sealed::Sealed {}
 
 impl RecursivePolicyKind for TextPolicyKind {}

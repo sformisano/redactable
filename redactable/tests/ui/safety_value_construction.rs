@@ -1,4 +1,4 @@
-use redactable::{BypassJsonRedaction, BypassTextRedaction, RedactedValue, ToRedacted};
+use redactable::{BypassDisplayRedaction, BypassJsonRedaction, RedactedValue, ToRedacted};
 fn main() {
     let raw = serde_json::json!({"raw": true});
     // No public variants and no public constructors.
@@ -12,7 +12,7 @@ fn main() {
     let _: RedactedValue = raw.clone().into();
     let _: RedactedValue = serde_json::from_str("{\"raw\":true}").unwrap();
     // No field access and no view.
-    let declared = BypassTextRedaction(String::from("declared")).to_redacted();
+    let declared = BypassDisplayRedaction(String::from("declared")).to_redacted();
     let _ = declared.text;
     let _ = declared.json;
     let selected = BypassJsonRedaction(&raw).to_redacted();

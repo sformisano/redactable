@@ -1,6 +1,6 @@
-use redactable::__private::DeclaredFormatting;
+use redactable::__private::DeclaredFormatting as LegacyDeclaredFormatting;
 use redactable::{
-    BypassDebugRedaction, BypassDisplayRedaction, BypassJsonRedaction, BypassTextRedaction,
+    BypassDebugRedaction, BypassDisplayRedaction, BypassJsonRedaction, DeclaredFormatting,
     RedactableWithFormatter, RedactedValue, SensitiveDisplay, ToRedacted,
 };
 use std::{
@@ -14,6 +14,7 @@ impl RedactableWithFormatter for Manual {
     }
 }
 impl DeclaredFormatting for Manual {}
+fn legacy_declared<T: LegacyDeclaredFormatting + ?Sized>(_: &T) {}
 #[derive(SensitiveDisplay)]
 #[error("{field}")]
 struct Holder {
@@ -21,19 +22,20 @@ struct Holder {
 }
 impl ToRedacted for Manual {
     fn to_redacted(&self) -> RedactedValue {
-        BypassTextRedaction("SELECTED".into()).to_redacted()
+        BypassDisplayRedaction("SELECTED").to_redacted()
     }
 }
 fn sink<T: ToRedacted>(value: &T) -> RedactedValue {
     value.to_redacted()
 }
 fn main() {
+    legacy_declared(&Manual);
     assert_eq!(
         Holder { field: Manual }.redacted_display().to_string(),
         "MANUAL"
     );
     assert_eq!(sink(&Manual).text(), "SELECTED");
-    assert_eq!(sink(&BypassTextRedaction(String::new())).text(), "");
+    assert_eq!(sink(&BypassDisplayRedaction(String::new())).text(), "");
     let _ = sink(&BypassDisplayRedaction("public"));
     let _ = sink(&BypassDebugRedaction(Error::other("public")));
     let _ = sink(&BypassJsonRedaction(&serde_json::json!({"public":true})));

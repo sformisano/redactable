@@ -14,3 +14,6 @@ Cargo.lock
 !/Cargo.lock
 !/cargo-fixtures/panic-abort-refcell/Cargo.lock
 !/cargo-fixtures/axis-safety-consumer/Cargo.lock
+
+# Build directories of the standalone fixture crates under cargo-fixtures/.
+target/

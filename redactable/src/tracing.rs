@@ -313,7 +313,7 @@ where
 mod tests {
     use super::{TracingRedactedDebugExt, TracingRedactedExt};
     use crate::redaction::{
-        BypassTextRedaction, Redactable, RedactableMapper, RedactableWithMapper, RedactedValue,
+        BypassDisplayRedaction, Redactable, RedactableMapper, RedactableWithMapper, RedactedValue,
         ToRedacted,
     };
 
@@ -324,7 +324,7 @@ mod tests {
 
     impl ToRedacted for MockRedactable {
         fn to_redacted(&self) -> RedactedValue {
-            BypassTextRedaction(format!("[REDACTED:{}]", self.value.len())).to_redacted()
+            BypassDisplayRedaction(format!("[REDACTED:{}]", self.value.len())).to_redacted()
         }
     }
 

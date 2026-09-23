@@ -1,0 +1,5 @@
+error: `generated_formatting` was removed; the default route already selects the library formatter, so delete the option
+ --> tests/ui/sensitive_display_generated_formatting_removed.rs:7:18
+  |
+7 |     #[redactable(generated_formatting)]
+  |                  ^^^^^^^^^^^^^^^^^^^^

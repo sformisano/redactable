@@ -1,0 +1,29 @@
+error[E0277]: `CustomLeaf` cannot be formatted by reference under a redaction policy
+  --> tests/ui/sensitive_display_custom_leaf_missing_formatting.rs:22:10
+   |
+22 | #[derive(SensitiveDisplay)]
+   |          ^^^^^^^^^^^^^^^^ this policy field has no borrowed formatting support
+23 | #[error("{value}")]
+   |          ------- required by this formatting parameter
+   |
+help: the trait `PolicyFormat` is not implemented for `CustomLeaf`
+  --> tests/ui/sensitive_display_custom_leaf_missing_formatting.rs:7:1
+   |
+ 7 | struct CustomLeaf;
+   | ^^^^^^^^^^^^^^^^^
+   = note: text policies format `String`, `Cow<str>`, `&str`, `serde_json::Value`, `SensitiveValue<T, P>`, and supported containers of these
+   = note: for a generic field, declare `T: PolicyDisplay<P>` for `{}` or `T: PolicyDebug<P>` for `{:?}`
+   = note: for a custom leaf type, implement `redactable::PolicyFormat`
+   = help: the following other types implement trait `PolicyFormat`:
+             &str
+             Arc<T>
+             BTreeMap<K, V>
+             BTreeSet<T>
+             Box<T>
+             Cell<T>
+             Cow<'_, str>
+             HashMap<K, V, S>
+           and $N others
+   = note: required for `SecretPolicyKind` to implement `redactable::__private::PolicyKindDisplayFormatting<Secret, CustomLeaf>`
+   = note: required for `CustomLeaf` to implement `PolicyDisplay<Secret>`
+   = note: required for `redactable::__private::PolicyFormattingRef<'_, Secret, CustomLeaf>` to implement `std::fmt::Display`

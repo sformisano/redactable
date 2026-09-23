@@ -170,7 +170,7 @@ fn display_adapter_emits_selected_text_and_json_through_real_drain() {
     use std::fmt::{Formatter, Result as FmtResult};
 
     use redactable::{
-        BypassJsonRedaction, BypassTextRedaction, RedactableWithFormatter, slog::SlogRedactedExt,
+        BypassDisplayRedaction, BypassJsonRedaction, RedactableWithFormatter, slog::SlogRedactedExt,
     };
 
     struct Divergent {
@@ -191,7 +191,7 @@ fn display_adapter_emits_selected_text_and_json_through_real_drain() {
                 )
                 .to_redacted()
             } else {
-                BypassTextRedaction("SELECTED".to_owned()).to_redacted()
+                BypassDisplayRedaction("SELECTED".to_owned()).to_redacted()
             }
         }
     }

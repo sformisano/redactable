@@ -4,7 +4,7 @@ mod to_redacted {
     // The expected stderr lists every ToRedacted implementor, and that list
     // grows with optional features, so the snapshot only matches under the
     // all-features run that CI performs.
-    #[cfg(feature = "json")]
+    #[cfg(feature = "slog")]
     #[test]
     fn rejects_raw_and_undeclared_values() {
         let t = TestCases::new();

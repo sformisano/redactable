@@ -9,7 +9,7 @@
 //! bounds in `bounds`.
 
 use std::collections::BTreeMap;
-use syn::{Error, Generics};
+use syn::Error;
 
 use proc_macro2::{Ident, TokenStream};
 use quote::{quote, quote_spanned};
@@ -24,10 +24,7 @@ use crate::{
 use super::{
     RedactedDisplayOutput,
     bounds::collect_bounds,
-    model::{
-        FieldInfo, FormatArgsOutput, FormatMode, FormattingRoute, PlaceholderKey,
-        build_fields_from_syn,
-    },
+    model::{FieldInfo, FormatArgsOutput, FormatMode, PlaceholderKey, build_fields_from_syn},
     template::{
         merge_mode, parse_placeholders, template_from_attrs, validate_positional_placeholders,
     },
@@ -37,12 +34,11 @@ pub(super) fn derive_struct_display(
     name: &Ident,
     data: &DataStruct,
     attrs: &[Attribute],
-    generics: &Generics,
     formatter: &Ident,
     fresh: &mut FreshIdentAllocator,
 ) -> Result<RedactedDisplayOutput> {
     let template = template_from_attrs(attrs, name.span())?;
-    let fields = build_fields_from_syn(&data.fields, generics, fresh)?;
+    let fields = build_fields_from_syn(&data.fields, fresh)?;
     let format_args = build_format_args(&template, &fields, formatter, fresh)?;
     let format_prelude = format_args.prelude.clone();
     let pattern = match data.fields {
@@ -70,30 +66,23 @@ pub(super) fn derive_struct_display(
     };
     Ok(RedactedDisplayOutput {
         body,
-        display_generics: format_args.display_generics,
-        debug_generics: format_args.debug_generics,
-        policy_ref_generics: format_args.policy_ref_generics,
-        nested_generics: format_args.nested_generics,
+        predicates: format_args.predicates,
     })
 }
 
 pub(super) fn derive_enum_display(
     name: &Ident,
     data: &DataEnum,
-    generics: &Generics,
     formatter: &Ident,
     fresh: &mut FreshIdentAllocator,
 ) -> Result<RedactedDisplayOutput> {
     let mut arms = Vec::new();
-    let mut display_generics = Vec::new();
-    let mut debug_generics = Vec::new();
-    let mut policy_ref_generics = Vec::new();
-    let mut nested_generics = Vec::new();
+    let mut predicates = Vec::new();
 
     for variant in &data.variants {
         reject_variant_sensitivity_attrs(&variant.attrs)?;
         let template = template_from_attrs(&variant.attrs, variant.ident.span())?;
-        let fields = build_fields_from_syn(&variant.fields, generics, fresh)?;
+        let fields = build_fields_from_syn(&variant.fields, fresh)?;
         let format_args = build_format_args(&template, &fields, formatter, fresh)?;
         let format_prelude = format_args.prelude.clone();
         let variant_ident = &variant.ident;
@@ -118,10 +107,7 @@ pub(super) fn derive_enum_display(
             }
         });
 
-        display_generics.extend(format_args.display_generics);
-        debug_generics.extend(format_args.debug_generics);
-        policy_ref_generics.extend(format_args.policy_ref_generics);
-        nested_generics.extend(format_args.nested_generics);
+        predicates.extend(format_args.predicates);
     }
 
     let body = if arms.is_empty() {
@@ -138,13 +124,7 @@ pub(super) fn derive_enum_display(
         }
     };
 
-    Ok(RedactedDisplayOutput {
-        body,
-        display_generics,
-        debug_generics,
-        policy_ref_generics,
-        nested_generics,
-    })
+    Ok(RedactedDisplayOutput { body, predicates })
 }
 
 #[allow(clippy::too_many_lines)]
@@ -159,10 +139,7 @@ fn build_format_args(
     let mut named_args: BTreeMap<String, (Ident, Ident, &'_ FieldInfo<'_>, FormatMode)> =
         BTreeMap::new();
     let mut positional_args: Vec<Option<(Ident, &'_ FieldInfo<'_>, FormatMode)>> = Vec::new();
-    let mut display_generics = Vec::new();
-    let mut debug_generics = Vec::new();
-    let mut policy_ref_generics = Vec::new();
-    let mut nested_generics = Vec::new();
+    let mut predicates = Vec::new();
 
     for placeholder in placeholders {
         match placeholder.key {
@@ -210,14 +187,7 @@ fn build_format_args(
 
     for (_, (arg_ident, name_ident, field, mode)) in named_args {
         let expr = redacted_expr_for_field(field);
-        collect_bounds(
-            field,
-            mode,
-            &mut display_generics,
-            &mut debug_generics,
-            &mut policy_ref_generics,
-            &mut nested_generics,
-        );
+        collect_bounds(field, mode, &mut predicates);
         prelude_bindings.push(quote! {
             let #arg_ident = #expr;
         });
@@ -226,14 +196,7 @@ fn build_format_args(
 
     for (arg_ident, field, mode) in positional_args.into_iter().flatten() {
         let expr = redacted_expr_for_field(field);
-        collect_bounds(
-            field,
-            mode,
-            &mut display_generics,
-            &mut debug_generics,
-            &mut policy_ref_generics,
-            &mut nested_generics,
-        );
+        collect_bounds(field, mode, &mut predicates);
         prelude_bindings.push(quote! {
             let #arg_ident = #expr;
         });
@@ -256,10 +219,7 @@ fn build_format_args(
 
     Ok(FormatArgsOutput {
         prelude,
-        display_generics,
-        debug_generics,
-        policy_ref_generics,
-        nested_generics,
+        predicates,
     })
 }
 
@@ -279,25 +239,8 @@ fn redacted_expr_for_field(field: &FieldInfo<'_>) -> TokenStream {
         Strategy::NotSensitive => quote_spanned! { span =>
             #ident
         },
-        Strategy::Policy(policy) => {
-            let policy = policy.clone();
-            if field.formatting_route == FormattingRoute::Legacy {
-                quote_spanned! { span =>
-                    #crate_root::__private::legacy_policy_formatting_ref::<#policy, _>(#ident)
-                }
-            } else if field.formatting_route == FormattingRoute::Declared {
-                quote_spanned! { span =>
-                    #crate_root::__private::declared_policy_formatting_ref::<#policy, _>(#ident)
-                }
-            } else {
-                quote_spanned! { span =>
-                    {
-                        use #crate_root::__private::PolicyFormattingDispatch as _;
-                        #crate_root::__private::policy_formatting_probe(#ident)
-                            .redactable_policy_formatting::<#policy>()
-                    }
-                }
-            }
-        }
+        Strategy::Policy(policy) => quote_spanned! { span =>
+            #crate_root::__private::policy_formatting_ref::<#policy, _>(#ident)
+        },
     }
 }

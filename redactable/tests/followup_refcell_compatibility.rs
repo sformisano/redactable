@@ -146,7 +146,6 @@ where
     CellAlias<String>: PolicyDisplay<P>,
 {
     #[sensitive(P)]
-    #[redactable(generated_formatting)]
     value: CellAlias<String>,
     marker: PhantomData<P>,
 }
@@ -399,12 +398,9 @@ fn generic_nested_alias_resolves_under_ip_address_policy() {
 }
 
 mod unrelated {
-    use redactable::__private::{
-        PolicyApplicableRefForFormatting, PolicyApplicableRefForGeneratedFormatting,
-        PolicyFormattingOutput,
-    };
     use redactable::{
-        PolicyApplicableRef, RedactableMapper, RedactionPolicy, policy::RecursivePolicyKind,
+        PolicyApplicableRef, PolicyFormat, PolicyFormattingOutput, RedactableMapper,
+        RedactionPolicy, policy::RecursivePolicyKind,
     };
 
     #[derive(Debug)]
@@ -424,13 +420,13 @@ mod unrelated {
         }
     }
 
-    impl<T> PolicyApplicableRefForGeneratedFormatting for RefCell<T> {
-        type FormattingOutput = &'static str;
+    impl<T> PolicyFormat for RefCell<T> {
+        type Output = &'static str;
 
-        fn apply_policy_ref_for_generated_formatting<P, M>(
+        fn apply_policy_for_formatting<P, M>(
             &self,
             mapper: &M,
-        ) -> PolicyFormattingOutput<Self::FormattingOutput>
+        ) -> PolicyFormattingOutput<Self::Output>
         where
             P: RedactionPolicy,
             P::Kind: RecursivePolicyKind,
@@ -439,8 +435,6 @@ mod unrelated {
             PolicyFormattingOutput::Value(self.apply_policy_ref::<P, M>(mapper))
         }
     }
-
-    impl<T> PolicyApplicableRefForFormatting for RefCell<T> {}
 }
 
 use unrelated::RefCell;
@@ -467,7 +461,7 @@ where
 }
 
 #[test]
-fn unrelated_same_named_refcell_uses_explicit_downstream_fallback() {
+fn unrelated_same_named_refcell_uses_its_own_formatting() {
     let rendered = UnrelatedSameNameRefCellDisplay {
         value: RefCell(CANARY.to_owned()),
     }

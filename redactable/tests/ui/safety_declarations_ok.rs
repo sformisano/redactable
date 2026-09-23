@@ -116,9 +116,5 @@ fn main() {
         elapsed: Duration::from_secs(1),
     }
     .redact();
-    #[cfg(feature = "json")]
-    {
-        use serde_json::Value;
-        declared::<Value>();
-    }
+    declared::<serde_json::Value>();
 }
