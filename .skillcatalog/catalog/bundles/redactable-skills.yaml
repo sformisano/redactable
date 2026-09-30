@@ -1,0 +1,9 @@
+---
+name: Redactable Skills
+description: All public Rust redactable crate guidance in one bundle.
+author: Salvatore Formisano
+created_at: "2026-05-17T20:26:33Z"
+updated_at: "2026-09-30T00:00:00Z"
+---
+stacks:
+  - redactable
