@@ -35,7 +35,9 @@ README.md	docs/reference.md#upgrading	1
 README.md	docs/reference.md#what-each-derive-generates	1
 README.md	docs/reference.md#wrapper-contracts	1
 docs/reference.md	#advanced-derive-options	1
+docs/reference.md	#bounded-list-output	1
 docs/reference.md	#custom-policy-formatting	2
+docs/reference.md	#generated-debug-and-ordinary-display	1
 docs/reference.md	#generic-declarations	2
 docs/reference.md	#low-level-traversal	1
 docs/reference.md	#manual-formatters	1

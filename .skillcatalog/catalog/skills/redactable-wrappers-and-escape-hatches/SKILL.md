@@ -53,10 +53,11 @@ raw value. Trace its downstream formatting, error construction, and diagnostic
 serialization before accepting the access. Consuming extraction discards the
 wrapper, so later code no longer carries its policy.
 
-For each bypass or raw accessor, record why the operation needs it, which output
-is approved, and which test demonstrates that sensitive data does not reach a
-diagnostic channel. If that cannot be established, keep the finding open and
-use a narrower projection instead.
+For each bypass or raw accessor, establish why the operation needs it and inspect
+downstream uses. When it can affect diagnostic output, require a focused test of
+that output. Keep unexplained disclosure paths open as findings and prefer a
+narrower projection. Raw access used only for business computation does not need
+a diagnostic test merely because an accessor appears.
 
 ## Mechanics
 

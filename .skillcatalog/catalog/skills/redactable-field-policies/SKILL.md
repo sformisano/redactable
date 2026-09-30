@@ -24,9 +24,11 @@ output audience. The policy name is not evidence that the disclosure is safe.
   long, and Unicode inputs. Built-in keep policies fully mask values at or below
   their window; just above it, most of the value may remain visible. Assert
   exact expected output independently of the policy implementation.
-- Treat every `#[not_sensitive]` as an assertion about all reachable content.
-  Numeric IDs and timestamps can be sensitive too. Neither a field's name nor
-  its primitive type is enough to declare it public.
+- Assess `#[not_sensitive]` against the output paths that use it. Structural
+  passthrough retains the whole value; a display-only field exposes the selected
+  formatter's output. Audit that representation, including nested data it emits.
+  Numeric IDs and timestamps can be sensitive too. A field's name or primitive
+  type does not establish that its output is public.
 - Let nested declared types apply their own policies. Use a leaf policy where
   the whole value has one meaning; do not use an outer public declaration to
   silence missing support for a sensitive inner value.

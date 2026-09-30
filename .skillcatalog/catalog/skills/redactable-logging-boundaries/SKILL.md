@@ -36,10 +36,10 @@ dumps need the same path inspection as explicit log statements.
 - Choose tracing text, redacted `Debug`, or structured valuable output from
   downstream requirements. Exercise the subscriber and feature configuration
   used by the application before claiming structured output works.
-- Generated `Debug` is not one universal projection. Structural derives mask
-  annotated fields but delegate other fields to their own `Debug`; display
-  derives render policy-shaped templates. An unannotated opaque JSON field can
-  therefore be visible in direct structural `Debug`.
+- `Sensitive` masks annotated fields in generated `Debug` and delegates other
+  fields to their own `Debug`. `SensitiveDisplay` and `SensitiveDual` render
+  policy-shaped templates. An unannotated opaque JSON field can therefore be
+  visible through `Sensitive`'s direct `Debug`.
 
 ## Bound cost and failure behavior
 

@@ -15,16 +15,14 @@ version differs from the catalog's 0.14 target.
 
 ## Publication status
 
-Source has moved; publication has not switched. The standalone repository remains
-the active installation source and retains its frozen 0.13 compatibility snapshot:
+This is the only maintained catalog source. The companion change removes the
+standalone catalog, metadata, and example harness, leaving a README pointer.
+Merge this library change before that removal. The old repository's default
+branch will no longer be a catalog installation or update source.
 
-```sh
-skc catalog add https://github.com/sformisano/redactable-skills.git
-```
-
-Make content changes only here. Do not independently edit the old skills or
-advertise the library repository as an installation source yet. Local catalog
-validation is not evidence of app support for an inlined catalog.
+Publication from the library repository remains pending. Do not advertise a new
+installation command until released app support passes the checks below. Local
+catalog validation does not prove app installation or update support.
 
 ## Switch publication only after app verification
 
@@ -41,13 +39,13 @@ disposable app configuration and delivery targets:
    results with the publication change. A command-line catalog validation alone
    does not satisfy either installation check.
 4. Update installation instructions and any catalog registry/profile source URLs
-   together. Leave a permanent pointer in the standalone README with the new
-   source and upgrade instructions. Retire its obsolete publication files only
-   after the update path passes; preserve Git history and existing release refs.
+   together. Add the verified upgrade instructions to the standalone README
+   pointer. Preserve Git history and existing release refs.
 
-Until those checks pass, keep the old source registered. If either check fails,
-defer the switch and preserve the compatibility snapshot. Do not maintain a
-second edited catalog to work around missing app support.
+Use the historical standalone revision linked above to reproduce an existing
+installation for the update check. Do not rely on its retired default branch.
+If either check fails, defer publication and report the unsupported path.
+Do not recreate a second catalog to work around missing app support.
 
 ## Maintenance and validation
 
@@ -76,8 +74,7 @@ it does not register the catalog or change installed profiles. The link check
 checks every skill's Markdown destinations and heading anchors against this
 checkout, including absolute links to this repository. API examples live in the
 product docs and run in the existing consumer doctest fixture. The former 0.13
-skill-example harness remains only with the frozen standalone snapshot; it is
-not a current-library validation gate.
+skill-example harness is retired; its history remains in the old repository.
 
 Packaging checks do not validate judgment. Review changed guidance against code
 and documentation, and exercise both a risky case and a valid counterexample.

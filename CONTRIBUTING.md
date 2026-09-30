@@ -4,7 +4,7 @@ The [README](README.md) teaches how to use Redactable. The
 [reference](docs/reference.md) holds detailed contracts, and the
 [changelog](CHANGELOG.md) explains upgrades.
 
-The [skill catalog](.skillcatalog/README.md) guides decisions about where to use
+The [skill catalog](https://github.com/sformisano/redactable/blob/main/.skillcatalog/README.md) guides decisions about where to use
 Redactable, disclosure, design tradeoffs, and review. Keep API syntax, exhaustive
 feature lists, and step-by-step instructions in product documentation. Retain a
 short example in a skill only when it clarifies a decision, and link to the
