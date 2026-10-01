@@ -1,0 +1,14 @@
+---
+name: Redactable
+description: Decisions for Redactable boundaries, derives, disclosure policies, wrappers, logging, and review.
+author: Salvatore Formisano
+created_at: "2026-04-29T15:18:46Z"
+updated_at: "2026-09-30T00:00:00Z"
+---
+skills:
+  - redactable-core-model
+  - redactable-derive-selection
+  - redactable-field-policies
+  - redactable-wrappers-and-escape-hatches
+  - redactable-logging-boundaries
+  - redactable-review-checklist

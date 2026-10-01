@@ -1,0 +1,7 @@
+id: redactable-skills
+name: Redactable Skills
+description: "Decision guidance for designing and reviewing Rust redactable usage."
+taxonomy:
+  categories: []
+  owners: []
+  tags: []

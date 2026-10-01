@@ -26,6 +26,26 @@ jobs:
       - name: Verify the immutable-reference guard itself
         run: .github/scripts/check-actions-pinned.test.sh
 
+  skill-catalog:
+    name: Skill catalog and documentation links
+    needs: pin-check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout exact commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Validate catalog without changing installed profiles
+        run: |
+          catalog_tmp="$(mktemp -d)"
+          trap 'rm -rf -- "$catalog_tmp"' EXIT
+          TMPDIR="$catalog_tmp" bash .github/scripts/check-skillcatalog.sh
+
+      - name: Check skill documentation links
+        run: python3 .github/scripts/check-skill-links.py
+
   checks:
     name: Complete Rust 1.97 verification
     needs: pin-check

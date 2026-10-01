@@ -6,12 +6,14 @@ Start there for the derive walkthrough and logging examples.
 ## Contents
 
 - [What each derive generates](#what-each-derive-generates)
+- [Generated Debug and ordinary Display](#generated-debug-and-ordinary-display)
 - [Low-level traversal](#low-level-traversal)
 - [Manual formatters](#manual-formatters)
 - [Generic declarations](#generic-declarations)
 - [Custom policy formatting](#custom-policy-formatting)
 - [Types that implement `Drop`](#types-that-implement-drop)
 - [Output and adapter contracts](#output-and-adapter-contracts)
+- [Bounded list output](#bounded-list-output)
 - [Wrapper contracts](#wrapper-contracts)
 - [Migrating a local compatibility wrapper](#migrating-a-local-compatibility-wrapper)
 - [Supported types](#supported-types)
@@ -57,6 +59,44 @@ The sensitive derives also generate the integrations enabled by `slog` and
 - `slog::Value` and `SlogRedacted`: when `slog` feature is enabled
 - `TracingRedacted`: when `tracing` feature is enabled
 
+## Generated Debug and ordinary Display
+
+`Sensitive` generates structural `Debug`. A field annotated with
+`#[sensitive(Policy)]` prints the fixed string `"[REDACTED]"`, regardless of the
+policy. Other fields use their own `Debug`, including fields whose types declare
+redaction. This does not run structural traversal first.
+
+For example, an unannotated `serde_json::Value` prints its original contents in
+that `Debug` output, although `.redact()` replaces the same field completely:
+
+```rust
+use redactable::{Redactable, Sensitive};
+
+#[derive(Clone, serde::Serialize, Sensitive)]
+struct Record {
+    payload: serde_json::Value,
+}
+
+let record = Record { payload: serde_json::json!({"secret": "example-secret"}) };
+assert!(format!("{record:?}").contains("example-secret"));
+assert_eq!(record.redact().payload, serde_json::json!("[REDACTED]"));
+```
+
+Annotating that field `#[sensitive(Secret)]` also replaces its generated `Debug`
+output with the fixed placeholder. `#[not_sensitive]` instead skips structural
+redaction and uses the field's own `Debug`.
+
+`SensitiveDisplay` and `SensitiveDual` generate `Debug` from their redacted
+template. That output includes any fragments retained by the policies and any
+public fields referenced by the template. These rules do not change in consumer
+tests or with the `testing` feature.
+
+None of the five derives generates ordinary `Display` or `std::error::Error`.
+A separate implementation controls those paths. For example, `thiserror`
+formats the original fields even when it shares a template with
+`SensitiveDisplay`. A handwritten `Display` can delegate to redacted formatting;
+its behavior depends on that implementation, not the sensitive derive.
+
 ## Low-level traversal
 
 Bare leaves do not implement `Redactable`, so calling `.redact()` on a `String`
@@ -65,6 +105,10 @@ mapper and can leave a raw leaf unchanged. It is not a logging boundary.
 Declarations come from derives, supported manual implementations, and explicit wrappers.
 `#[not_sensitive]` skips traversal. Bounds for the selected output still apply.
 For example, `Sensitive`'s `ToRedacted` implementation requires `Serialize` on the containing type.
+
+`NotSensitive` also skips nested traversal: its producer serializes the borrowed
+original. A nested type's `Sensitive` annotations do not alter its `Serialize`
+implementation, so they do not run through an enclosing `NotSensitive` producer.
 
 ## Manual formatters
 
@@ -274,6 +318,19 @@ The result retains no reference to the source and has no public constructor,
 `.slog_redacted()` holds a reference and runs it each time slog serializes the record.
 `.redacted_display()` remains a borrowed formatting view.
 
+### Serialization failure
+
+JSON producers and JSON adapters use `serialize_redacted_json` for the final
+serialization step. If Serde returns an error, the entire JSON representation
+becomes the string `"[REDACTED]"`. No partial object or serializer error text is
+included. For a dual producer, its separately rendered template text remains
+available. This conversion does not catch panics in cloning, redaction,
+formatting, or serialization.
+
+`serialize_redacted_json` performs no redaction itself. Its input must already
+be the desired projection; serializing an original value through it preserves
+that value when serialization succeeds.
+
 ### Cloning and borrow conflicts
 
 The producer determines what work happens inside the adapter:
@@ -315,6 +372,29 @@ mutation through an exposed object can affect later projections.
 The adapter applies redaction when it is constructed and does not redact each
 subsequent projection again.
 
+## Bounded list output
+
+`RedactedList` borrows a slice of `ToRedacted` producers and requires an explicit
+nonzero item limit. It produces `{"items": [...], "omitted": count}`. Included
+producers run exactly once each in slice order; omitted producers do not run.
+Each item uses its JSON representation, including the `{"message": text}`
+fallback for text-only producers.
+
+```rust
+use std::num::NonZeroUsize;
+use redactable::{BypassDisplayRedaction, RedactedList, ToRedacted};
+
+let items = [BypassDisplayRedaction("accepted"), BypassDisplayRedaction("pending")];
+let output = RedactedList::new(&items, NonZeroUsize::new(1).unwrap()).to_redacted();
+assert_eq!(output.json(), serde_json::json!({
+    "items": [{"message": "accepted"}], "omitted": 1
+}));
+```
+
+The limit bounds item-producer calls. It does not bound bytes, nesting depth,
+allocations, or the work performed by each included producer. The omitted count
+is part of the output.
+
 ## Wrapper contracts
 
 Normally choose one policy form: an attribute on a bare field, or an unannotated
@@ -326,7 +406,9 @@ the wrapper's policy is authoritative.
   - Implements `Debug` with redacted output
   - Does **not** implement `Display` (prevents accidental raw formatting)
   - Implements `ToRedacted`, `slog::Value` + `SlogRedacted` (requires `slog` feature) and `TracingRedacted` (requires `tracing` feature)
-  - Provides `.redacted()` for the redacted form and `.expose()` for raw access
+  - Provides `.redacted()` for the redacted form, `.expose()` and `.expose_mut()`
+    for raw references, and `.into_inner()` for consuming raw access
+  - Serializes and deserializes the raw inner value
 - **`BypassRedaction<T>`**
   - Wraps a foreign value to satisfy a `Redactable` bound it cannot implement
   - Passes the value through unchanged
@@ -399,6 +481,13 @@ Supported containers are walked automatically. Policy annotations recurse
 through options, sequences, arrays, results, maps, and sets. Map keys are not
 redacted. Each rendered map key uses its compact or alternate `Debug`
 implementation once.
+
+Traversal support and field-policy support are separate. Tuples, `Mutex`, and
+`RwLock` can traverse declared contents but do not accept a direct recursive
+text-policy annotation. A `Cell<T>` policy operation requires `T: Copy` as well
+as the corresponding policy operation; listing `Cell` as a container does not
+make every leaf eligible. Structural producers additionally need `Clone` and
+`Serialize` on the complete type. The standard locks do not implement `Clone`.
 
 Built-in mapper and formatter support covers:
 
