@@ -14,38 +14,45 @@ are absolute repository URLs so they remain usable after installation elsewhere.
 They point at current documentation; use the consumer's locked revision when its
 version differs from the catalog's 0.14 target.
 
-## Publication status
+## Installation
 
-This is the only maintained catalog source. The standalone GitHub repository
-is being deleted entirely. Its old URL will no longer serve installations,
-updates, or a README pointer. Repository deletion does not publish this source.
+This repository is the only maintained catalog source. Use SkillCatalog 0.10.1
+or later, which discovers `.skillcatalog/catalog` inside the library repository.
+For a fresh profile, replace `/absolute/path/to/project` with the delivery directory:
 
-Publication from the library repository remains pending. Do not advertise a new
-installation command until released app support passes the checks below. Local
-catalog validation does not prove app installation or update support.
+```sh
+skc catalog add https://github.com/sformisano/redactable.git
+skc settings enable codex
+skc profile create redactable-project /absolute/path/to/project \
+  --entry bundle:redactable-skills:redactable-skills
+skc deliver
+skc deliver --check
+```
 
-## Switch publication only after app verification
+Enable `claude-code` as well when that target is needed. For an existing profile,
+select stack `redactable` or bundle `redactable-skills` from catalog
+`redactable-skills`; both contain the six consumer skills.
 
-Once a released app supports `.skillcatalog/catalog`, verify both paths using
-disposable app configuration and delivery targets:
+## Replace the standalone source
 
-1. Freshly register the library source, install the existing bundle, and check
-   that exactly the six expected skills arrive with working documentation links.
-2. Start from an installation of the standalone source. Follow the app's
-   supported source-change procedure while preserving catalog, stack, bundle,
-   and skill IDs. Update and verify content replacement, no duplicate catalog,
-   no lost selections, and no stale delivered skills.
-3. Record the app version, library revision, commands or UI actions, and observed
-   results with the publication change. A command-line catalog validation alone
-   does not satisfy either installation check.
-4. Update installation instructions and any catalog registry/profile source URLs
-   together. Document the verified upgrade procedure here; the deleted repository
-   cannot provide a redirect or migration instructions.
+The standalone repository is deleted. Its URL cannot serve updates or redirects.
+Back up the SkillCatalog configuration and any local edits in its cached clone
+before changing the registration. With SkillCatalog 0.10.1 or later, run:
 
-Use an existing installation or a preserved checkout of the standalone revision
-above for the update check. Do not depend on fetching the deleted repository.
-If either check fails, defer publication and report the unsupported path.
-Do not recreate a second catalog to work around missing app support.
+```sh
+skc catalog remove redactable-skills --force --keep-clone
+skc catalog add https://github.com/sformisano/redactable.git
+skc deliver
+skc deliver --check
+```
+
+Removing the registration with `--force --keep-clone` preserves profile selections
+and the old clone. Re-registering the same catalog ID connects those selections
+to the library source. Delivery replaces the installed content. Check that both
+enabled targets contain the six selected skills and no stale or edited managed
+files. Retire the old clone after preserving any local edits; do not maintain it
+as another catalog source. Update any setup scripts or profile manifests that
+still name the standalone URL.
 
 ## Maintenance and validation
 

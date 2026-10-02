@@ -3,7 +3,7 @@ set -euo pipefail
 
 # Validate without installing a CLI or reading the developer's catalog state.
 repo_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd -P)"
-skc_version=0.9.1
+skc_version=0.10.1
 skc_release="https://github.com/humanfrontier/skillcatalog-releases/releases/download/v${skc_version}"
 
 fail() { printf '%s\n' "$*" >&2; exit 1; }
@@ -16,12 +16,12 @@ fail() { printf '%s\n' "$*" >&2; exit 1; }
 case "$(uname -s)/$(uname -m)" in
   Linux/x86_64)
     skc_asset="skc-v${skc_version}-x86_64-unknown-linux-gnu.tar.gz"
-    skc_hash=a7ff9827f9d19c627052b63b389eb3d161f45f43675583e5a7378f1f918d6f64
+    skc_hash=eb71d98d847e228aae2e867ede16e421cd49f52cd048e05c15d0a582862985c8
     skc_member=skc
     ;;
   Darwin/arm64)
     skc_asset=SkillCatalog.app.tar.gz
-    skc_hash=ffa1c8f6935d0be2ce3f1568451e2d566978e684c6bd1ffd309c57ba5865e97d
+    skc_hash=77030b0a39865fdcba873c1bf1134c2b04834dbff9646a92ac8eeb87e3c80cc6
     skc_member=SkillCatalog.app/Contents/MacOS/skc
     ;;
   *) fail "SkillCatalog ${skc_version} publishes validators for Linux x86_64 and macOS arm64 only." ;;
