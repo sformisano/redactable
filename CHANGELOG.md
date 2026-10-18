@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- The opt-in `mask-map-keys` feature replaces map keys in `Sensitive` and
+  `SensitiveDual` producer JSON with positional placeholders. Names emitted
+  through Serde's struct and variant methods remain; flattened fields and tags
+  emitted as map keys are masked too. Public producers and explicit output bypasses
+  retain their declared output; templates and ordinary serialization are
+  unchanged. See the [map-key output contract](docs/reference.md#map-key-output)
+  for nested public fields and feature unification.
+
 ## 0.14.0 - 2026-09-23
 
 ### Breaking

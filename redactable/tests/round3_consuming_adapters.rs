@@ -314,11 +314,14 @@ fn collection_event() -> CollectionEvent {
 #[test]
 fn sensitive_map_and_set_reach_the_generated_producer() {
     let output = collection_event().to_redacted().json();
-    // The producer serializes the redacted value, so map keys survive and the
-    // set collapses exactly as structural traversal leaves them.
+    let map_key = if cfg!(feature = "mask-map-keys") {
+        "[REDACTED-KEY-0]"
+    } else {
+        "api"
+    };
     assert_eq!(
         output,
-        serde_json::json!({"tokens":{"api":"[REDACTED]"},"tags":["[REDACTED]"]})
+        serde_json::json!({"tokens":{map_key:"[REDACTED]"},"tags":["[REDACTED]"]})
     );
     let output = output.to_string();
     let redacted = collection_event().redact();

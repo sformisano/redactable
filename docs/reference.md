@@ -308,6 +308,43 @@ public wrapper, or `RedactedList` for a slice of producers.
 unsized producers, including `&dyn ToRedacted`. `.slog_redacted()` retains its
 `Sized` requirement.
 
+### Map-key output
+
+By default, map traversal redacts values and retains keys. Enable the optional
+`mask-map-keys` feature when producer JSON must hide map keys. This feature
+implies `redaction`. It affects the JSON produced by `Sensitive` and
+`SensitiveDual`, including JSON reached through logging adapters. A JSON-only
+producer's `text()` also uses the masked JSON.
+
+Masking follows the typed serializer's Serde calls, before JSON loses the
+distinction between a map key and a struct field name. Each map receives positional keys
+`[REDACTED-KEY-0]`, `[REDACTED-KEY-1]`, and so on. Nested maps are masked too;
+names emitted through `SerializeStruct`, `SerializeStructVariant` and the
+serializer's variant methods remain visible. `#[serde(flatten)]` uses
+`SerializeMap`, so all its object keys are masked, including ordinary fields
+beside the flattened field. An internally tagged newtype containing a map also
+emits its tag as a map key; that key is masked while the variant-name value
+remains. Entry count and serialization order are preserved. Hash-map
+placeholders follow the map's iteration order and are not stable identifiers.
+
+Every map key inside that sensitive producer is masked, including maps in
+`#[not_sensitive]` fields or `BypassRedaction` fields. These field declarations
+still control value traversal, but do not exempt keys from serialization-time
+masking. A whole `NotSensitive` producer or a `BypassJsonRedaction` producer
+keeps the raw JSON explicitly declared public. Display and debug bypasses also
+keep their declared text.
+
+This feature does not change `.redact()`, generated `Debug`, template text,
+`SensitiveDisplay`, ordinary Serde serialization, schema generation, or
+`serialize_redacted_json` called directly. Review template map keys separately:
+their `Debug` implementation still controls what they reveal. A `SensitiveDual`
+value keeps its template text and carries the masked JSON separately.
+
+Cargo unifies this feature across users of the same resolved runtime package.
+Once enabled, every `Sensitive` or `SensitiveDual` producer from that package
+uses key masking. Producing and reusing a `RedactedValue` still clones and
+redacts only at construction; reading its text or JSON does not repeat that work.
+
 ### When adapters run
 
 `to_redacted()` borrows its receiver and returns an owned `RedactedValue`.
@@ -478,9 +515,10 @@ redaction policy or custom projection for those values.
 cannot be policy-annotated because redaction may need to produce zero.
 
 Supported containers are walked automatically. Policy annotations recurse
-through options, sequences, arrays, results, maps, and sets. Map keys are not
-redacted. Each rendered map key uses its compact or alternate `Debug`
-implementation once.
+through options, sequences, arrays, results, maps, and sets. Traversal does not
+redact map keys. Each rendered map key uses its compact or alternate `Debug`
+implementation once. The optional [map-key output](#map-key-output) feature
+masks keys separately when sensitive producers serialize their JSON.
 
 Traversal support and field-policy support are separate. Tuples, `Mutex`, and
 `RwLock` can traverse declared contents but do not accept a direct recursive

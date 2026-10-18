@@ -1166,6 +1166,15 @@ A `Sensitive` type always produces JSON. On serialization failure, the JSON is
 the fixed string `"[REDACTED]"`; serializer errors and input data are never
 included.
 
+If map keys can contain private identifiers, enable `mask-map-keys`. It replaces
+map keys in `Sensitive` and `SensitiveDual` producer JSON with positional names
+such as `[REDACTED-KEY-0]`. Names emitted through Serde's struct methods remain;
+flattened fields and tags emitted as map keys are masked too. The feature also
+protects the compact text produced from JSON-only output. Templates and ordinary
+Serde serialization keep their existing behavior. The
+[map-key output contract](docs/reference.md#map-key-output) explains public
+declarations, nested maps and the feature's limits.
+
 This logger accepts any `ToRedacted` value. The example also reads its JSON
 representation, so add `serde_json = "1"` as a direct dependency:
 

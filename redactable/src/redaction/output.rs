@@ -5,6 +5,11 @@
 //! - [`RedactedValue`]: the eager, opaque value a logging boundary receives
 //! - [`ToRedacted`]: the trait that produces one
 
+#[cfg(feature = "mask-map-keys")]
+mod map_keys;
+#[cfg(test)]
+mod tests;
+
 use std::fmt::{Debug, Formatter, Result as FmtResult};
 
 use serde::Serialize;
@@ -161,6 +166,10 @@ impl Debug for RedactedValue {
 /// its template text); `SensitiveDisplay` produces redacted text;
 /// `NotSensitive` requires `Serialize` and produces the raw JSON its author
 /// declared public.
+/// With `mask-map-keys`, sensitive JSON producers replace every map key with a
+/// positional placeholder. Names emitted through Serde's struct methods stay
+/// visible; flattened fields and tags emitted as map keys are masked too.
+/// Template text and public producers keep their existing output.
 ///
 /// Handwritten implementations are supported and are the route for an exotic
 /// projection: build the value from a member of the Bypass family, which is
@@ -215,7 +224,10 @@ where
 
 /// Clones, redacts and serializes, leaving the caller's value in place.
 fn redacted_json_of<T: Redactable + Clone + Serialize>(value: &T) -> JsonValue {
-    serialize_redacted_json(Redactable::redact(Clone::clone(value)))
+    let redacted = Redactable::redact(Clone::clone(value));
+    #[cfg(feature = "mask-map-keys")]
+    let redacted = map_keys::MaskMapKeys(&redacted);
+    serialize_redacted_json(redacted)
 }
 
 /// Builds the JSON-only sink value a structural producer carries.

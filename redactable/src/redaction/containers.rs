@@ -44,11 +44,13 @@
 //! let _ = value.redact();
 //! ```
 //!
-//! ## Map Keys Are Not Redacted
+//! ## Map traversal preserves keys
 //!
 //! For map containers (`HashMap`, `BTreeMap`), only **values** are redacted.
 //! Keys are left untouched by design to preserve hashing/ordering invariants.
-//! Do not place sensitive data in map keys unless you intend it to remain visible.
+//! The optional `mask-map-keys` feature masks keys separately when `Sensitive`
+//! and `SensitiveDual` producers serialize JSON. Traversal and template
+//! formatting still retain keys; review their output before logging it.
 //!
 //! ## Set Redaction Can Collapse Elements
 //!

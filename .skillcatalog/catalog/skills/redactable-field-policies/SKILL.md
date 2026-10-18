@@ -5,7 +5,7 @@ metadata:
   skillcatalog/display_name: "Redactable Field Policies"
   skillcatalog/author: "Salvatore Formisano"
   skillcatalog/created_at: "2026-04-29T15:18:46Z"
-  skillcatalog/updated_at: "2026-09-30T00:00:00Z"
+  skillcatalog/updated_at: "2026-10-18T00:00:00Z"
 ---
 # Redactable Field Policies
 
@@ -39,9 +39,15 @@ Text and typed IP policies disclose different fragments. For example, the same
 address `1.2.3.4` becomes `***.3.4` as text but `0.0.0.4` as a typed IP. Choose
 the representation and policy together; also assess any preserved port.
 
-Map keys are not redacted. If keys can contain sensitive data, redesign the
-logging projection so those values become policy-controlled fields. Redacting
-map values alone does not protect the map.
+Traversal leaves map keys unchanged. Before accepting sensitive keys in logs,
+check the resolved library and enabled features against the selected output.
+Where available, `mask-map-keys` masks keys in `Sensitive` and `SensitiveDual`
+producer JSON, including text adapted from JSON-only output. It does not change
+templates, direct `Debug`, or public bypass producers. Verify the emitted output;
+without key masking, redesign the projection so keys become policy-controlled
+fields. Redacting map values alone does not protect the map. The
+[map-key output contract](https://github.com/sformisano/redactable/blob/main/docs/reference.md#map-key-output)
+defines the serialization and public-field limits.
 
 Redacted set elements may become equal and collapse. Use a sequence projection
 if the output needs to preserve cardinality, and decide whether revealing that

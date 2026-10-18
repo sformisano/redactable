@@ -25,6 +25,7 @@ policy = []
 # Structural redaction always carries its JSON form: `Sensitive` requires
 # `serde::Serialize`, and every sink value can be read as JSON.
 redaction = ["policy", "dep:serde", "dep:serde_json"]
+mask-map-keys = ["redaction"]
 json = ["redaction"]
 slog = ["redaction", "dep:slog", "redactable-derive/slog"]
 tracing = ["redaction", "dep:tracing", "redactable-derive/tracing"]

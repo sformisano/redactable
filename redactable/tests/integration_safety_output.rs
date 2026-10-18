@@ -173,9 +173,14 @@ mod json_value {
             set: ["first".into(), "second".into()].into(),
             opaque: json!({"arbitrary":[1,2]}),
         };
+        let map_key = if cfg!(feature = "mask-map-keys") {
+            "[REDACTED-KEY-0]"
+        } else {
+            "public-key"
+        };
         assert_eq!(
             record(&populated),
-            json!({"result":{"optional":"[REDACTED]","map":{"public-key":"[REDACTED]"},"set":["[REDACTED]"],"opaque":"[REDACTED]"}})
+            json!({"result":{"optional":"[REDACTED]","map":{map_key:"[REDACTED]"},"set":["[REDACTED]"],"opaque":"[REDACTED]"}})
         );
         let empty = Collections {
             optional: None,
