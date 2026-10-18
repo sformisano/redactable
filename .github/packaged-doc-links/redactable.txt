@@ -5,6 +5,7 @@
 # Counts are load-bearing: deleting one of several identical links is a real
 # change to the shipped document and must show up as a diff here.
 CHANGELOG.md	docs/reference.md#custom-policy-formatting	1
+CHANGELOG.md	docs/reference.md#map-key-output	1
 CHANGELOG.md	docs/reference.md#wrapper-contracts	1
 CONTRIBUTING.md	CHANGELOG.md	1
 CONTRIBUTING.md	README.md	1
@@ -27,6 +28,7 @@ README.md	docs/reference.md	2
 README.md	docs/reference.md#custom-policy-formatting	2
 README.md	docs/reference.md#generic-declarations	1
 README.md	docs/reference.md#manual-formatters	2
+README.md	docs/reference.md#map-key-output	1
 README.md	docs/reference.md#output-and-adapter-contracts	1
 README.md	docs/reference.md#precedence-and-edge-cases	1
 README.md	docs/reference.md#supported-types	1
@@ -41,6 +43,7 @@ docs/reference.md	#generated-debug-and-ordinary-display	1
 docs/reference.md	#generic-declarations	2
 docs/reference.md	#low-level-traversal	1
 docs/reference.md	#manual-formatters	1
+docs/reference.md	#map-key-output	1
 docs/reference.md	#migrating-a-local-compatibility-wrapper	1
 docs/reference.md	#output-and-adapter-contracts	1
 docs/reference.md	#precedence-and-edge-cases	1
