@@ -12,6 +12,14 @@
   unchanged. See the [map-key output contract](docs/reference.md#map-key-output)
   for nested public fields and feature unification.
 
+### Fixed
+
+- `Sensitive`, `SensitiveDisplay`, and `SensitiveDual` report each missing
+  field declaration once when the generated impls infer no extra bounds, as on
+  a non-generic type. These derives previously emitted every such error twice.
+  Cargo's terminal output merged the copies, but JSON diagnostics and editors
+  showed both.
+
 ## 0.14.0 - 2026-09-23
 
 ### Breaking

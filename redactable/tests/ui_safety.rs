@@ -1,3 +1,9 @@
+#[path = "support/rustc_json.rs"]
+mod rustc_json;
+
+use std::{fs, process::Command};
+
+use rustc_json::compiler_error_lines;
 use trybuild::TestCases;
 
 #[test]
@@ -22,6 +28,108 @@ fn undeclared_fields_and_override_siblings_are_rejected() {
         cases.compile_fail("tests/ui/safety_recursive_overrides.rs");
         cases.compile_fail("tests/ui/safety_missing_companion.rs");
     }
+}
+
+/// Cargo's rendered output merges identical diagnostics, so a stderr snapshot
+/// cannot show an error emitted twice. The JSON stream keeps every emission.
+#[test]
+fn undeclared_fields_report_each_error_once() {
+    const SOURCE: &str = r#"
+use redactable::{Secret, Sensitive, SensitiveDisplay, SensitiveDual};
+
+#[derive(Clone, serde::Serialize)]
+struct Opaque;
+
+#[derive(Clone, serde::Serialize, Sensitive)]
+struct StructuralOwner {
+    structural_field: String,
+}
+
+#[derive(Clone, serde::Serialize, Sensitive)]
+enum VariantOwner {
+    TupleVariant(String),
+    Named { named_variant_field: Vec<String> },
+}
+
+#[derive(Clone, serde::Serialize, Sensitive)]
+struct PolicyOwner {
+    #[sensitive(Secret)]
+    policy_field: Opaque,
+}
+
+#[derive(SensitiveDisplay)]
+#[error("{display_field}")]
+struct DisplayOwner {
+    display_field: String,
+}
+
+#[derive(Clone, serde::Serialize, SensitiveDual)]
+#[error("summary")]
+struct DualOwner {
+    dual_field: String,
+}
+
+fn main() {}
+"#;
+    // Each name belongs to one owner, so an error that contains it reports that owner.
+    const UNDECLARED: [&str; 6] = [
+        "structural_field",
+        "TupleVariant",
+        "named_variant_field",
+        "policy_field",
+        "display_field",
+        "dual_field",
+    ];
+
+    let owner = tempfile::Builder::new()
+        .prefix("rd-declaration-")
+        .tempdir()
+        .expect("owned fixture directory");
+    let directory = owner.path();
+    fs::create_dir(directory.join("src")).unwrap();
+    fs::write(
+        directory.join("Cargo.toml"),
+        format!(
+            "[package]\nname='declaration-diagnostics'\nversion='0.0.0'\nedition='2024'\npublish=false\n[workspace]\n[dependencies]\nserde={{version='1',features=['derive']}}\nredactable={{path='{}'}}\n",
+            env!("CARGO_MANIFEST_DIR")
+        ),
+    )
+    .unwrap();
+    fs::write(directory.join("src/main.rs"), SOURCE).unwrap();
+
+    let output = Command::new(env!("CARGO"))
+        .args([
+            "check",
+            "--offline",
+            "--message-format",
+            "json",
+            "--manifest-path",
+        ])
+        .arg(directory.join("Cargo.toml"))
+        .env("CARGO_TARGET_DIR", directory.join("target"))
+        .output()
+        .expect("fixture cargo check runs");
+    assert!(!output.status.success(), "undeclared fields compiled");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let errors: Vec<&str> = stdout
+        .lines()
+        .filter(|message| compiler_error_lines(message).is_some())
+        .collect();
+    for field in UNDECLARED {
+        let reports = errors.iter().filter(|error| error.contains(field)).count();
+        assert_eq!(
+            reports,
+            1,
+            "`{field}` has {reports} error-level diagnostics:\n{}",
+            errors.join("\n")
+        );
+    }
+    assert_eq!(
+        errors.len(),
+        UNDECLARED.len(),
+        "unexpected error-level diagnostics:\n{}",
+        errors.join("\n")
+    );
 }
 
 #[test]

@@ -171,6 +171,7 @@ fn expand_display(
     let declaration = declaration_check(
         &ident,
         &generics,
+        &redacted_display_generics,
         quote! {
             fn #check_name(&self, #formatter: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
                 #redacted_display_body
@@ -285,6 +286,7 @@ fn expand_structural(
     let declaration = declaration_check(
         &ident,
         &generics,
+        &policy_generics,
         quote! {
             fn #check_name<#mapper_type: #crate_root::RedactableMapper>(self, #mapper: &#mapper_type) -> Self {
                 use #crate_root::RedactableWithMapper as _;
