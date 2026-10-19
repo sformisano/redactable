@@ -1,13 +1,11 @@
-//! Complete-type trait predicate management for generated implementations.
+//! Complete-type `Debug` predicates for the generated structural `Debug` impl.
 //!
-//! Bounds describe the exact type used by each emitted operation. Container
-//! implementations remain authoritative for their inner `Clone`, `Copy`, key,
-//! hasher, ordering, and traversal requirements.
+//! The traversal and formatting impls carry exactly the type's declared bounds.
+//! A `Debug` bound names the exact field type the impl prints. Container
+//! implementations remain authoritative for their inner requirements.
 
 use quote::ToTokens;
-use syn::{Generics, Ident, Path, Type, TypePath, WherePredicate, parse_quote, visit::Visit};
-
-use crate::{crate_path, crate_root};
+use syn::{Generics, Ident, Type, TypePath, WherePredicate, parse_quote, visit::Visit};
 
 /// Adds deduplicated where predicates to a generic declaration.
 pub(crate) fn add_predicates(
@@ -75,56 +73,6 @@ fn push_unique(predicates: &mut Vec<WherePredicate>, predicate: WherePredicate) 
     }
 }
 
-pub(crate) fn push_container_predicate(predicates: &mut Vec<WherePredicate>, ty: &Type) {
-    let trait_path = crate_path("Redactable");
-    push_unique(predicates, parse_quote!(#ty: #trait_path));
-}
-
-pub(crate) fn push_policy_predicate(
-    predicates: &mut Vec<WherePredicate>,
-    ty: &Type,
-    policy: &Path,
-) {
-    let crate_root = crate_root();
-    push_unique(
-        predicates,
-        parse_quote!(#ty: #crate_root::__private::PolicyField<#policy>),
-    );
-}
-
-pub(crate) fn push_policy_display_predicate(
-    predicates: &mut Vec<WherePredicate>,
-    ty: &Type,
-    policy: &Path,
-) {
-    let crate_root = crate_root();
-    push_unique(
-        predicates,
-        parse_quote!(#ty: #crate_root::PolicyDisplay<#policy>),
-    );
-}
-
-pub(crate) fn push_policy_debug_predicate(
-    predicates: &mut Vec<WherePredicate>,
-    ty: &Type,
-    policy: &Path,
-) {
-    let crate_root = crate_root();
-    push_unique(
-        predicates,
-        parse_quote!(#ty: #crate_root::PolicyDebug<#policy>),
-    );
-}
-
 pub(crate) fn push_debug_predicate(predicates: &mut Vec<WherePredicate>, ty: &Type) {
     push_unique(predicates, parse_quote!(#ty: ::core::fmt::Debug));
-}
-
-pub(crate) fn push_display_predicate(predicates: &mut Vec<WherePredicate>, ty: &Type) {
-    push_unique(predicates, parse_quote!(#ty: ::core::fmt::Display));
-}
-
-pub(crate) fn push_redacted_display_predicate(predicates: &mut Vec<WherePredicate>, ty: &Type) {
-    let trait_path = crate_path("__private::DeclaredFormatting");
-    push_unique(predicates, parse_quote!(#ty: #trait_path));
 }

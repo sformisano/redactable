@@ -18,7 +18,6 @@ use crate::{
         Body, ContainerOptions, parse_container_options, reject_field_only_container_attrs,
     },
     crate_paths::{crate_root, isolate_generated_items},
-    declaration::declaration_check,
     derive_enum::derive_enum,
     derive_struct::derive_struct,
     fresh_ident::FreshIdentAllocator,
@@ -30,12 +29,11 @@ use crate::{
 /// Output produced by struct/enum derive logic for the structural half.
 ///
 /// Shared by `derive_struct`, `derive_enum`, and the top-level `expand()`.
+/// The redaction body runs under the type's declared bounds alone.
 pub(crate) struct DeriveOutput {
     pub(crate) redaction_body: TokenStream,
-    /// Traversal and policy bounds shared by every emitted structural impl.
-    pub(crate) predicates: Vec<WherePredicate>,
     pub(crate) debug_redacted_body: TokenStream,
-    /// Extra bounds only the generated `Debug` impl needs.
+    /// Bounds the generated `Debug` impl adds to the declared bounds.
     pub(crate) debug_predicates: Vec<WherePredicate>,
 }
 
@@ -157,27 +155,11 @@ fn expand_display(
     formatter: Ident,
 ) -> Result<TokenStream> {
     let crate_root = crate_root();
-    let redacted_display_output =
-        derive_redacted_display(&ident, &body, &attrs, &formatter, fresh)?;
-    let redacted_display_generics = add_predicates(
-        generics.clone(),
-        &redacted_display_output.predicates,
-        &ident,
-    );
+    // The formatting impls carry exactly the declared bounds, so the formatting
+    // body below is checked once, under those bounds.
+    let redacted_display_body = derive_redacted_display(&ident, &body, &attrs, &formatter, fresh)?;
     let (display_impl_generics, display_ty_generics, display_where_clause) =
-        redacted_display_generics.split_for_impl();
-    let redacted_display_body = redacted_display_output.body;
-    let check_name = fresh.fresh("__redactable_check_display_declaration");
-    let declaration = declaration_check(
-        &ident,
-        &generics,
-        &redacted_display_generics,
-        quote! {
-            fn #check_name(&self, #formatter: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
-                #redacted_display_body
-            }
-        },
-    );
+        generics.split_for_impl();
     let redacted_display_impl = quote! {
         impl #display_impl_generics #crate_root::RedactableWithFormatter for #ident #display_ty_generics #display_where_clause {
             fn fmt_redacted(&self, #formatter: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
@@ -190,9 +172,9 @@ fn expand_display(
     // The display half owns the producer in dual mode: it is the half that
     // knows the template, and only one impl may exist per type.
     let to_redacted_impl = if dual {
-        dual_to_redacted_impl(&ident, &redacted_display_generics, &crate_root)
+        dual_to_redacted_impl(&ident, &generics, &crate_root)
     } else {
-        display_to_redacted_impl(&ident, &redacted_display_generics, &crate_root)
+        display_to_redacted_impl(&ident, &generics, &crate_root)
     };
 
     // Debug always uses the same selected template as redacted display.
@@ -210,7 +192,7 @@ fn expand_display(
     } else {
         #[cfg(feature = "slog")]
         {
-            assemble_display_slog_impl(fresh, generics, &ident, &crate_root)
+            assemble_display_slog_impl(fresh, generics.clone(), &ident, &crate_root)
         }
 
         #[cfg(not(feature = "slog"))]
@@ -224,7 +206,7 @@ fn expand_display(
     } else {
         #[cfg(feature = "tracing")]
         {
-            assemble_display_tracing_impl(&redacted_display_generics, &crate_root, &ident)
+            assemble_display_tracing_impl(&generics, &crate_root, &ident)
         }
 
         #[cfg(not(feature = "tracing"))]
@@ -234,7 +216,6 @@ fn expand_display(
     };
 
     let generated = quote! {
-        #declaration
         #redacted_display_impl
         #to_redacted_impl
         #debug_impl
@@ -269,31 +250,16 @@ fn expand_structural(
         Body::Enum(data) => derive_enum(&ident, data, &formatter, &mapper, fresh)?,
     };
 
-    let policy_generics = add_predicates(generics.clone(), &derive_output.predicates, &ident);
-    let (impl_generics, ty_generics, where_clause) = policy_generics.split_for_impl();
+    // The traversal impls carry exactly the declared bounds, so the redaction
+    // body is checked once, under those bounds. Only `Debug` adds field bounds.
+    let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
     #[cfg(feature = "slog")]
     let slog_base_generics = generics.clone();
-    let debug_generics = add_predicates(
-        policy_generics.clone(),
-        &derive_output.debug_predicates,
-        &ident,
-    );
+    let debug_generics = add_predicates(generics.clone(), &derive_output.debug_predicates, &ident);
     let (debug_impl_generics, debug_ty_generics, debug_where_clause) =
         debug_generics.split_for_impl();
     let redaction_body = &derive_output.redaction_body;
     let debug_redacted_body = &derive_output.debug_redacted_body;
-    let check_name = fresh.fresh("__redactable_check_structural_declaration");
-    let declaration = declaration_check(
-        &ident,
-        &generics,
-        &policy_generics,
-        quote! {
-            fn #check_name<#mapper_type: #crate_root::RedactableMapper>(self, #mapper: &#mapper_type) -> Self {
-                use #crate_root::RedactableWithMapper as _;
-                #redaction_body
-            }
-        },
-    );
     // Dual gets Debug from its display expansion; standalone Sensitive retains
     // its annotation-driven production placeholders in every build mode.
     let debug_impl = if dual {
@@ -327,7 +293,6 @@ fn expand_structural(
     let tracing_impl = quote! {};
 
     let trait_impl = quote! {
-        #declaration
         impl #impl_generics #crate_root::RedactableWithMapper for #ident #ty_generics #where_clause {
             fn redact_with<#mapper_type: #crate_root::RedactableMapper>(self, #mapper: &#mapper_type) -> Self {
                 use #crate_root::RedactableWithMapper as _;
@@ -393,12 +358,12 @@ pub(crate) fn assemble_display_slog_impl(
 /// Assembles the `TracingRedacted` marker impl emitted by `SensitiveDisplay`.
 #[cfg(feature = "tracing")]
 fn assemble_display_tracing_impl(
-    redacted_display_generics: &Generics,
+    generics: &Generics,
     crate_root: &TokenStream,
     ident: &Ident,
 ) -> TokenStream {
     let (tracing_impl_generics, tracing_ty_generics, tracing_where_clause) =
-        redacted_display_generics.split_for_impl();
+        generics.split_for_impl();
     quote! {
         impl #tracing_impl_generics #crate_root::tracing::TracingRedacted for #ident #tracing_ty_generics #tracing_where_clause {}
     }

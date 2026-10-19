@@ -18,11 +18,9 @@ pub(crate) fn derive_struct(
     fresh: &mut FreshIdentAllocator,
 ) -> Result<DeriveOutput> {
     let container_path = crate_path("RedactableWithMapper");
-    let mut predicates = Vec::new();
     let mut debug_predicates = Vec::new();
     let mut ctx = DeriveContext {
         container_path: &container_path,
-        predicates: &mut predicates,
         debug_predicates: &mut debug_predicates,
         mapper,
     };
@@ -30,7 +28,6 @@ pub(crate) fn derive_struct(
     let Some(fields) = derive_fields(&mut ctx, data.fields, formatter, &debug_name, fresh)? else {
         return Ok(DeriveOutput {
             redaction_body: quote! { self },
-            predicates,
             debug_redacted_body: quote! {
                 #formatter.write_str(stringify!(#name))
             },
@@ -51,7 +48,6 @@ pub(crate) fn derive_struct(
             #(#transforms)*
             Self #reconstruction
         },
-        predicates,
         debug_redacted_body: quote! {
             match self {
                 Self #debug_pattern => #debug_body

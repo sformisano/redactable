@@ -12,13 +12,22 @@
   unchanged. See the [map-key output contract](docs/reference.md#map-key-output)
   for nested public fields and feature unification.
 
+### Changed
+
+- Generated traversal and formatting impls carry exactly the type's declared
+  bounds. The derives no longer add a `where` predicate for each field type,
+  so the same types implement the same traits with shorter `where` clauses.
+  `#[redactable(recursive)]` now affects only the `Debug` bound that a
+  standalone `Sensitive` derive infers; other derives accept it unchanged.
+
 ### Fixed
 
 - `Sensitive`, `SensitiveDisplay`, and `SensitiveDual` report each missing
-  field declaration once when the generated impls infer no extra bounds, as on
-  a non-generic type. These derives previously emitted every such error twice.
-  Cargo's terminal output merged the copies, but JSON diagnostics and editors
-  showed both.
+  field declaration once, at the field. A non-generic type previously got two
+  identical errors. A generic type with an undeclared concrete field, such as
+  `raw: String`, got an extra copy at the derive for each generated impl. A
+  generic definition that is already rejected no longer adds a second error
+  where its methods are called.
 
 ## 0.14.0 - 2026-09-23
 

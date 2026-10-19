@@ -94,7 +94,7 @@ impl PolicyFormat for LegacyOnlyLeaf {
     }
 }
 
-// `recursive` suppresses the inferred field bound; the declaration states it.
+// The declaration states the field's formatting bound; `recursive` is accepted.
 #[derive(SensitiveDisplay)]
 #[error("{value}")]
 pub struct CombinedLegacyRecursive<T>

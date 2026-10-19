@@ -3,9 +3,9 @@
 //! Resolves the format template for a container or variant — an explicit
 //! `#[error("...")]` attribute wins over doc-comment lines — and parses it
 //! into [`Placeholder`]s. Parsing validates positional and named
-//! placeholders, resolves `{field}`, `{field:?}`, and explicit `?`
-//! specifiers into [`FormatMode`]s, and rejects unsupported debug format
-//! specs and dynamic width/precision. Errors are reported against the
+//! placeholders, accepts `Display` and `Debug` specifiers, and rejects
+//! other format traits, unsupported debug format specs, and dynamic
+//! width/precision. Errors are reported against the
 //! template literal's span so diagnostics point at the user's attribute.
 
 use std::collections::BTreeSet;
@@ -13,7 +13,7 @@ use std::collections::BTreeSet;
 use proc_macro2::{Ident, Span};
 use syn::{Attribute, Error, Expr, Lit, LitStr, Meta, Result, spanned::Spanned};
 
-use super::model::{FormatMode, Placeholder, PlaceholderKey};
+use super::model::{Placeholder, PlaceholderKey};
 
 pub(super) fn validate_positional_placeholders(placeholders: &[Placeholder]) -> Result<()> {
     let indexes: BTreeSet<usize> = placeholders
@@ -45,17 +45,6 @@ pub(super) fn validate_positional_placeholders(placeholders: &[Placeholder]) -> 
     }
 
     Ok(())
-}
-
-pub(super) fn merge_mode(existing: FormatMode, next: FormatMode) -> FormatMode {
-    match (existing, next) {
-        (FormatMode::Both, _) | (_, FormatMode::Both) => FormatMode::Both,
-        (FormatMode::Display, FormatMode::Debug) | (FormatMode::Debug, FormatMode::Display) => {
-            FormatMode::Both
-        }
-        (FormatMode::Display, FormatMode::Display) => FormatMode::Display,
-        (FormatMode::Debug, FormatMode::Debug) => FormatMode::Debug,
-    }
 }
 
 pub(super) fn template_from_attrs(attrs: &[Attribute], span: Span) -> Result<LitStr> {
@@ -143,7 +132,7 @@ pub(super) fn parse_placeholders(template: &LitStr) -> Result<Vec<Placeholder>> 
                 let mut parts = inside.splitn(2, ':');
                 let arg_part = parts.next().unwrap_or("").trim();
                 let spec_part = parts.next().unwrap_or("");
-                let mode = format_mode_from_spec(spec_part, template.span())?;
+                validate_format_spec(spec_part, template.span())?;
                 let key = if arg_part.is_empty() {
                     let index = implicit_index;
                     implicit_index += 1;
@@ -158,7 +147,6 @@ pub(super) fn parse_placeholders(template: &LitStr) -> Result<Vec<Placeholder>> 
                 };
                 placeholders.push(Placeholder {
                     key,
-                    mode,
                     span: template.span(),
                 });
             }
@@ -185,10 +173,10 @@ fn parse_placeholder_ident(value: &str, span: Span) -> Result<Ident> {
         .map_err(|_| Error::new(span, format!("unsupported format placeholder `{value}`")))
 }
 
-fn format_mode_from_spec(spec_part: &str, span: Span) -> Result<FormatMode> {
+fn validate_format_spec(spec_part: &str, span: Span) -> Result<()> {
     let spec = spec_part.trim();
     if spec.is_empty() {
-        return Ok(FormatMode::Display);
+        return Ok(());
     }
     if has_dynamic_width_or_precision(spec) {
         return Err(Error::new(
@@ -204,12 +192,11 @@ fn format_mode_from_spec(spec_part: &str, span: Span) -> Result<FormatMode> {
     }
     let last = spec.chars().last().unwrap_or_default();
     match last {
-        '?' => Ok(FormatMode::Debug),
         'x' | 'X' | 'o' | 'b' | 'p' | 'e' | 'E' => Err(Error::new(
             span,
             format!("unsupported format specifier `{spec}`; only Display and Debug are supported"),
         )),
-        _ => Ok(FormatMode::Display),
+        _ => Ok(()),
     }
 }
 
@@ -243,30 +230,25 @@ fn is_unsupported_debug_specifier(spec: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::{FormatMode, format_mode_from_spec};
+    use super::validate_format_spec;
     use proc_macro2::Span;
 
     #[test]
-    fn format_mode_allows_star_and_dollar_fill_chars() {
-        assert_eq!(
-            format_mode_from_spec("*>12", Span::call_site()).unwrap(),
-            FormatMode::Display
-        );
-        assert_eq!(
-            format_mode_from_spec("$<12", Span::call_site()).unwrap(),
-            FormatMode::Display
-        );
+    fn format_spec_allows_star_and_dollar_fill_chars() {
+        assert!(validate_format_spec("*>12", Span::call_site()).is_ok());
+        assert!(validate_format_spec("$<12", Span::call_site()).is_ok());
+        assert!(validate_format_spec("?", Span::call_site()).is_ok());
     }
 
     #[test]
-    fn format_mode_rejects_dynamic_width_and_precision() {
-        assert!(format_mode_from_spec("width$", Span::call_site()).is_err());
-        assert!(format_mode_from_spec(".*", Span::call_site()).is_err());
+    fn format_spec_rejects_dynamic_width_and_precision() {
+        assert!(validate_format_spec("width$", Span::call_site()).is_err());
+        assert!(validate_format_spec(".*", Span::call_site()).is_err());
     }
 
     #[test]
-    fn format_mode_rejects_hex_debug_specifiers() {
-        assert!(format_mode_from_spec("x?", Span::call_site()).is_err());
-        assert!(format_mode_from_spec("X?", Span::call_site()).is_err());
+    fn format_spec_rejects_hex_debug_specifiers() {
+        assert!(validate_format_spec("x?", Span::call_site()).is_err());
+        assert!(validate_format_spec("X?", Span::call_site()).is_err());
     }
 }

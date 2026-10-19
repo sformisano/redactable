@@ -11,7 +11,7 @@ use syn::{Fields, Result, Type, WherePredicate, spanned::Spanned};
 use crate::{
     crate_root,
     fresh_ident::FreshIdentAllocator,
-    generics::{push_container_predicate, push_debug_predicate, push_policy_predicate},
+    generics::push_debug_predicate,
     strategy::{Strategy, parse_field_strategy, parse_redactable_field_options},
 };
 
@@ -21,9 +21,7 @@ use crate::{
 /// during traversal of struct fields or enum variants.
 pub(crate) struct DeriveContext<'a> {
     pub(crate) container_path: &'a TokenStream,
-    /// Traversal and policy bounds shared by every structural impl.
-    pub(crate) predicates: &'a mut Vec<WherePredicate>,
-    /// Extra bounds only the generated `Debug` impl needs.
+    /// Bounds the generated `Debug` impl adds to the declared bounds.
     pub(crate) debug_predicates: &'a mut Vec<WherePredicate>,
     pub(crate) mapper: &'a Ident,
 }
@@ -178,7 +176,6 @@ fn generate_field_transform(
     match strategy {
         Strategy::WalkDefault => {
             if !recursive_bound_override {
-                push_container_predicate(ctx.predicates, ty);
                 push_debug_predicate(ctx.debug_predicates, ty);
             }
             let crate_root = crate_root();
@@ -198,9 +195,6 @@ fn generate_field_transform(
             TokenStream::new()
         }
         Strategy::Policy(policy_path) => {
-            if !recursive_bound_override {
-                push_policy_predicate(ctx.predicates, ty, policy_path);
-            }
             let policy = policy_path.clone();
             let crate_root = crate_root();
             quote_spanned! { span =>

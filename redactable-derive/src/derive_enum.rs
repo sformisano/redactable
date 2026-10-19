@@ -1,7 +1,7 @@
 //! Enum-specific `RedactableWithMapper` derivation.
 //!
-//! This module generates match arms for each variant and collects generic
-//! parameters that require trait bounds.
+//! This module generates match arms for each variant and collects the field
+//! bounds the generated `Debug` impl needs.
 
 use proc_macro2::Ident;
 use quote::quote;
@@ -24,7 +24,6 @@ pub(crate) fn derive_enum(
     let container_path = crate_path("RedactableWithMapper");
     let mut arms = Vec::new();
     let mut debug_redacted_arms = Vec::new();
-    let mut predicates = Vec::new();
     let mut debug_predicates = Vec::new();
 
     for variant in data.variants {
@@ -33,7 +32,6 @@ pub(crate) fn derive_enum(
         let debug_name = quote! { concat!(stringify!(#name), "::", stringify!(#variant_ident)) };
         let mut ctx = DeriveContext {
             container_path: &container_path,
-            predicates: &mut predicates,
             debug_predicates: &mut debug_predicates,
             mapper,
         };
@@ -82,7 +80,6 @@ pub(crate) fn derive_enum(
 
     Ok(DeriveOutput {
         redaction_body: body,
-        predicates,
         debug_redacted_body,
         debug_predicates,
     })

@@ -151,7 +151,9 @@ assert_eq!(event.redacted_display().to_string(), "request accepted");
 
 `Sensitive`, `SensitiveDisplay`, and `SensitiveDual` check their required field
 operations under the type's declared bounds. Missing capabilities reject the
-definition, even when no method or formatting operation is called.
+definition, even when no method or formatting operation is called. The
+generated traversal and formatting impls carry exactly the declared bounds, so
+each missing capability is reported once, at its field.
 
 These checks cover field operations. For generic `Sensitive` and `SensitiveDual`
 types, the generated `ToRedacted` implementation requires `Clone + Serialize` on
@@ -181,8 +183,9 @@ Formatting bounds alone do not supply that operation.
 
 Requirements apply to complete field types. `std::marker::PhantomData<T>` does
 not impose redaction on `T`. Map keys remain exempt from value traversal.
-`#[redactable(recursive)]` suppresses cyclic inferred predicates; actual field
-operations still need to compile under the original declaration.
+`#[redactable(recursive)]` suppresses only the cyclic `Debug` bound that a
+standalone `Sensitive` derive infers; actual field operations still need to
+compile under the original declaration.
 
 ## Custom policy formatting
 
@@ -572,8 +575,8 @@ feature gates.
 
 Most types need no `#[redactable(...)]` field option. The derive macros expose
 one narrow override for a shape that procedural macros cannot infer on stable
-Rust: `recursive` suppresses a cyclic inferred bound on a recursive field. It
-applies only to fields.
+Rust: `recursive` suppresses the inferred `Debug` bound that a standalone
+`Sensitive` derive adds for a recursive field. It applies only to fields.
 
 The former `legacy_formatting` and `generated_formatting` options were removed.
 Every `#[sensitive(Policy)]` template field now formats through one borrowed

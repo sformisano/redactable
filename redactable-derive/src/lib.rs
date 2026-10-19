@@ -71,7 +71,6 @@ use syn::{DeriveInput, parse_macro_input};
 
 mod container;
 mod crate_paths;
-mod declaration;
 mod derive_enum;
 mod derive_struct;
 mod fresh_ident;
@@ -95,9 +94,9 @@ use sensitive::{Expansion, expand};
 ///
 /// # Recursive Fields
 ///
-/// Use `#[redactable(recursive)]` on a field whose crate-qualified, aliased, or
-/// mutually recursive type would otherwise create a self-referential inferred
-/// bound. Unannotated fields retain their exact complete-type bounds.
+/// The generated `Debug` impl requires `Debug` on each printed field's complete
+/// type. Use `#[redactable(recursive)]` on a field whose crate-qualified, aliased,
+/// or mutually recursive type would make that bound self-referential.
 ///
 /// # Field Attributes
 ///
@@ -120,8 +119,9 @@ use sensitive::{Expansion, expand};
 /// when no generated method is called. For an unannotated generic field `T`,
 /// declare `T: Redactable`; complete container bounds may be declared instead.
 /// Policy fields require the corresponding complete-type `PolicyField<P>` bound.
-/// The recursion override omits inferred recursive predicates, but still checks
-/// the actual field operations.
+/// The traversal impls carry exactly those declared bounds, so each missing
+/// capability is reported once, at its field. The recursion override omits only
+/// the field's inferred `Debug` bound.
 ///
 /// Unions are rejected at compile time.
 ///

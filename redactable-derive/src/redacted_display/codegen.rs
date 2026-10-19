@@ -5,8 +5,7 @@
 //! model, and attaches the placeholder's and field's own spans to each
 //! generated expression so compiler errors point at user code rather than
 //! generated tokens. Emitting tokens is this module's only job — template
-//! parsing lives in `template`, the field model in `model`, and generic
-//! bounds in `bounds`.
+//! parsing lives in `template` and the field model in `model`.
 
 use std::collections::BTreeMap;
 use syn::Error;
@@ -22,12 +21,8 @@ use crate::{
 };
 
 use super::{
-    RedactedDisplayOutput,
-    bounds::collect_bounds,
-    model::{FieldInfo, FormatArgsOutput, FormatMode, PlaceholderKey, build_fields_from_syn},
-    template::{
-        merge_mode, parse_placeholders, template_from_attrs, validate_positional_placeholders,
-    },
+    model::{FieldInfo, PlaceholderKey, build_fields_from_syn},
+    template::{parse_placeholders, template_from_attrs, validate_positional_placeholders},
 };
 
 pub(super) fn derive_struct_display(
@@ -36,11 +31,10 @@ pub(super) fn derive_struct_display(
     attrs: &[Attribute],
     formatter: &Ident,
     fresh: &mut FreshIdentAllocator,
-) -> Result<RedactedDisplayOutput> {
+) -> Result<TokenStream> {
     let template = template_from_attrs(attrs, name.span())?;
     let fields = build_fields_from_syn(&data.fields, fresh)?;
-    let format_args = build_format_args(&template, &fields, formatter, fresh)?;
-    let format_prelude = format_args.prelude.clone();
+    let format_prelude = build_format_args(&template, &fields, formatter, fresh)?;
     let pattern = match data.fields {
         Fields::Named(_) => {
             let patterns = fields.iter().map(|field| {
@@ -64,10 +58,7 @@ pub(super) fn derive_struct_display(
             }
         }
     };
-    Ok(RedactedDisplayOutput {
-        body,
-        predicates: format_args.predicates,
-    })
+    Ok(body)
 }
 
 pub(super) fn derive_enum_display(
@@ -75,16 +66,14 @@ pub(super) fn derive_enum_display(
     data: &DataEnum,
     formatter: &Ident,
     fresh: &mut FreshIdentAllocator,
-) -> Result<RedactedDisplayOutput> {
+) -> Result<TokenStream> {
     let mut arms = Vec::new();
-    let mut predicates = Vec::new();
 
     for variant in &data.variants {
         reject_variant_sensitivity_attrs(&variant.attrs)?;
         let template = template_from_attrs(&variant.attrs, variant.ident.span())?;
         let fields = build_fields_from_syn(&variant.fields, fresh)?;
-        let format_args = build_format_args(&template, &fields, formatter, fresh)?;
-        let format_prelude = format_args.prelude.clone();
+        let format_prelude = build_format_args(&template, &fields, formatter, fresh)?;
         let variant_ident = &variant.ident;
         let pattern = match &variant.fields {
             Fields::Named(_) => {
@@ -106,8 +95,6 @@ pub(super) fn derive_enum_display(
                 #format_prelude
             }
         });
-
-        predicates.extend(format_args.predicates);
     }
 
     let body = if arms.is_empty() {
@@ -124,7 +111,7 @@ pub(super) fn derive_enum_display(
         }
     };
 
-    Ok(RedactedDisplayOutput { body, predicates })
+    Ok(body)
 }
 
 #[allow(clippy::too_many_lines)]
@@ -133,13 +120,11 @@ fn build_format_args(
     fields: &[FieldInfo<'_>],
     formatter: &Ident,
     fresh: &mut FreshIdentAllocator,
-) -> Result<FormatArgsOutput> {
+) -> Result<TokenStream> {
     let placeholders = parse_placeholders(template)?;
     validate_positional_placeholders(&placeholders)?;
-    let mut named_args: BTreeMap<String, (Ident, Ident, &'_ FieldInfo<'_>, FormatMode)> =
-        BTreeMap::new();
-    let mut positional_args: Vec<Option<(Ident, &'_ FieldInfo<'_>, FormatMode)>> = Vec::new();
-    let mut predicates = Vec::new();
+    let mut named_args: BTreeMap<String, (Ident, Ident, &'_ FieldInfo<'_>)> = BTreeMap::new();
+    let mut positional_args: Vec<Option<(Ident, &'_ FieldInfo<'_>)>> = Vec::new();
 
     for placeholder in placeholders {
         match placeholder.key {
@@ -153,15 +138,13 @@ fn build_format_args(
                             format!("unknown field `{name}` in format string"),
                         )
                     })?;
-                let entry = named_args.entry(canonical_name(&name)).or_insert_with(|| {
+                named_args.entry(canonical_name(&name)).or_insert_with(|| {
                     (
                         fresh.fresh_with_ident("__redacted_", &field.ident),
                         field.ident.clone(),
                         field,
-                        placeholder.mode,
                     )
                 });
-                entry.3 = merge_mode(entry.3, placeholder.mode);
             }
             PlaceholderKey::Index(index) => {
                 if positional_args.len() <= index {
@@ -174,9 +157,7 @@ fn build_format_args(
                     )
                 })?;
                 let arg_ident = fresh.fresh(&format!("__redacted_{index}"));
-                let entry =
-                    positional_args[index].get_or_insert((arg_ident, field, placeholder.mode));
-                entry.2 = merge_mode(entry.2, placeholder.mode);
+                positional_args[index].get_or_insert((arg_ident, field));
             }
         }
     }
@@ -185,18 +166,16 @@ fn build_format_args(
     let mut positional_idents = Vec::new();
     let mut named_pairs = Vec::new();
 
-    for (_, (arg_ident, name_ident, field, mode)) in named_args {
+    for (_, (arg_ident, name_ident, field)) in named_args {
         let expr = redacted_expr_for_field(field);
-        collect_bounds(field, mode, &mut predicates);
         prelude_bindings.push(quote! {
             let #arg_ident = #expr;
         });
         named_pairs.push(quote! { #name_ident = #arg_ident });
     }
 
-    for (arg_ident, field, mode) in positional_args.into_iter().flatten() {
+    for (arg_ident, field) in positional_args.into_iter().flatten() {
         let expr = redacted_expr_for_field(field);
-        collect_bounds(field, mode, &mut predicates);
         prelude_bindings.push(quote! {
             let #arg_ident = #expr;
         });
@@ -212,14 +191,9 @@ fn build_format_args(
         }
     };
 
-    let prelude = quote! {
+    Ok(quote! {
         #(#prelude_bindings)*
         #formatter.write_fmt(#format_args)
-    };
-
-    Ok(FormatArgsOutput {
-        prelude,
-        predicates,
     })
 }
 

@@ -905,24 +905,3 @@ help: consider restricting type parameter `T` with trait `RedactableWithMapper`
     |
 164 | struct Generic<T: redactable::RedactableWithMapper>(T);
     |                 ++++++++++++++++++++++++++++++++++
-
-error[E0599]: the method `redact` exists for struct `Generic<String>`, but its trait bounds were not satisfied
- --> tests/ui/safety_undecided_fields.rs
-  |
-  | struct Generic<T>(T);
-  | ----------------- method `redact` not found for this struct because it doesn't satisfy `Generic<String>: Redactable`
-  | fn main() {
-  |     let _ = Generic(String::new()).redact();
-  |                                    ^^^^^^ method cannot be called on `Generic<String>` due to unsatisfied trait bounds
-  |
-note: trait bound `String: Redactable` was not satisfied
- --> tests/ui/safety_undecided_fields.rs
-  |
-  | #[derive(Clone, serde::Serialize, Sensitive)]
-  |                                   ^^^^^^^^^ type parameter would need to implement `Redactable`
-  = help: consider manually implementing the trait to avoid undesired bounds
-  = help: items from traits can only be used if the trait is implemented and in scope
-  = note: the following traits define an item `redact`, perhaps you need to implement one of them:
-          candidate #1: `Redactable`
-          candidate #2: `ScalarRedaction`
-  = note: this error originates in the derive macro `Sensitive` (in Nightly builds, run with -Z macro-backtrace for more info)

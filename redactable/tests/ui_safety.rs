@@ -35,7 +35,7 @@ fn undeclared_fields_and_override_siblings_are_rejected() {
 #[test]
 fn undeclared_fields_report_each_error_once() {
     const SOURCE: &str = r#"
-use redactable::{Secret, Sensitive, SensitiveDisplay, SensitiveDual};
+use redactable::{DeclaredFormatting, Redactable, Secret, Sensitive, SensitiveDisplay, SensitiveDual};
 
 #[derive(Clone, serde::Serialize)]
 struct Opaque;
@@ -69,16 +69,31 @@ struct DualOwner {
     dual_field: String,
 }
 
+#[derive(Clone, serde::Serialize, Sensitive)]
+struct GenericOwner<T: Redactable> {
+    value: T,
+    generic_struct_raw: String,
+}
+
+#[derive(SensitiveDisplay)]
+#[error("{value} {generic_template_raw}")]
+struct GenericDisplayOwner<T: DeclaredFormatting> {
+    value: T,
+    generic_template_raw: String,
+}
+
 fn main() {}
 "#;
     // Each name belongs to one owner, so an error that contains it reports that owner.
-    const UNDECLARED: [&str; 6] = [
+    const UNDECLARED: [&str; 8] = [
         "structural_field",
         "TupleVariant",
         "named_variant_field",
         "policy_field",
         "display_field",
         "dual_field",
+        "generic_struct_raw",
+        "generic_template_raw",
     ];
 
     let owner = tempfile::Builder::new()
