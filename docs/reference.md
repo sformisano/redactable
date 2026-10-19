@@ -151,9 +151,18 @@ assert_eq!(event.redacted_display().to_string(), "request accepted");
 
 `Sensitive`, `SensitiveDisplay`, and `SensitiveDual` check their required field
 operations under the type's declared bounds. Missing capabilities reject the
-definition, even when no method or formatting operation is called. The
-generated traversal and formatting impls carry exactly the declared bounds, so
-each missing capability is reported once, at its field.
+definition, even when no method or formatting operation is called.
+
+Traversal impls carry exactly the declared bounds. Formatting impls retain
+inferred complete-type `Display` and `Debug` bounds for `#[not_sensitive]`
+template fields. A formatter on `&T` alone does not satisfy these conditional
+impl bounds. The formatting body is checked once under the declared bounds,
+including when the conditional impl delegates to a hidden helper.
+
+The derives add no inferred redaction or policy-formatting predicates that
+repeat a concrete field's missing declaration at each impl. This does not
+guarantee one diagnostic per field. Other missing bounds can produce additional
+errors, and formatting errors can point at the derive or template.
 
 These checks cover field operations. For generic `Sensitive` and `SensitiveDual`
 types, the generated `ToRedacted` implementation requires `Clone + Serialize` on
@@ -183,9 +192,8 @@ Formatting bounds alone do not supply that operation.
 
 Requirements apply to complete field types. `std::marker::PhantomData<T>` does
 not impose redaction on `T`. Map keys remain exempt from value traversal.
-`#[redactable(recursive)]` suppresses only the cyclic `Debug` bound that a
-standalone `Sensitive` derive infers; actual field operations still need to
-compile under the original declaration.
+The [recursion override](#advanced-derive-options) suppresses inferred formatting
+bounds; actual field operations still need to compile under the original declaration.
 
 ## Custom policy formatting
 
@@ -575,8 +583,10 @@ feature gates.
 
 Most types need no `#[redactable(...)]` field option. The derive macros expose
 one narrow override for a shape that procedural macros cannot infer on stable
-Rust: `recursive` suppresses the inferred `Debug` bound that a standalone
-`Sensitive` derive adds for a recursive field. It applies only to fields.
+Rust: `recursive` suppresses inferred formatting bounds on a recursive field.
+These are the `Debug` bounds from standalone `Sensitive`, and the `Display` or
+`Debug` bounds from `#[not_sensitive]` template fields. On other template fields,
+the option has no effect. It applies only to fields.
 
 The former `legacy_formatting` and `generated_formatting` options were removed.
 Every `#[sensitive(Policy)]` template field now formats through one borrowed

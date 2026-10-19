@@ -14,6 +14,12 @@ use crate::{
     strategy::{Strategy, parse_field_strategy, parse_redactable_field_options},
 };
 
+#[derive(Clone, Copy, Debug)]
+pub(super) enum FormatMode {
+    Display,
+    Debug,
+}
+
 #[derive(Clone, Debug)]
 pub(super) enum PlaceholderKey {
     Named(Ident),
@@ -23,6 +29,7 @@ pub(super) enum PlaceholderKey {
 #[derive(Clone, Debug)]
 pub(super) struct Placeholder {
     pub(super) key: PlaceholderKey,
+    pub(super) mode: FormatMode,
     pub(super) span: Span,
 }
 
@@ -31,6 +38,7 @@ pub(super) struct FieldInfo<'a> {
     pub(super) binding: Ident,
     pub(super) ty: &'a Type,
     pub(super) strategy: Strategy,
+    pub(super) recursive_bound_override: bool,
     pub(super) span: Span,
 }
 
@@ -43,9 +51,7 @@ pub(super) fn build_fields_from_syn<'a>(
         .enumerate()
         .map(|(index, field)| {
             let strategy = parse_field_strategy(&field.attrs)?;
-            // Display impls infer no field bounds, so `recursive` changes nothing
-            // here; malformed options are still rejected.
-            parse_redactable_field_options(&field.attrs)?;
+            let options = parse_redactable_field_options(&field.attrs)?;
             let (ident, binding) = if let Some(ident) = &field.ident {
                 (
                     ident.clone(),
@@ -60,6 +66,7 @@ pub(super) fn build_fields_from_syn<'a>(
                 binding,
                 ty: &field.ty,
                 strategy,
+                recursive_bound_override: options.recursive,
                 span: field.span(),
             })
         })

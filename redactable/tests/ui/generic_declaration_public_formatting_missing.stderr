@@ -1,0 +1,43 @@
+error[E0277]: `T` doesn't implement `std::fmt::Display`
+ --> tests/ui/generic_declaration_public_formatting_missing.rs:3:10
+  |
+3 | #[derive(SensitiveDisplay)]
+  |          ^^^^^^^^^^^^^^^^ `T` cannot be formatted with the default formatter
+4 | #[error("{value}")]
+  |          ------- required by this formatting parameter
+  |
+  = note: in format strings you may be able to use `{:?}` (or {:#?} for pretty-print) instead
+  = note: required for `&T` to implement `std::fmt::Display`
+help: consider restricting type parameter `T` with trait `Display`
+  |
+5 | struct Display<T: std::fmt::Display> {
+  |                 +++++++++++++++++++
+
+error[E0277]: `T` doesn't implement `std::fmt::Debug`
+  --> tests/ui/generic_declaration_public_formatting_missing.rs:10:10
+   |
+10 | #[derive(SensitiveDisplay)]
+   |          ^^^^^^^^^^^^^^^^ `T` cannot be formatted using `{:?}` because it doesn't implement `std::fmt::Debug`
+11 | #[error("{0:?}")]
+   |          ----- required by this formatting parameter
+   |
+   = note: required for `&T` to implement `std::fmt::Debug`
+help: consider restricting type parameter `T` with trait `Debug`
+   |
+12 | struct Debug<T: std::fmt::Debug>(#[not_sensitive] T);
+   |               +++++++++++++++++
+
+error[E0277]: `T` doesn't implement `std::fmt::Display`
+  --> tests/ui/generic_declaration_public_formatting_missing.rs:14:10
+   |
+14 | #[derive(SensitiveDisplay)]
+   |          ^^^^^^^^^^^^^^^^ `T` cannot be formatted with the default formatter
+15 | #[error("{value:?} {value}")]
+   |                    ------- required by this formatting parameter
+   |
+   = note: in format strings you may be able to use `{:?}` (or {:#?} for pretty-print) instead
+   = note: required for `&T` to implement `std::fmt::Display`
+help: consider further restricting type parameter `T` with trait `Display`
+   |
+16 | struct Both<T: std::fmt::Debug + std::fmt::Display> {
+   |                                +++++++++++++++++++

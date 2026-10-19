@@ -76,9 +76,11 @@ struct GenericOwner<T: Redactable> {
 }
 
 #[derive(SensitiveDisplay)]
-#[error("{value} {generic_template_raw}")]
+#[error("{value} {public} {generic_template_raw}")]
 struct GenericDisplayOwner<T: DeclaredFormatting> {
     value: T,
+    #[not_sensitive]
+    public: u32,
     generic_template_raw: String,
 }
 
@@ -102,10 +104,20 @@ fn main() {}
         .expect("owned fixture directory");
     let directory = owner.path();
     fs::create_dir(directory.join("src")).unwrap();
+    let features = [
+        ("slog", cfg!(feature = "slog")),
+        ("tracing", cfg!(feature = "tracing")),
+        ("tracing-valuable", cfg!(feature = "tracing-valuable")),
+    ]
+    .into_iter()
+    .filter(|(_, enabled)| *enabled)
+    .map(|(name, _)| format!("'{name}'"))
+    .collect::<Vec<_>>()
+    .join(",");
     fs::write(
         directory.join("Cargo.toml"),
         format!(
-            "[package]\nname='declaration-diagnostics'\nversion='0.0.0'\nedition='2024'\npublish=false\n[workspace]\n[dependencies]\nserde={{version='1',features=['derive']}}\nredactable={{path='{}'}}\n",
+            "[package]\nname='declaration-diagnostics'\nversion='0.0.0'\nedition='2024'\npublish=false\n[workspace]\n[dependencies]\nserde={{version='1',features=['derive']}}\nredactable={{path='{}',features=[{features}]}}\n",
             env!("CARGO_MANIFEST_DIR")
         ),
     )

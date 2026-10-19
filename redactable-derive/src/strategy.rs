@@ -9,7 +9,7 @@ use syn::{Attribute, Error, Meta, Path, Result, spanned::Spanned};
 /// Additive code-generation overrides for one derived field.
 #[derive(Clone, Copy, Debug, Default)]
 pub(crate) struct RedactableFieldOptions {
-    /// Suppress the inferred `Debug` bound for a semantically recursive field.
+    /// Suppress inferred formatting bounds for a semantically recursive field.
     pub(crate) recursive: bool,
 }
 
@@ -18,7 +18,7 @@ pub(crate) struct RedactableFieldOptions {
 /// Stable procedural macros cannot resolve aliases or arbitrary qualified paths
 /// back to the type currently being derived. `#[redactable(recursive)]` is the
 /// explicit contract for those recursive fields; it suppresses only the inferred
-/// `Debug` bound for that field and leaves every unannotated field on the precise
+/// formatting bounds for that field and leaves every unannotated field on the precise
 /// default route. The former formatting-route options are rejected with migration
 /// messages: every policy field now formats through one borrowed route.
 pub(crate) fn parse_redactable_field_options(

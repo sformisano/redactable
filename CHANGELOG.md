@@ -14,20 +14,22 @@
 
 ### Changed
 
-- Generated traversal and formatting impls carry exactly the type's declared
-  bounds. The derives no longer add a `where` predicate for each field type,
-  so the same types implement the same traits with shorter `where` clauses.
-  `#[redactable(recursive)]` now affects only the `Debug` bound that a
-  standalone `Sensitive` derive infers; other derives accept it unchanged.
+- Generated traversal impls carry exactly the type's declared bounds.
+  Formatting impls retain conditional `Display` and `Debug` bounds for
+  `#[not_sensitive]` template fields. The derives no longer infer redaction or
+  policy-formatting predicates. `#[redactable(recursive)]` suppresses inferred
+  formatting bounds from standalone `Sensitive` and explicitly public template
+  fields; it has no effect on other template fields.
 
 ### Fixed
 
-- `Sensitive`, `SensitiveDisplay`, and `SensitiveDual` report each missing
-  field declaration once, at the field. A non-generic type previously got two
-  identical errors. A generic type with an undeclared concrete field, such as
-  `raw: String`, got an extra copy at the derive for each generated impl. A
-  generic definition that is already rejected no longer adds a second error
-  where its methods are called.
+- Remove duplicate missing-redaction diagnostics caused by copied declaration
+  checks and inferred concrete-field predicates in `Sensitive`,
+  `SensitiveDisplay`, and `SensitiveDual`. Formatting bodies are checked once
+  under the declared bounds while public-field formatting impls stay conditional.
+  Other missing bounds can still produce multiple diagnostics or errors at the
+  derive or template. Some rejected generic definitions no longer produce a
+  follow-on error where `.redact()` is called.
 
 ## 0.14.0 - 2026-09-23
 

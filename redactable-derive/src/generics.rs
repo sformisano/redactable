@@ -1,7 +1,7 @@
-//! Complete-type `Debug` predicates for the generated structural `Debug` impl.
+//! Complete-type predicates for conditional formatting implementations.
 //!
-//! The traversal and formatting impls carry exactly the type's declared bounds.
-//! A `Debug` bound names the exact field type the impl prints. Container
+//! Structural `Debug` and explicitly public template fields add formatting
+//! bounds on the exact field types they print. Container
 //! implementations remain authoritative for their inner requirements.
 
 use quote::ToTokens;
@@ -75,4 +75,8 @@ fn push_unique(predicates: &mut Vec<WherePredicate>, predicate: WherePredicate) 
 
 pub(crate) fn push_debug_predicate(predicates: &mut Vec<WherePredicate>, ty: &Type) {
     push_unique(predicates, parse_quote!(#ty: ::core::fmt::Debug));
+}
+
+pub(crate) fn push_display_predicate(predicates: &mut Vec<WherePredicate>, ty: &Type) {
+    push_unique(predicates, parse_quote!(#ty: ::core::fmt::Display));
 }

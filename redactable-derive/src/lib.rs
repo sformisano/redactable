@@ -119,9 +119,10 @@ use sensitive::{Expansion, expand};
 /// when no generated method is called. For an unannotated generic field `T`,
 /// declare `T: Redactable`; complete container bounds may be declared instead.
 /// Policy fields require the corresponding complete-type `PolicyField<P>` bound.
-/// The traversal impls carry exactly those declared bounds, so each missing
-/// capability is reported once, at its field. The recursion override omits only
-/// the field's inferred `Debug` bound.
+/// The traversal impls carry exactly those declared bounds. They add no inferred
+/// redaction predicates that repeat a concrete field's missing declaration at
+/// each impl. Other missing bounds can still produce additional diagnostics.
+/// The recursion override omits only the field's inferred `Debug` bound.
 ///
 /// Unions are rejected at compile time.
 ///

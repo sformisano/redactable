@@ -12,7 +12,7 @@ use syn::Error;
 
 use proc_macro2::{Ident, TokenStream};
 use quote::{quote, quote_spanned};
-use syn::{Attribute, DataEnum, DataStruct, Fields, LitStr, Result};
+use syn::{Attribute, DataEnum, DataStruct, Fields, LitStr, Result, WherePredicate};
 
 use crate::{
     crate_path, crate_root,
@@ -21,6 +21,8 @@ use crate::{
 };
 
 use super::{
+    RedactedDisplayOutput,
+    bounds::collect_bounds,
     model::{FieldInfo, PlaceholderKey, build_fields_from_syn},
     template::{parse_placeholders, template_from_attrs, validate_positional_placeholders},
 };
@@ -31,10 +33,11 @@ pub(super) fn derive_struct_display(
     attrs: &[Attribute],
     formatter: &Ident,
     fresh: &mut FreshIdentAllocator,
-) -> Result<TokenStream> {
+) -> Result<RedactedDisplayOutput> {
     let template = template_from_attrs(attrs, name.span())?;
     let fields = build_fields_from_syn(&data.fields, fresh)?;
-    let format_prelude = build_format_args(&template, &fields, formatter, fresh)?;
+    let mut predicates = Vec::new();
+    let format_prelude = build_format_args(&template, &fields, formatter, fresh, &mut predicates)?;
     let pattern = match data.fields {
         Fields::Named(_) => {
             let patterns = fields.iter().map(|field| {
@@ -58,7 +61,7 @@ pub(super) fn derive_struct_display(
             }
         }
     };
-    Ok(body)
+    Ok(RedactedDisplayOutput { body, predicates })
 }
 
 pub(super) fn derive_enum_display(
@@ -66,14 +69,16 @@ pub(super) fn derive_enum_display(
     data: &DataEnum,
     formatter: &Ident,
     fresh: &mut FreshIdentAllocator,
-) -> Result<TokenStream> {
+) -> Result<RedactedDisplayOutput> {
     let mut arms = Vec::new();
+    let mut predicates = Vec::new();
 
     for variant in &data.variants {
         reject_variant_sensitivity_attrs(&variant.attrs)?;
         let template = template_from_attrs(&variant.attrs, variant.ident.span())?;
         let fields = build_fields_from_syn(&variant.fields, fresh)?;
-        let format_prelude = build_format_args(&template, &fields, formatter, fresh)?;
+        let format_prelude =
+            build_format_args(&template, &fields, formatter, fresh, &mut predicates)?;
         let variant_ident = &variant.ident;
         let pattern = match &variant.fields {
             Fields::Named(_) => {
@@ -111,7 +116,7 @@ pub(super) fn derive_enum_display(
         }
     };
 
-    Ok(body)
+    Ok(RedactedDisplayOutput { body, predicates })
 }
 
 #[allow(clippy::too_many_lines)]
@@ -120,6 +125,7 @@ fn build_format_args(
     fields: &[FieldInfo<'_>],
     formatter: &Ident,
     fresh: &mut FreshIdentAllocator,
+    predicates: &mut Vec<WherePredicate>,
 ) -> Result<TokenStream> {
     let placeholders = parse_placeholders(template)?;
     validate_positional_placeholders(&placeholders)?;
@@ -138,6 +144,7 @@ fn build_format_args(
                             format!("unknown field `{name}` in format string"),
                         )
                     })?;
+                collect_bounds(field, placeholder.mode, predicates);
                 named_args.entry(canonical_name(&name)).or_insert_with(|| {
                     (
                         fresh.fresh_with_ident("__redacted_", &field.ident),
@@ -156,6 +163,7 @@ fn build_format_args(
                         format!("unknown positional field index {index} in format string"),
                     )
                 })?;
+                collect_bounds(field, placeholder.mode, predicates);
                 let arg_ident = fresh.fresh(&format!("__redacted_{index}"));
                 positional_args[index].get_or_insert((arg_ident, field));
             }

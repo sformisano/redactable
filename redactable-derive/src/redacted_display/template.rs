@@ -13,7 +13,7 @@ use std::collections::BTreeSet;
 use proc_macro2::{Ident, Span};
 use syn::{Attribute, Error, Expr, Lit, LitStr, Meta, Result, spanned::Spanned};
 
-use super::model::{Placeholder, PlaceholderKey};
+use super::model::{FormatMode, Placeholder, PlaceholderKey};
 
 pub(super) fn validate_positional_placeholders(placeholders: &[Placeholder]) -> Result<()> {
     let indexes: BTreeSet<usize> = placeholders
@@ -132,7 +132,7 @@ pub(super) fn parse_placeholders(template: &LitStr) -> Result<Vec<Placeholder>> 
                 let mut parts = inside.splitn(2, ':');
                 let arg_part = parts.next().unwrap_or("").trim();
                 let spec_part = parts.next().unwrap_or("");
-                validate_format_spec(spec_part, template.span())?;
+                let mode = validate_format_spec(spec_part, template.span())?;
                 let key = if arg_part.is_empty() {
                     let index = implicit_index;
                     implicit_index += 1;
@@ -147,6 +147,7 @@ pub(super) fn parse_placeholders(template: &LitStr) -> Result<Vec<Placeholder>> 
                 };
                 placeholders.push(Placeholder {
                     key,
+                    mode,
                     span: template.span(),
                 });
             }
@@ -173,10 +174,10 @@ fn parse_placeholder_ident(value: &str, span: Span) -> Result<Ident> {
         .map_err(|_| Error::new(span, format!("unsupported format placeholder `{value}`")))
 }
 
-fn validate_format_spec(spec_part: &str, span: Span) -> Result<()> {
+fn validate_format_spec(spec_part: &str, span: Span) -> Result<FormatMode> {
     let spec = spec_part.trim();
     if spec.is_empty() {
-        return Ok(());
+        return Ok(FormatMode::Display);
     }
     if has_dynamic_width_or_precision(spec) {
         return Err(Error::new(
@@ -192,11 +193,12 @@ fn validate_format_spec(spec_part: &str, span: Span) -> Result<()> {
     }
     let last = spec.chars().last().unwrap_or_default();
     match last {
+        '?' => Ok(FormatMode::Debug),
         'x' | 'X' | 'o' | 'b' | 'p' | 'e' | 'E' => Err(Error::new(
             span,
             format!("unsupported format specifier `{spec}`; only Display and Debug are supported"),
         )),
-        _ => Ok(()),
+        _ => Ok(FormatMode::Display),
     }
 }
 

@@ -23,7 +23,7 @@ use crate::{
     fresh_ident::FreshIdentAllocator,
     generics::add_predicates,
     output::{display_to_redacted_impl, dual_to_redacted_impl, structural_to_redacted_impl},
-    redacted_display::derive_redacted_display,
+    redacted_display::{checked_display_body, derive_redacted_display},
 };
 
 /// Output produced by struct/enum derive logic for the structural half.
@@ -155,11 +155,18 @@ fn expand_display(
     formatter: Ident,
 ) -> Result<TokenStream> {
     let crate_root = crate_root();
-    // The formatting impls carry exactly the declared bounds, so the formatting
-    // body below is checked once, under those bounds.
-    let redacted_display_body = derive_redacted_display(&ident, &body, &attrs, &formatter, fresh)?;
+    let output = derive_redacted_display(&ident, &body, &attrs, &formatter, fresh)?;
+    let display_generics = add_predicates(generics.clone(), &output.predicates, &ident);
+    let (declaration, redacted_display_body) = checked_display_body(
+        &ident,
+        &generics,
+        &display_generics,
+        &formatter,
+        output.body,
+        fresh,
+    );
     let (display_impl_generics, display_ty_generics, display_where_clause) =
-        generics.split_for_impl();
+        display_generics.split_for_impl();
     let redacted_display_impl = quote! {
         impl #display_impl_generics #crate_root::RedactableWithFormatter for #ident #display_ty_generics #display_where_clause {
             fn fmt_redacted(&self, #formatter: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
@@ -172,9 +179,9 @@ fn expand_display(
     // The display half owns the producer in dual mode: it is the half that
     // knows the template, and only one impl may exist per type.
     let to_redacted_impl = if dual {
-        dual_to_redacted_impl(&ident, &generics, &crate_root)
+        dual_to_redacted_impl(&ident, &display_generics, &crate_root)
     } else {
-        display_to_redacted_impl(&ident, &generics, &crate_root)
+        display_to_redacted_impl(&ident, &display_generics, &crate_root)
     };
 
     // Debug always uses the same selected template as redacted display.
@@ -206,7 +213,7 @@ fn expand_display(
     } else {
         #[cfg(feature = "tracing")]
         {
-            assemble_display_tracing_impl(&generics, &crate_root, &ident)
+            assemble_display_tracing_impl(&display_generics, &crate_root, &ident)
         }
 
         #[cfg(not(feature = "tracing"))]
@@ -216,6 +223,7 @@ fn expand_display(
     };
 
     let generated = quote! {
+        #declaration
         #redacted_display_impl
         #to_redacted_impl
         #debug_impl
