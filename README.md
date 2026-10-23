@@ -1220,9 +1220,46 @@ It is computed when produced and retains no reference to the source.
 The [output reference](docs/reference.md#output-and-adapter-contracts) explains
 adapter bounds, cloning, and when borrowed adapters run.
 
+### Optional and shared producers
+
+An operation can return `Option<T>` and keep `T`'s chosen logging output.
+`Some(value)` delegates to the producer without changing its text or JSON.
+`None` and `()` produce JSON `null`.
+
+This also works with a handwritten producer that borrows its data:
+
+```rust
+use redactable::{BypassDisplayRedaction, Email, RedactedValue, RedactionPolicy, ToRedacted};
+
+struct Account<'a> {
+    email: &'a str,
+}
+
+impl ToRedacted for Account<'_> {
+    fn to_redacted(&self) -> RedactedValue {
+        let email = Email::policy().apply_to(self.email);
+        BypassDisplayRedaction(email).to_redacted()
+    }
+}
+
+let result = Some(Account { email: "alice@example.com" });
+assert_eq!(result.to_redacted().text(), "al***@example.com");
+assert_eq!(None::<Account<'_>>.to_redacted().json(), serde_json::Value::Null);
+assert_eq!(().to_redacted().json(), serde_json::Value::Null);
+```
+
+The bypass receives only the email after its policy runs. The account needs
+neither `Clone` nor `Serialize`, and its original data remains available.
+
+References, `Box<T>`, `Rc<T>`, and `Arc<T>` also forward to an existing producer.
+These implementations require `ToRedacted`; structural `.redact()` support alone
+does not make a value a producer. `Option<String>` therefore remains rejected.
+The [composition contract](docs/reference.md#producer-composition) covers bounds,
+nested options, and the loss of distinction between absent values and JSON null.
+
 ### Logging a list
 
-A container of loggable types does not itself implement `ToRedacted`.
+Collections such as `Vec<T>` do not implement `ToRedacted` from their elements.
 Use `RedactedList` to log a slice with a limit on how many items are included.
 
 `RedactedList::new(&items, limit)` takes items implementing `ToRedacted` and a

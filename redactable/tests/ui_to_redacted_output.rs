@@ -9,6 +9,7 @@ mod to_redacted {
     fn rejects_raw_and_undeclared_values() {
         let t = TestCases::new();
         t.compile_fail("tests/ui/to_redacted_raw_string_rejected.rs");
+        t.compile_fail("tests/ui/to_redacted_option_raw_string_rejected.rs");
         t.compile_fail("tests/ui/to_redacted_arbitrary_display_rejected.rs");
         t.compile_fail("tests/ui/to_redacted_arbitrary_debug_rejected.rs");
         t.compile_fail("tests/ui/to_redacted_raw_number_rejected.rs");

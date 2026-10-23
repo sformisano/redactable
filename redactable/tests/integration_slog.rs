@@ -166,6 +166,34 @@ fn log_redacted<T: ToRedacted>(value: &T) -> RedactedValue {
 }
 
 #[test]
+fn composed_producers_preserve_text_and_structured_output_through_real_drain() {
+    const CANARY: &str = "slog-producer-composition-private-8234";
+    let text = Some(Box::new(redactable::SensitiveValue::<_, Secret>::from(
+        CANARY.to_owned(),
+    )));
+    let dual = Some(Arc::new(GenericDualFixture {
+        label: "account",
+        secret: CANARY.to_owned(),
+    }));
+    let (logger, captured) = capturing_logger();
+    slog::info!(logger, "text"; "event" => log_redacted(&text));
+    slog::info!(logger, "dual"; "event" => log_redacted(&dual));
+    slog::info!(logger, "absent"; "event" => log_redacted(&None::<()>));
+    slog::info!(logger, "unit"; "event" => log_redacted(&()));
+    let values = captured.lock().expect("capture lock");
+    assert_eq!(
+        *values,
+        [
+            CapturedValue::Str("[REDACTED]".into()),
+            CapturedValue::Serde(serde_json::json!({"label": "account", "secret": "[REDACTED]"})),
+            CapturedValue::Serde(JsonValue::Null),
+            CapturedValue::Serde(JsonValue::Null),
+        ]
+    );
+    assert!(!format!("{values:?}").contains(CANARY));
+}
+
+#[test]
 fn display_adapter_emits_selected_text_and_json_through_real_drain() {
     use std::fmt::{Formatter, Result as FmtResult};
 

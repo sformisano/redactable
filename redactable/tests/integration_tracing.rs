@@ -277,6 +277,35 @@ fn unsized_producer_tracing_text_matches_concrete_output() {
     assert_eq!(dynamic, concrete);
 }
 
+#[test]
+fn composed_producers_preserve_selected_text_through_tracing() {
+    const CANARY: &str = "tracing-producer-composition-private-9137";
+    let text = Some(Box::new(SensitiveValue::<_, Secret>::from(
+        CANARY.to_owned(),
+    )));
+    let dual = Some(Arc::new(GenericDualFixture {
+        label: "account",
+        secret: CANARY.to_owned(),
+    }));
+    let fields = capture_fields(|| {
+        tracing::info!(
+            text = text.tracing_redacted(),
+            dual = dual.tracing_redacted(),
+            absent = None::<()>.tracing_redacted(),
+            unit = ().tracing_redacted(),
+        );
+    });
+    for (name, expected) in [
+        ("text", "[REDACTED]"),
+        ("dual", "account: [REDACTED]"),
+        ("absent", "null"),
+        ("unit", "null"),
+    ] {
+        assert_eq!(debug_text(field_named(&fields, name), name), expected);
+    }
+    assert!(!format!("{fields:?}").contains(CANARY));
+}
+
 #[cfg(feature = "tracing-valuable")]
 #[test]
 fn valuable_error_projection_forwards_caller_mutation() {

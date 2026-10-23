@@ -10,7 +10,11 @@ mod map_keys;
 #[cfg(test)]
 mod tests;
 
-use std::fmt::{Debug, Formatter, Result as FmtResult};
+use std::{
+    fmt::{Debug, Formatter, Result as FmtResult},
+    rc::Rc,
+    sync::Arc,
+};
 
 use serde::Serialize;
 use serde_json::{Value as JsonValue, json};
@@ -54,9 +58,8 @@ pub fn serialize_redacted_json<T: Serialize>(value: T) -> JsonValue {
 
 /// The value a logging boundary receives.
 ///
-/// Obtain it from [`ToRedacted::to_redacted`]. A value carries redacted text,
-/// redacted JSON, or both; which of those a producer builds is decided by the
-/// derive that generated it, never by the sink. Both [`Self::text`] and
+/// Obtain it from [`ToRedacted::to_redacted`]. The producer chooses whether a
+/// value carries redacted text, redacted JSON, or both. Both [`Self::text`] and
 /// [`Self::json`] always answer, adapting the stored representation when the
 /// requested one was not built.
 ///
@@ -66,8 +69,8 @@ pub fn serialize_redacted_json<T: Serialize>(value: T) -> JsonValue {
 /// time.
 ///
 /// Construction is crate-private: a `RedactedValue` can only come from a
-/// redacting derive, a logging adapter, or a deliberate member of the Bypass
-/// family. There is no `From`, no `Deserialize`, and no mutable access.
+/// declared producer, a logging adapter, or the built-in null output for
+/// `None` and `()`. There is no `From`, no `Deserialize`, and no mutable access.
 #[derive(Clone, PartialEq, Eq)]
 pub struct RedactedValue {
     text: Option<String>,
@@ -176,6 +179,15 @@ impl Debug for RedactedValue {
 /// where the author's declaration is recorded. These declarations and
 /// user-defined policies remain the author's responsibility; producing a value
 /// does not prove confidentiality or completeness.
+///
+/// `Option<T>` delegates `Some(value)` to its producer without converting its
+/// output. `None` and `()` produce JSON null. There is no variant tag:
+/// `Some(())`, `Some(None::<()>)`, and `None::<()>` have the same output.
+/// References, `Box`, [`Rc`], and [`Arc`] also delegate to the inner producer,
+/// including unsized producers. These implementations require only
+/// `ToRedacted`; structural [`Redactable`] implementations do not make a value
+/// a producer. Collections require an explicit choice such as
+/// [`RedactedList`](super::list::RedactedList), which enforces an item limit.
 pub trait ToRedacted {
     /// Produces the logging-safe value for `self`.
     ///
@@ -196,6 +208,51 @@ pub trait ToRedacted {
 impl ToRedacted for RedactedValue {
     fn to_redacted(&self) -> RedactedValue {
         self.clone()
+    }
+}
+
+impl<T: ToRedacted> ToRedacted for Option<T> {
+    fn to_redacted(&self) -> RedactedValue {
+        self.as_ref().map_or_else(
+            || RedactedValue::from_json(JsonValue::Null),
+            ToRedacted::to_redacted,
+        )
+    }
+}
+
+impl ToRedacted for () {
+    fn to_redacted(&self) -> RedactedValue {
+        RedactedValue::from_json(JsonValue::Null)
+    }
+}
+
+impl<T: ToRedacted + ?Sized> ToRedacted for &T {
+    fn to_redacted(&self) -> RedactedValue {
+        T::to_redacted(self)
+    }
+}
+
+impl<T: ToRedacted + ?Sized> ToRedacted for &mut T {
+    fn to_redacted(&self) -> RedactedValue {
+        T::to_redacted(self)
+    }
+}
+
+impl<T: ToRedacted + ?Sized> ToRedacted for Box<T> {
+    fn to_redacted(&self) -> RedactedValue {
+        T::to_redacted(self)
+    }
+}
+
+impl<T: ToRedacted + ?Sized> ToRedacted for Rc<T> {
+    fn to_redacted(&self) -> RedactedValue {
+        T::to_redacted(self)
+    }
+}
+
+impl<T: ToRedacted + ?Sized> ToRedacted for Arc<T> {
+    fn to_redacted(&self) -> RedactedValue {
+        T::to_redacted(self)
     }
 }
 

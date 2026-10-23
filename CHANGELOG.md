@@ -1,5 +1,24 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- `Option<T>` implements `ToRedacted` when `T` does. `Some(value)` preserves the
+  producer's complete text and JSON output; `None` and `()` produce JSON null.
+  Nested options retain no presence tags. See the
+  [composition contract](docs/reference.md#producer-composition) for null ambiguity.
+- References, `Box<T>`, `Rc<T>`, and `Arc<T>` forward `ToRedacted` for sized or
+  unsized producers without adding cloning, serialization, or formatting bounds.
+  Collections still require an explicit output choice, such as bounded `RedactedList`.
+
+### Compatibility
+
+- Existing downstream `ToRedacted` implementations for `&Local`, `&mut Local`, or
+  `Box<Local>` overlap with forwarding when `Local: ToRedacted`. Remove redundant
+  implementations. Use a local newtype if the wrapper needs different output.
+  Bare strings and `Option<String>` remain outside the producer boundary.
+
 ## 0.14.1 - 2026-10-19
 
 ### Added

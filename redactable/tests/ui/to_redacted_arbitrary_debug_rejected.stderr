@@ -12,13 +12,15 @@ help: the trait `ToRedacted` is not implemented for `DebugOnly`
  5 | struct DebugOnly;
    | ^^^^^^^^^^^^^^^^
    = help: the following other types implement trait `ToRedacted`:
+             &T
+             &mut T
+             ()
+             Arc<T>
+             Box<T>
              BypassDebugRedaction<T>
              BypassDisplayRedaction<T>
              BypassJsonRedaction<'_, T>
-             BypassTextRedaction
-             RedactedList<'_, T>
-             RedactedValue
-             SensitiveValue<T, P>
+           and $N others
 note: required by a bound in `require_output`
   --> tests/ui/to_redacted_arbitrary_debug_rejected.rs:13:22
    |

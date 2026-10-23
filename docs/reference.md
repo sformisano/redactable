@@ -300,9 +300,9 @@ including empty text.
 A type with a derive-generated implementation cannot also define a handwritten one.
 Use a separate log-view type for a different projection.
 
-Standard containers do not gain `ToRedacted` from their elements. A bare `String`
-or `Vec<String>` does not declare logging output. Use a derive, an explicit
-public wrapper, or `RedactedList` for a slice of producers.
+A bare `String` does not declare logging output. Use a derive, an explicit
+public wrapper, or an existing producer through the composition rules below.
+Use `RedactedList` for a [bounded slice of producers](#bounded-list-output).
 
 | Method | Required bounds |
 |---|---|
@@ -318,6 +318,38 @@ public wrapper, or `RedactedList` for a slice of producers.
 `.to_redacted()`, `.slog_redacted_json()`, and `.tracing_redacted()` also accept
 unsized producers, including `&dyn ToRedacted`. `.slog_redacted()` retains its
 `Sized` requirement.
+
+### Producer composition
+
+Structural `Redactable` traversal applies field policies and returns a value of
+the same type. Producer delegation calls an existing `ToRedacted` implementation
+and returns its owned `RedactedValue` unchanged. Neither trait implies the other.
+
+| Producer | Required bounds | Output |
+|---|---|---|
+| `Option<T>` | `T: ToRedacted` | `Some(value)` delegates to `value`; `None` produces JSON `null` |
+| `()` | None | JSON `null` |
+| `&T`, `&mut T`, `Box<T>`, `Rc<T>`, `Arc<T>` | `T: ToRedacted + ?Sized` | Delegate to the referenced producer |
+
+Delegation preserves the complete `RedactedValue`, including distinct text and
+JSON from a dual producer. It does not format, serialize, clone, or structurally
+redact the source itself. It adds no `Clone`, `Serialize`, `Display`, `Debug`, or
+`Redactable` requirement. The inner producer still performs its own work.
+Mutable references delegate through a shared borrow; delegation does not mutate
+the source. Unsized referents such as `dyn ToRedacted` are supported.
+
+The null output has `json() == serde_json::Value::Null` and `text() == "null"`.
+No option tag or nesting depth is retained. `None::<Option<()>>`, `Some(None::<()>)`,
+and `Some(Some(()))` therefore produce the same output.
+Likewise, `Some(value)` is indistinguishable from `None` when `value` produces only JSON null.
+A producer with JSON null and separate text retains that text inside `Some`.
+Use a dedicated log-view type when the distinction matters.
+
+Only an existing producer can be forwarded. `Option<String>` and `Box<String>`
+remain rejected, including an absent `None::<String>`.
+Collections, slices, arrays, non-unit tuples, and `Result` do not gain producer
+implementations from their contents. Use `RedactedList` for an explicit item
+limit, or a dedicated log-view type to choose a representation.
 
 ### Map-key output
 
