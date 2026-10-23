@@ -38,12 +38,12 @@ types and logging adapters.
 
 ### Quick examples
 
-These examples use the 0.14 series and require Rust 1.97 or later.
+These examples use the 0.15 series and require Rust 1.97 or later.
 The structured example also uses Serde to make the redacted value serializable:
 
 ```toml
 [dependencies]
-redactable = "0.14"
+redactable = "0.15"
 serde = { version = "1", features = ["derive"] }
 ```
 
@@ -917,7 +917,7 @@ The `slog` feature makes derived types and `SensitiveValue` implement
 
 ```toml
 [dependencies]
-redactable = { version = "0.14", features = ["slog"] }
+redactable = { version = "0.15", features = ["slog"] }
 serde = { version = "1", features = ["derive"] }
 slog = "2.8"
 ```
@@ -984,7 +984,7 @@ feature and log the redacted `Debug` form:
 
 ```toml
 [dependencies]
-redactable = { version = "0.14", features = ["tracing"] }
+redactable = { version = "0.15", features = ["tracing"] }
 serde = { version = "1", features = ["derive"] }
 tracing = "0.1"
 ```
@@ -1025,7 +1025,7 @@ and the field expression must pass a reference through that adapter:
 
 ```toml
 [dependencies]
-redactable = { version = "0.14", features = ["tracing-valuable"] }
+redactable = { version = "0.15", features = ["tracing-valuable"] }
 serde = { version = "1", features = ["derive"] }
 tracing = "0.1"
 valuable = { version = "0.1", features = ["derive"] }

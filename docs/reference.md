@@ -675,6 +675,10 @@ Include populated samples to exercise those paths.
 
 ## Upgrading
 
+For the 0.15 upgrade, check downstream `ToRedacted` implementations for overlap
+with producer forwarding. [Migration from 0.14](../CHANGELOG.md#migration-from-014)
+explains which implementations to remove or replace with a newtype.
+
 For the 0.14 upgrade, remove `#[redactable(legacy_formatting)]` and
 `#[redactable(generated_formatting)]`. Migrate custom policy-formatting
 implementations as described in [Migration from 0.13](../CHANGELOG.md#migration-from-013).

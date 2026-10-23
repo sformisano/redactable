@@ -1,6 +1,11 @@
 # Changelog
 
-## Unreleased
+## 0.15.0 - 2026-10-23
+
+### Breaking
+
+- Existing downstream `ToRedacted` implementations for `&Local`, `&mut Local`, or
+  `Box<Local>` overlap with forwarding when `Local: ToRedacted`.
 
 ### Added
 
@@ -12,12 +17,13 @@
   unsized producers without adding cloning, serialization, or formatting bounds.
   Collections still require an explicit output choice, such as bounded `RedactedList`.
 
-### Compatibility
+### Migration from 0.14
 
-- Existing downstream `ToRedacted` implementations for `&Local`, `&mut Local`, or
-  `Box<Local>` overlap with forwarding when `Local: ToRedacted`. Remove redundant
-  implementations. Use a local newtype if the wrapper needs different output.
-  Bare strings and `Option<String>` remain outside the producer boundary.
+Remove redundant downstream implementations for references or `Box<Local>` when
+`Local` already implements `ToRedacted`. Use a local newtype if the wrapper needs
+different output.
+
+Bare strings and `Option<String>` remain outside the producer boundary.
 
 ## 0.14.1 - 2026-10-19
 

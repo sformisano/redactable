@@ -57,6 +57,7 @@ docs/reference.md	#what-each-derive-generates	1
 docs/reference.md	#wrapper-contracts	2
 docs/reference.md	../CHANGELOG.md#migration-from-011	1
 docs/reference.md	../CHANGELOG.md#migration-from-013	1
+docs/reference.md	../CHANGELOG.md#migration-from-014	1
 docs/reference.md	../README.md	1
 docs/reference.md	../README.md#custom-policies	1
 docs/reference.md	../README.md#foreign-types	1
