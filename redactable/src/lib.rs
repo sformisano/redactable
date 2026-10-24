@@ -1,7 +1,9 @@
 //! Redaction for structured values and formatted text.
 //!
-//! Mark sensitive data with a policy marker such as `Pii`, `Token`, or `Email`.
-//! Each marker selects a redaction policy that defines how to transform the data.
+//! Preserve useful context for the output's audience and choose protection field
+//! by field. Credentials use `Secret`; partial policies such as `Token` and
+//! `Email` retain fragments that need their own diagnostic purpose.
+//! Public fields use `#[not_sensitive]`; nested types retain their own policies.
 //!
 //! Use `Redactable::redact()` to transform a value whose type declares redaction
 //! behavior. Use `ToRedacted` to produce owned text or JSON for logging.

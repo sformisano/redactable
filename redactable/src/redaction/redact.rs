@@ -11,19 +11,19 @@
 //!
 //! For a field like:
 //! ```ignore
-//! #[sensitive(Token)]
+//! #[sensitive(Secret)]
 //! api_keys: Option<Vec<String>>
 //! ```
 //!
 //! The generated code calls:
 //! ```ignore
-//! PolicyApplicable::apply_policy::<Token, _>(api_keys, mapper)
+//! PolicyApplicable::apply_policy::<Secret, _>(api_keys, mapper)
 //! ```
 //!
 //! At runtime, this recursively descends:
-//! 1. `Option<Vec<String>>` → calls `.map(|v| v.apply_policy::<Token, _>(mapper))`
-//! 2. `Vec<String>` → calls `.into_iter().map(|v| v.apply_policy::<Token, _>(mapper)).collect()`
-//! 3. `String` → calls `mapper.map_sensitive::<_, Token>(self)`
+//! 1. `Option<Vec<String>>` → calls `.map(|v| v.apply_policy::<Secret, _>(mapper))`
+//! 2. `Vec<String>` → calls `.into_iter().map(|v| v.apply_policy::<Secret, _>(mapper)).collect()`
+//! 3. `String` → calls `mapper.map_sensitive::<_, Secret>(self)`
 //!
 //! The recursion handles any nesting depth automatically!
 

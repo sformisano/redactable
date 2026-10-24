@@ -4,6 +4,8 @@
 //! Default traversal and supported recursive policy application fully redact it
 //! to `Value::String("[REDACTED]")`. They do not traverse its dynamic structure.
 //! Policy application retains its policy-kind bounds; typed IP dispatch is separate.
+//! Useful dynamic fields need a typed diagnostic projection. Generated structural
+//! `Debug` uses the original field's formatter unless a field policy protects it.
 
 use serde_json::Value;
 
@@ -40,7 +42,7 @@ impl PolicyApplicableRef for Value {
 
 impl RedactableWithMapper for Value {
     fn redact_with<M: RedactableMapper>(self, _mapper: &M) -> Self {
-        // Safe-by-default: unannotated Value fields are fully redacted.
+        // Erased JSON has no field policies; this structural path emits an opaque placeholder.
         Value::String("[REDACTED]".to_string())
     }
 }

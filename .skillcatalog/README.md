@@ -3,6 +3,8 @@
 The editable catalog lives in [catalog](catalog/). Its guidance targets
 Redactable 0.15. Skills guide decisions; the
 [README](../README.md) and [reference](../docs/reference.md) own API mechanics.
+The README's [disclosure decision](../README.md#choose-what-diagnostics-retain)
+owns the product baseline for useful context and protected values.
 
 Catalog ID `redactable-skills`, all six skill IDs, stack `redactable`, and bundle
 `redactable-skills` are unchanged. The stack still contains all six skills.

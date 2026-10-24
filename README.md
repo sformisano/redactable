@@ -49,6 +49,10 @@ serde = { version = "1", features = ["derive"] }
 
 **Structured** (`Sensitive`), with a redacted copy:
 
+The email examples model restricted support logs whose operators use a mailbox
+prefix and domain to correlate delivery failures. That application permits both
+fragments. Use `Secret` where those fragments have no diagnostic purpose.
+
 `.redact()` consumes its input. Clone first when you want to keep the original,
 as this example does:
 
@@ -109,7 +113,29 @@ The library follows three principles:
 
 A plain `String` does not tell the compiler whether it holds a password or a
 public message. That is why raw fields need an explicit decision.
-An undecided raw field fails to compile when structural traversal or a template references it.
+An undecided primitive field fails to compile when structural traversal or a template references it.
+
+### Choose what diagnostics retain
+
+Start with the output's audience and purpose. Restricted operator diagnostics
+need useful names, IDs, branches, titles, labels, paths, messages, counts, and
+relevant review content to explain work. Public outputs may need another view.
+
+Mask concrete credentials, unnecessary personal data, and values covered by a
+stated domain confidentiality rule. A field is not secret merely because it is
+`String`, free-form, caller-supplied, internal, or stored in a private repository.
+The possibility of an embedded secret does not justify masking the whole field.
+Redactable applies your declared policies; it does not detect secrets in content.
+
+Use `Secret` for credentials unless a documented diagnostic need justifies a
+retained fragment. Other partial policies also need that disclosure decision.
+Keep nested types' policies intact. A public declaration skips them, so review
+the entire representation before choosing passthrough.
+
+Use a typed diagnostic view when the original representation cannot retain
+useful context with the required protection. Output limits control volume
+separately from confidentiality; report omitted counts or size limits clearly.
+Keep original business values for operations and raw serialization that need them.
 
 ### What redaction protects
 
@@ -142,13 +168,14 @@ Each field tells it what to do:
 | `#[not_sensitive]` | Keep the whole field unchanged, including any nested sensitive data |
 | A nested type deriving `Sensitive` | Walk that type's fields and apply its annotations |
 | A supported container such as `Option<T>` or `Vec<T>` | Delegate to its contents, which must also declare redaction behavior |
-| A raw field with no declaration | Compile error |
+| Opaque `serde_json::Value` | Follow the [payload-specific rules](#json-payloads-need-an-output-view) |
+| An undecided scalar or string field | Compile error |
 
 For example, `Address` below declares what to do with its fields. `Account`
 does not, so the `account` field makes this example fail to compile:
 
 ```rust,compile_fail
-use redactable::{Sensitive, Token};
+use redactable::{Secret, Sensitive};
 
 #[derive(Clone, Sensitive, serde::Serialize)]
 struct Address {
@@ -166,7 +193,7 @@ struct User {
     address: Address,       // ✅ container, walks into it
     #[not_sensitive]
     name: String,           // ✅ explicitly public, unchanged
-    #[sensitive(Token)]
+    #[sensitive(Secret)]
     api_key: String,        // ✅ annotated leaf, policy applied (redacted)
     account: Account,       // ❌ ERROR: Account does not declare Redactable behavior
 }
@@ -225,6 +252,64 @@ assert_eq!(redacted.maybe_inner.unwrap().secret, "[REDACTED]");   // walked and 
 assert_eq!(redacted.secret, Some("[REDACTED]".into()));           // policy applied
 ```
 
+### JSON payloads need an output view
+
+With the default `redaction` feature, `serde_json::Value` is an opaque traversal
+leaf. Structural redaction replaces the whole payload with `"[REDACTED]"`.
+This fallback has no field-level knowledge; it does not classify every JSON
+value as secret. `Sensitive`'s generated `Debug` instead delegates an unannotated
+JSON field to its original `Debug`, which can expose the entire payload.
+
+For useful diagnostics, select known fields into a typed view with their own
+policies. Keep the raw payload for business use. This example preserves review
+context and protects a concrete credential:
+
+```rust
+use redactable::{Secret, Sensitive, ToRedacted};
+use serde::Serialize;
+use serde_json::json;
+
+#[derive(Clone, Sensitive, Serialize)]
+struct Event {
+    #[not_sensitive]
+    request_id: String,
+    payload: serde_json::Value,
+}
+
+#[derive(Clone, Sensitive, Serialize)]
+struct ReviewDiagnostic {
+    #[not_sensitive]
+    request_id: String,
+    #[not_sensitive]
+    title: String,
+    #[sensitive(Secret)]
+    access_token: String,
+}
+
+let event = Event {
+    request_id: "review-42".into(),
+    payload: json!({"title": "Improve routing", "access_token": "example-access-token"}),
+};
+assert_eq!(event.to_redacted().json()["payload"], "[REDACTED]");
+assert!(format!("{event:?}").contains("example-access-token"));
+
+let view = ReviewDiagnostic {
+    request_id: event.request_id.clone(),
+    title: event.payload["title"].as_str().unwrap().to_owned(),
+    access_token: event.payload["access_token"].as_str().unwrap().to_owned(),
+};
+assert_eq!(view.to_redacted().json(), json!({
+    "request_id": "review-42", "title": "Improve routing", "access_token": "[REDACTED]"
+}));
+assert!(!format!("{view:?}").contains("example-access-token"));
+assert_eq!(event.payload["access_token"], "example-access-token");
+```
+
+Send the view through the selected logging adapter. Declaring the raw JSON
+`#[not_sensitive]` would bypass the fallback and expose all current and future
+fields. The [reference](docs/reference.md#generated-debug-and-ordinary-display)
+describes the separate `Debug` and traversal contracts.
+
 ### What if a field has no redaction declaration?
 
 For a raw leaf, choose a policy or `#[not_sensitive]`. For a type containing its
@@ -264,7 +349,7 @@ also applies through supported containers, such as an `Option<String>`:
 - `#[sensitive(Policy)]` on strings: applies the policy's redaction rules
 
 ```rust
-use redactable::{Email, Secret, Sensitive};
+use redactable::{Email, Redactable, Secret, Sensitive};
 
 #[derive(Clone, Sensitive, serde::Serialize)]
 struct Login {
@@ -274,9 +359,20 @@ struct Login {
     password: String,           // redacted to "[REDACTED]"
     #[sensitive(Email)]
     email: String,              // redacted to "al***@example.com"
-    #[sensitive(Secret)]
-    attempts: u32,              // redacted to 0
+    #[not_sensitive]
+    attempts: u32,              // retained for diagnosing retries
 }
+
+let login = Login {
+    username: "alice".into(),
+    password: "example-password".into(),
+    email: "alice@example.com".into(),
+    attempts: 3,
+};
+let diagnostic = login.clone().redact();
+assert_eq!(diagnostic.attempts, 3);
+assert_eq!(diagnostic.password, "[REDACTED]");
+assert_eq!(login.password, "example-password");
 ```
 
 `#[sensitive(Secret)]` accepts both bare primitive names such as `u32` and qualified standard-library paths such as `std::primitive::u32`.
@@ -331,7 +427,7 @@ flowchart TD
     A -- No --> D{"Annotated with<br/>#[not_sensitive]?"}
     D -- Yes --> E["Preserve field<br/>ordinary output bounds still apply"]
     D -- No --> G{"Declares<br/>Redactable?"}
-    G -- "Yes, derived type" --> I["Use declared traversal"]
+    G -- "Yes, declared type" --> I["Use declared traversal"]
     G -- "Yes, supported container<br/>with declared contents" --> I
     G -- No --> K["Compile error"]
 ```
@@ -540,7 +636,7 @@ the result into the template:
 - `#[sensitive(Policy)]` on containers such as `Option<String>` or `Vec<String>`: applies the policy to each contained string, then formats the redacted container in the template
 
 ```rust
-use redactable::{Email, RedactableWithFormatter, Secret, SensitiveDisplay, Token};
+use redactable::{Email, RedactableWithFormatter, Secret, SensitiveDisplay};
 
 #[derive(SensitiveDisplay)]
 enum AuthEvent {
@@ -548,10 +644,10 @@ enum AuthEvent {
     Login {
         #[sensitive(Email)]
         email: String,              // becomes "al***@example.com"
-        #[sensitive(Token)]
-        token: String,              // becomes "***********2345"
         #[sensitive(Secret)]
-        attempt: u32,               // becomes 0
+        token: String,              // credential remains fully masked
+        #[not_sensitive]
+        attempt: u32,               // retained for diagnosing retries
     },
 }
 
@@ -562,7 +658,7 @@ let event = AuthEvent::Login {
 };
 assert_eq!(
     event.redacted_display().to_string(),
-    "login by al***@example.com with token ***********2345 (attempt 0)"
+    "login by al***@example.com with token [REDACTED] (attempt 3)"
 );
 ```
 
@@ -912,14 +1008,15 @@ Local structured types should derive `Sensitive` instead.
 
 ### slog
 
-The `slog` feature makes derived types and `SensitiveValue` implement
-`slog::Value`, so you can pass them to slog directly:
+For structured records, use `.slog_redacted_json()` to keep the fields selected
+by the type's policies. This example writes them through a JSON drain:
 
 ```toml
 [dependencies]
 redactable = { version = "0.15", features = ["slog"] }
 serde = { version = "1", features = ["derive"] }
 slog = "2.8"
+slog-json = { version = "2.6", features = ["nested-values"] }
 ```
 
 Structured slog output relies on nested-value support throughout the drain
@@ -927,50 +1024,62 @@ stack. When using drains such as `slog-async` or `slog-json`, enable each
 drain crate's `nested-values` feature as well. Enabling `redactable/slog`
 enables the feature on `slog` itself, but not on separate drain crates.
 
-**Containers**: the `Sensitive` derive generates `slog::Value` automatically.
-Passing a borrowed `Sensitive` or `SensitiveDual` value directly to slog emits
-`"[REDACTED]"`. To log its redacted fields as JSON, use `.slog_redacted_json()`.
-That adapter clones the value, redacts the clone, and emits its JSON.
+For `Sensitive` and `SensitiveDual`, the adapter clones the value, redacts the
+clone, and serializes it at the call. This work happens even if the drain later
+filters the record. Prefer a small view when cloning or serializing the source
+would be expensive. It leaves the original business value unchanged.
 
 ```rust
-use redactable::{CreditCard, Email, Sensitive};
+use redactable::{Secret, Sensitive};
+use redactable::slog::SlogRedactedExt;
 use serde::Serialize;
-use slog::{Discard, Logger};
+use slog::{Drain, Logger};
 
 #[derive(Clone, Sensitive, Serialize)]
-struct PaymentEvent {
-    #[sensitive(Email)]
-    customer_email: String,
-    #[sensitive(CreditCard)]
-    card_number: String,
+struct ReviewEvent {
     #[not_sensitive]
-    amount: u64,
+    request_id: String,
+    #[not_sensitive]
+    title: String,
+    #[not_sensitive]
+    attempts: u32,
+    #[sensitive(Secret)]
+    access_token: String,
 }
 
-let event = PaymentEvent {
-    customer_email: "alice@example.com".into(),
-    card_number: "4111111111111234".into(),
-    amount: 9999,
+let event = ReviewEvent {
+    request_id: "review-42".into(),
+    title: "Improve review routing".into(),
+    attempts: 3,
+    access_token: "example-access-token".into(),
 };
 
-// Just log it - slog::Value impl handles redaction automatically
-let logger = Logger::root(Discard, slog::o!());
-slog::info!(logger, "payment"; "event" => &event);
-// Borrowed generated output: "[REDACTED]"
+let drain = slog_json::Json::default(std::io::stdout());
+let logger = Logger::root(std::sync::Mutex::new(drain).fuse(), slog::o!());
+slog::info!(logger, "review requested"; "event" => event.slog_redacted_json());
+assert_eq!(event.access_token, "example-access-token");
 ```
+
+The nested `event` object retains `request_id`, `title`, and `attempts` while
+`access_token` is `"[REDACTED]"`.
+
+Direct borrowed native output is a coarse fallback: passing `"event" => &event`
+for a `Sensitive` or `SensitiveDual` value emits only `"[REDACTED]"`.
+That path protects the complete value without cloning, but discards all of its
+field context. Keep it when that placeholder is the intended output.
+Use a typed diagnostic view and the JSON adapter when fields are needed.
 
 **Leaf wrappers**: `SensitiveValue<T, P>` also implements `slog::Value`:
 
 ```rust
-use redactable::{SensitiveValue, Token};
+use redactable::{Secret, SensitiveValue};
 use slog::{Discard, Logger};
 
-let api_token: SensitiveValue<String, Token> = SensitiveValue::from(String::from("sk-secret-key"));
+let api_token: SensitiveValue<String, Secret> = SensitiveValue::from(String::from("sk-secret-key"));
 
-// Also automatic - SensitiveValue has its own slog::Value impl
 let logger = Logger::root(Discard, slog::o!());
 slog::info!(logger, "auth"; "token" => &api_token);
-// Logged: "*********-key"
+// Logged: "[REDACTED]"
 ```
 
 `SensitiveDisplay` emits its redacted text. The public-data derives emit what you
@@ -992,12 +1101,12 @@ tracing = "0.1"
 With your application's tracing subscriber configured:
 
 ```rust,ignore
-use redactable::{Email, Sensitive, Token};
+use redactable::{Email, Secret, Sensitive};
 use redactable::tracing::TracingRedactedDebugExt;
 
 #[derive(Clone, Sensitive, serde::Serialize)]
 struct AuthEvent {
-    #[sensitive(Token)]
+    #[sensitive(Secret)]
     api_key: String,
     #[sensitive(Email)]
     user_email: String,
@@ -1034,12 +1143,12 @@ valuable = { version = "0.1", features = ["derive"] }
 Build this example with `RUSTFLAGS="--cfg tracing_unstable"`:
 
 ```rust,ignore
-use redactable::{Email, Sensitive, Token};
+use redactable::{Email, Secret, Sensitive};
 use redactable::tracing::TracingValuableExt;
 
 #[derive(Clone, Sensitive, serde::Serialize, valuable::Valuable)]
 struct AuthEvent {
-    #[sensitive(Token)]
+    #[sensitive(Secret)]
     api_key: String,
     #[sensitive(Email)]
     user_email: String,
@@ -1055,7 +1164,7 @@ let event = AuthEvent {
 
 let redacted = event.tracing_redacted_valuable();
 tracing::info!(event = tracing::field::valuable(&redacted));
-// Logged: {api_key: "***************2345", user_email: "al***@example.com", action: "login"}
+// Logged: {api_key: "[REDACTED]", user_email: "al***@example.com", action: "login"}
 ```
 
 Unlike slog where `slog::Value` can be implemented automatically via the derive
@@ -1071,10 +1180,10 @@ inserted data can appear in later output.
 **For flat display values** (without `valuable`):
 
 ```rust,ignore
-use redactable::{Email, SensitiveValue, Token};
+use redactable::{Email, Secret, SensitiveValue};
 use redactable::tracing::TracingRedactedExt;
 
-let api_key: SensitiveValue<String, Token> = SensitiveValue::from(String::from("sk-secret-key-12345"));
+let api_key: SensitiveValue<String, Secret> = SensitiveValue::from(String::from("sk-secret-key-12345"));
 let user_email: SensitiveValue<String, Email> = SensitiveValue::from(String::from("alice@example.com"));
 
 tracing::info!(
@@ -1082,7 +1191,7 @@ tracing::info!(
     user_email = user_email.tracing_redacted(),
     action = "login"
 );
-// Logged: api_key="***************2345" user_email="al***@example.com" action="login"
+// Logged: api_key="[REDACTED]" user_email="al***@example.com" action="login"
 ```
 
 The display path also works for `SensitiveDisplay`, `SensitiveDual`,
@@ -1095,12 +1204,14 @@ helpers can require those adapters too, making an accidental raw value a compile
 
 ### Enforcing redaction at compile time
 
-`SlogRedacted` and `TracingRedacted` mark values with logging integrations that
-respect their redaction declarations. The five derives and `SensitiveValue`
+`SlogRedacted` and `TracingRedacted` mark logging integrations with a declared
+output policy. The five derives and `SensitiveValue`
 implement them when the corresponding feature is enabled.
 
 Requiring a marker is only useful if the helper also uses the correct adapter.
 A helper that checks the bound and then formats a raw field can still leak data.
+A marker also does not promise that native output preserves a record's fields.
+Public declarations and bypasses remain the author's disclosure decision.
 
 `BypassRedactionMarker` explicitly declares its wrapped value public. It implements
 `TracingRedacted`, and also `SlogRedacted` when the wrapped value implements
@@ -1113,7 +1224,7 @@ With `user`, `api_token`, and your logger supplied by the application, the
 first two calls compile. The raw email call is deliberately rejected:
 
 ```rust,ignore
-use redactable::slog::SlogRedacted;
+use redactable::slog::{SlogRedacted, SlogRedactedExt};
 
 macro_rules! slog_safe {
     ($logger:expr, $msg:literal; $($key:literal => $value:expr),* $(,)?) => {{
@@ -1123,11 +1234,11 @@ macro_rules! slog_safe {
     }};
 }
 
-// ✅ Works: Sensitive-derived types implement SlogRedacted
-slog_safe!(logger, "user logged in"; "user" => &user);
+let user_fields = user.slog_redacted_json();
+slog_safe!(logger, "user logged in"; "user" => &user_fields);
 
 // ✅ Works: SensitiveValue implements SlogRedacted
-slog_safe!(logger, "auth"; "token" => &api_token);  // SensitiveValue<String, Token>
+slog_safe!(logger, "auth"; "token" => &api_token);  // SensitiveValue<String, Secret>
 
 // ❌ Won't compile: raw String doesn't implement SlogRedacted
 slog_safe!(logger, "user"; "email" => &user.email);
@@ -1325,28 +1436,32 @@ For upgrades, start with the [upgrade notes](docs/reference.md#upgrading).
 
 | Policy | Use for | Example output |
 |---|---|---|
-| `Secret` | Scalars or generic redaction | `0` / `false` / `'*'` / `[REDACTED]` |
-| `Token` | API keys | `************f456` (last 4) |
+| `Secret` | Credentials and protected values requiring full masking | `0` / `false` / `'*'` / `[REDACTED]` |
+| `Token` | Protected tokens with a justified diagnostic suffix | `************f456` (last 4) |
 | `Email` | Email addresses | `al***@example.com` |
 | `CreditCard` | Card numbers | `************1234` (last 4) |
-| `Pii` | Generic PII (names, addresses) | `******oe` (last 2) |
+| `Pii` | Personal text with justified final characters; no content detection | `******oe` (last 2) |
 | `PhoneNumber` | Phone numbers | `*******4567` (last 4) |
 | `IpAddress` | IP addresses | `0.0.0.100` for typed IPv4; text keeps the last 4 characters |
 | `BlockchainAddress` | Wallet addresses | `************abcdef` (last 6) |
 
+This table describes transformations. The [audience decision](#choose-what-diagnostics-retain)
+determines whether a retained fragment belongs in your output.
+
 ### Custom policies
 
 A policy gives a name to a transformation. Define a marker type and implement
-`RedactionPolicy` to reuse it across fields. This policy keeps the last two
-characters of longer values:
+`RedactionPolicy` to reuse it across fields. Suppose support staff need the last
+two characters of a confidential payment reference to distinguish customer-supplied
+references. This policy expresses that partial-disclosure decision:
 
 ```rust
 use redactable::{RedactionPolicy, TextPolicyKind, TextRedactionPolicy};
 
 #[derive(Clone, Copy)]
-struct InternalId;
+struct PaymentReference;
 
-impl RedactionPolicy for InternalId {
+impl RedactionPolicy for PaymentReference {
     type Kind = TextPolicyKind;
 
     fn policy() -> TextRedactionPolicy {

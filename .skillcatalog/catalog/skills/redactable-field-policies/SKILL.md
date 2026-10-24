@@ -12,6 +12,8 @@ metadata:
 For Redactable 0.15, choose field disclosure from the intended audience and the
 value's meaning. Confirm the consumer's locked version before applying library
 contracts. A policy name does not establish the right disclosure.
+The [product disclosure decision](https://github.com/sformisano/redactable/blob/main/README.md#choose-what-diagnostics-retain)
+owns the library's baseline; the checks here apply it to field choices.
 
 ## Preserve useful context for the audience
 
@@ -92,10 +94,12 @@ if the output needs to preserve cardinality, and decide whether revealing that
 cardinality is itself acceptable. Scalar replacement can also create ordinary
 values such as zero; do not feed that projection back into business decisions.
 
-Dynamic JSON is opaque during structural redaction. Prefer a typed projection
-when useful selected fields are needed. Declaring arbitrary JSON public exposes
-future contents as well as today's sample. Generated structural `Debug` can
-print an unannotated JSON field raw, so assess that path separately.
+Dynamic JSON is opaque during structural redaction and becomes a whole-value
+mask under the `redaction` feature. Prefer a typed projection when useful selected
+fields are needed. Declaring arbitrary JSON public exposes future contents as
+well as today's sample. Generated structural `Debug` can print an unannotated
+JSON field raw, so assess that path separately. Keep the coarse structural mask
+when no projection exists; it is not evidence that every original field is secret.
 
 Verify representative useful and protected values together. Assert useful values
 remain visible and protected values are absent from the configured sink output.

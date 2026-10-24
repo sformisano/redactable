@@ -10,6 +10,8 @@ feature lists, and step-by-step instructions in product documentation. Retain a
 short example in a skill only when it clarifies a decision, and link to the
 authoritative documentation for mechanics. Check claims against the current
 implementation and the consumer's version.
+The README's [disclosure decision](README.md#choose-what-diagnostics-retain)
+owns the product guidance for useful context and protected fields.
 
 ## Voice and structure
 
@@ -22,6 +24,9 @@ check current source and tests for technical claims.
 - Keep structured redaction and formatted redaction in parallel sections. Explain the combined derive after both.
 - Update the paragraph that owns a changed behavior. Avoid appending another qualification elsewhere.
 - Keep disclosure risks beside the affected example. Put detailed restrictions in the reference and old-name mappings in the changelog.
+- Keep ordinary counts and correlation fields useful. Give masking a concrete confidentiality reason in the example's domain.
+- Use `Secret` for credential examples unless the example explicitly justifies partial disclosure.
+- Show the structured adapter when logging fields matter. Identify whole-value placeholders as fallbacks with different output.
 - Use tables for choices. Keep test infrastructure and verification reports out of the walkthrough.
 - When moving content, give each current behavior a destination and check the links.
 

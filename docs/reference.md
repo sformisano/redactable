@@ -2,6 +2,8 @@
 
 This page covers the contracts behind the examples in the [README](../README.md).
 Start there for the derive walkthrough and logging examples.
+The README's [disclosure decision](../README.md#choose-what-diagnostics-retain)
+owns the audience and confidentiality choices; this reference defines the mechanisms.
 
 ## Contents
 
@@ -85,6 +87,11 @@ assert_eq!(record.redact().payload, serde_json::json!("[REDACTED]"));
 Annotating that field `#[sensitive(Secret)]` also replaces its generated `Debug`
 output with the fixed placeholder. `#[not_sensitive]` instead skips structural
 redaction and uses the field's own `Debug`.
+
+For useful fields from an opaque payload, construct the README's
+[typed diagnostic view](../README.md#json-payloads-need-an-output-view).
+Keep the default whole-value traversal mask as a fallback when no such view
+exists. Making the raw JSON public exposes every current and future field.
 
 `SensitiveDisplay` and `SensitiveDual` generate `Debug` from their redacted
 template. That output includes any fragments retained by the policies and any
@@ -397,6 +404,10 @@ The result retains no reference to the source and has no public constructor,
 `.slog_redacted_json()` and `.tracing_redacted()` run the producer at the call.
 `.slog_redacted()` holds a reference and runs it each time slog serializes the record.
 `.redacted_display()` remains a borrowed formatting view.
+For the structured slog route and its nested drain setup, see the
+[runnable logging example](../README.md#slog).
+Direct borrowed native `Sensitive` and `SensitiveDual` output remains a fixed
+whole-value placeholder; it does not preserve fields.
 
 ### Serialization failure
 
@@ -667,6 +678,11 @@ and scalar JSON kinds.
 The helper reads `json()`, so a text-only producer is compared as `{"message": text}`.
 Write the expected JSON independently. Check expected policy output and unchanged
 public values as well; matching shapes alone cannot prove correct redaction.
+Capture the configured sink when changing a logging integration. Assert useful
+values and protected-value absence in the same record, including transitions and
+accepted unknown vocabulary where the contract supports them. Check actual
+`Debug` output separately from structural projections and confirm supported raw
+serialization retains the original business values.
 
 Strict JSON Pointer paths can mark opaque nodes. Their parents still require the
 node on both sides, and malformed paths are rejected.

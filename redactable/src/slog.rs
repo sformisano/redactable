@@ -3,6 +3,8 @@
 //! This module connects redacting derives and the Bypass family with `slog`.
 //! A value carrying JSON is emitted through nested-value support; a text-only
 //! value is emitted as a string.
+//! Use `SlogRedactedExt::slog_redacted_json` for selected structured fields.
+//! Direct borrowed `Sensitive` and `SensitiveDual` output is an opaque placeholder.
 //!
 //! It is responsible for:
 //! - Applying the operation selected by each adapter or named declaration.
@@ -28,14 +30,14 @@ use crate::{
     },
 };
 
-/// Marker trait for types whose `slog` integration always emits logging-safe output.
+/// Marker trait for types whose `slog` integration has a declared output policy.
 ///
 /// This trait requires `slog::Value` so the type can be logged with slog.
-/// Implementors are safe because their `slog::Value` implementation either
-/// redacts its value or emits a value explicitly declared non-sensitive.
+/// Implementations redact their value or emit a representation declared public.
+/// The marker validates neither confidentiality nor diagnostic usefulness.
 ///
-/// This trait is implemented only for logging-safe adapters and wrappers. It is
-/// not a blanket impl for raw types.
+/// The crate implements this marker for its declared adapters and wrappers.
+/// It supplies no blanket implementation for raw types.
 ///
 /// ```compile_fail
 /// use redactable::slog::SlogRedacted;
@@ -144,10 +146,20 @@ impl_slog_redacted!(@ [T] BypassJsonRedaction<'_, T> where T: Serialize + ?Sized
 /// use redactable::{Secret, Sensitive};
 ///
 /// #[derive(Clone, serde::Serialize, Sensitive)]
-/// struct Event { #[sensitive(Secret)] token: String }
+/// struct Event {
+///     #[not_sensitive]
+///     request_id: String,
+///     #[not_sensitive]
+///     attempt: u32,
+///     #[sensitive(Secret)]
+///     token: String,
+/// }
 /// # fn main() {
 /// use ::slog::{Discard, Logger};
-/// let event = Event { token: "secret".into() };
+/// let event = Event { request_id: "review-42".into(), attempt: 3, token: "secret".into() };
+/// assert_eq!(event.to_redacted().json(), serde_json::json!({
+///     "request_id": "review-42", "attempt": 3, "token": "[REDACTED]",
+/// }));
 /// let logger = Logger::root(Discard, ::slog::o!());
 /// ::slog::info!(logger, "event"; "data" => event.slog_redacted_json());
 /// # }

@@ -39,13 +39,18 @@ dumps need the same path inspection as explicit log statements.
 - Use the named slog JSON adapter for a redacted object. Direct borrowed
   structural values emit a fixed placeholder; that protects content but can
   discard the diagnostics the caller expected. Inspect the drain's output.
+  The [runnable slog example](https://github.com/sformisano/redactable/blob/main/README.md#slog)
+  shows the field-preserving route and required nested-value drain features.
 - Choose tracing text, redacted `Debug`, or structured valuable output from
   downstream requirements. Exercise the subscriber and feature configuration
   used by the application before claiming structured output works.
 - `Sensitive` masks annotated fields in generated `Debug` and delegates other
   fields to their own `Debug`. `SensitiveDisplay` and `SensitiveDual` render
   policy-shaped templates. An unannotated opaque JSON field can therefore be
-  visible through `Sensitive`'s direct `Debug`.
+  visible through `Sensitive`'s direct `Debug` even though structural traversal
+  replaces the whole payload with a mask. Use a typed diagnostic view to retain
+  useful metadata and apply concrete field protection; do not make raw JSON
+  public to recover lost context.
 
 ## Bound cost and failure behavior
 

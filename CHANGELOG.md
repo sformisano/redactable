@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.15.1 - 2026-10-24
 
 ### Changed
 
@@ -8,6 +8,17 @@
   field-level reasons for masking. Guidance distinguishes confidentiality from
   output limits and verifies useful output alongside protected-value absence.
   The catalog targets Redactable 0.15 and covers its producer forwarding behavior.
+- README and logging examples retain retry counts and correlation fields, fully
+  protect credentials, and state the purpose of partial personal-data disclosure.
+  The primary slog example uses a structured JSON drain and the field-preserving
+  adapter. Opaque JSON examples use a selected typed view for useful diagnostics.
+- Logging marker documentation describes declared representations without
+  promising confidentiality. Runtime APIs and redaction defaults are unchanged.
+
+### Tests
+
+- Real slog-drain regressions check useful execution and review context alongside
+  protected credentials, nested before/after values, and unchanged raw data.
 
 ## 0.15.0 - 2026-10-23
 

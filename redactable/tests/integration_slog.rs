@@ -63,6 +63,205 @@ fn capturing_logger() -> (Logger, Arc<Mutex<Vec<CapturedValue>>>) {
 }
 
 #[test]
+fn useful_execution_and_review_context_reaches_real_drain_with_nested_secrets_protected() {
+    #[derive(Clone, Serialize, Sensitive)]
+    struct ReviewSnapshot {
+        #[not_sensitive]
+        version: u64,
+        #[not_sensitive]
+        title: String,
+        #[not_sensitive]
+        commit_message: String,
+        #[not_sensitive]
+        branch: String,
+        #[not_sensitive]
+        labels: Vec<String>,
+        #[not_sensitive]
+        paths: Vec<String>,
+        #[not_sensitive]
+        count: u32,
+        #[not_sensitive]
+        status: String,
+        #[sensitive(Secret)]
+        access_token: String,
+    }
+
+    #[derive(Clone, Serialize, Sensitive)]
+    struct ReviewExecution {
+        #[not_sensitive]
+        request_id: String,
+        #[not_sensitive]
+        event_id: String,
+        #[not_sensitive]
+        step_id: String,
+        #[not_sensitive]
+        run_id: String,
+        #[not_sensitive]
+        schedule_id: String,
+        #[not_sensitive]
+        actor_id: u64,
+        #[sensitive(Secret)]
+        actor_email: String,
+        before: Option<ReviewSnapshot>,
+        after: ReviewSnapshot,
+    }
+
+    let event = ReviewExecution {
+        request_id: "request/review-42".into(),
+        event_id: "event/commit-73".into(),
+        step_id: "review:publish-findings".into(),
+        run_id: "run/nightly-14".into(),
+        schedule_id: "schedule/platform-nightly".into(),
+        actor_id: 17,
+        actor_email: "personal-contact-canary@example.invalid".into(),
+        before: Some(ReviewSnapshot {
+            version: 3,
+            title: "Draft: improve routing".into(),
+            commit_message: "fix(routing): preserve branch context\n\nExplain the selected target."
+                .into(),
+            branch: "feature/review-context".into(),
+            labels: vec!["workflow::triage".into()],
+            paths: vec!["src/old_route.rs".into()],
+            count: 1,
+            status: "queued".into(),
+            access_token: "before-credential-canary".into(),
+        }),
+        after: ReviewSnapshot {
+            version: 4,
+            title: "Improve routing / 路由".into(),
+            commit_message: "fix(routing): preserve branch context\n\nExplain the selected target."
+                .into(),
+            branch: "release/next".into(),
+            labels: vec!["workflow::ready".into(), "component::routing".into()],
+            paths: vec!["src/route.rs".into(), "docs/review.md".into()],
+            count: 2,
+            status: "awaiting_policy_sync".into(),
+            access_token: "after-credential-canary".into(),
+        },
+    };
+    let original = serde_json::to_value(&event).unwrap();
+    let expected = serde_json::json!({
+        "request_id": "request/review-42", "event_id": "event/commit-73",
+        "step_id": "review:publish-findings", "run_id": "run/nightly-14",
+        "schedule_id": "schedule/platform-nightly", "actor_id": 17,
+        "actor_email": "[REDACTED]",
+        "before": {
+            "version": 3, "title": "Draft: improve routing",
+            "commit_message": "fix(routing): preserve branch context\n\nExplain the selected target.",
+            "branch": "feature/review-context", "labels": ["workflow::triage"],
+            "paths": ["src/old_route.rs"], "count": 1, "status": "queued",
+            "access_token": "[REDACTED]"
+        },
+        "after": {
+            "version": 4, "title": "Improve routing / 路由",
+            "commit_message": "fix(routing): preserve branch context\n\nExplain the selected target.",
+            "branch": "release/next", "labels": ["workflow::ready", "component::routing"],
+            "paths": ["src/route.rs", "docs/review.md"], "count": 2, "status": "awaiting_policy_sync",
+            "access_token": "[REDACTED]"
+        }
+    });
+    let (logger, captured) = capturing_logger();
+    slog::info!(logger, "review projection"; "event" => event.slog_redacted_json());
+    slog::info!(logger, "review producer"; "event" => event.to_redacted());
+    slog::info!(logger, "opaque borrowed event"; "event" => &event);
+
+    let values = captured.lock().unwrap();
+    assert_eq!(
+        *values,
+        [
+            CapturedValue::Serde(expected.clone()),
+            CapturedValue::Serde(expected),
+            CapturedValue::Serde(serde_json::json!("[REDACTED]")),
+        ]
+    );
+    let output = format!("{values:?}");
+    for secret in [
+        "before-credential-canary",
+        "after-credential-canary",
+        "personal-contact-canary@example.invalid",
+    ] {
+        assert!(!output.contains(secret));
+    }
+    assert_eq!(serde_json::to_value(&event).unwrap(), original);
+    assert_eq!(event.after.access_token, "after-credential-canary");
+    assert_eq!(
+        original["before"]["access_token"],
+        "before-credential-canary"
+    );
+    assert_eq!(
+        original["actor_email"],
+        "personal-contact-canary@example.invalid"
+    );
+}
+
+#[test]
+fn typed_projection_of_erased_input_keeps_review_context_without_promoting_raw_json() {
+    #[derive(Clone, serde::Deserialize, Serialize, Sensitive)]
+    struct ReviewContext {
+        #[not_sensitive]
+        title: String,
+        #[not_sensitive]
+        message: String,
+        #[not_sensitive]
+        branch: String,
+        #[not_sensitive]
+        labels: Vec<String>,
+        #[not_sensitive]
+        paths: Vec<String>,
+        #[not_sensitive]
+        count: u32,
+        #[not_sensitive]
+        status: String,
+    }
+
+    #[derive(Clone, serde::Deserialize, Serialize, Sensitive)]
+    struct SelectedInput {
+        #[not_sensitive]
+        request_id: String,
+        #[not_sensitive]
+        event_id: String,
+        review: ReviewContext,
+    }
+
+    let raw = serde_json::json!({
+        "request_id": "request/erased-19", "event_id": "event/review-19",
+        "review": {
+            "title": "Keep implementation context", "message": "Explain the branch transition.",
+            "branch": "feature/typed-projection", "labels": ["review::ready"],
+            "paths": ["src/review.rs"], "count": 1, "status": "accepted",
+            "access_token": "nested-erased-token-canary"
+        },
+        "access_token": "erased-token-canary", "personal_email": "erased-person-canary@example.invalid"
+    });
+    let original = raw.clone();
+    let selected: SelectedInput = serde_json::from_value(raw.clone()).unwrap();
+    let expected = serde_json::json!({
+        "request_id": "request/erased-19", "event_id": "event/review-19",
+        "review": {
+            "title": "Keep implementation context", "message": "Explain the branch transition.",
+            "branch": "feature/typed-projection", "labels": ["review::ready"],
+            "paths": ["src/review.rs"], "count": 1, "status": "accepted"
+        }
+    });
+    let (logger, captured) = capturing_logger();
+    slog::info!(logger, "selected review context"; "event" => selected.slog_redacted_json());
+    let values = captured.lock().unwrap();
+    assert_eq!(*values, [CapturedValue::Serde(expected.clone())]);
+    assert_eq!(serde_json::to_value(&selected).unwrap(), expected);
+    let output = format!("{values:?}");
+    for secret in [
+        "erased-token-canary",
+        "nested-erased-token-canary",
+        "erased-person-canary@example.invalid",
+    ] {
+        assert!(!output.contains(secret));
+    }
+    assert_eq!(raw, original);
+    assert_eq!(raw["access_token"], "erased-token-canary");
+    assert_eq!(raw["review"]["access_token"], "nested-erased-token-canary");
+}
+
+#[test]
 fn real_slog_drain_keeps_canary_out_and_documents_borrowed_clone_panic() {
     #[derive(Clone, Sensitive, Serialize)]
     struct Event {

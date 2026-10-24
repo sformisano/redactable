@@ -58,14 +58,15 @@ use crate::{
     },
 };
 
-/// Marker trait for types whose `tracing` integration always emits logging-safe output.
+/// Marker trait for types whose `tracing` integration has a declared output policy.
 ///
-/// Implementors are safe because they either redact their value or represent a
-/// value explicitly declared non-sensitive before it reaches tracing (via
+/// Implementations redact their value or emit a representation declared public
+/// before it reaches tracing (via
 /// `TracingRedactedDebugExt`, `TracingRedactedExt`, or `TracingValuableExt`).
+/// The marker validates neither confidentiality nor diagnostic usefulness.
 ///
-/// This trait is implemented only for logging-safe adapters and wrappers. It is
-/// not a blanket impl for raw types.
+/// The crate implements this marker for its declared adapters and wrappers.
+/// It supplies no blanket implementation for raw types.
 ///
 /// ```compile_fail
 /// use redactable::tracing::TracingRedacted;

@@ -10,7 +10,9 @@ CHANGELOG.md	docs/reference.md#producer-composition	1
 CHANGELOG.md	docs/reference.md#wrapper-contracts	1
 CONTRIBUTING.md	CHANGELOG.md	1
 CONTRIBUTING.md	README.md	1
+CONTRIBUTING.md	README.md#choose-what-diagnostics-retain	1
 CONTRIBUTING.md	docs/reference.md	1
+README.md	#choose-what-diagnostics-retain	1
 README.md	#choosing-what-to-use	2
 README.md	#custom-policies	1
 README.md	#design-principles	1
@@ -19,6 +21,7 @@ README.md	#getting-started	1
 README.md	#how-sensitive-works	1
 README.md	#how-sensitivedisplay-works	1
 README.md	#integrations	1
+README.md	#json-payloads-need-an-output-view	1
 README.md	#logging-safety	1
 README.md	#notsensitive-and-notsensitivedisplay	1
 README.md	#policies-and-reference	1
@@ -27,6 +30,7 @@ README.md	#wrapper-types	1
 README.md	CONTRIBUTING.md	1
 README.md	docs/reference.md	2
 README.md	docs/reference.md#custom-policy-formatting	2
+README.md	docs/reference.md#generated-debug-and-ordinary-display	1
 README.md	docs/reference.md#generic-declarations	1
 README.md	docs/reference.md#manual-formatters	2
 README.md	docs/reference.md#map-key-output	1
@@ -59,5 +63,8 @@ docs/reference.md	../CHANGELOG.md#migration-from-011	1
 docs/reference.md	../CHANGELOG.md#migration-from-013	1
 docs/reference.md	../CHANGELOG.md#migration-from-014	1
 docs/reference.md	../README.md	1
+docs/reference.md	../README.md#choose-what-diagnostics-retain	1
 docs/reference.md	../README.md#custom-policies	1
 docs/reference.md	../README.md#foreign-types	1
+docs/reference.md	../README.md#json-payloads-need-an-output-view	1
+docs/reference.md	../README.md#slog	1
