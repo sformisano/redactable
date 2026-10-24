@@ -542,15 +542,18 @@ and an explicit output format, replace it with the matching upstream type:
 
 For example, when `public_handler_result` is an application value already reviewed as public:
 
-```rust,ignore
+```rust
+# let public_handler_result = String::from("ready to review");
 // Before:
 // struct NotSensitiveHandlerOutput<T>(T);
 
 // After, when the complete Debug representation is genuinely safe to log:
-use redactable::BypassDebugRedaction;
+use redactable::{BypassDebugRedaction, ToRedacted};
 
 let output = BypassDebugRedaction(public_handler_result);
+assert_eq!(output.to_redacted().text(), "\"ready to review\"");
 let raw_result = output.into_inner();
+assert_eq!(raw_result, "ready to review");
 ```
 
 Use `BypassDisplayRedaction` instead when `Display` is the approved representation.

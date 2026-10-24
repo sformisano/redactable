@@ -14,7 +14,7 @@
 //!
 //! # Example
 //!
-//! ```no_run
+//! ```
 //! # #![allow(hidden_glob_reexports)]
 //! # pub use redactable::*;
 //! use redactable::{Secret, Sensitive, SensitiveValue};
@@ -39,6 +39,10 @@
 //!     user = user.tracing_redacted_debug(),
 //!     leaf_token = leaf_token.tracing_redacted(),
 //! );
+//! assert_eq!(user.to_redacted().json(), serde_json::json!({"name": "alice", "token": "[REDACTED]"}));
+//! assert_eq!(leaf_token.redacted(), "[REDACTED]");
+//! assert_eq!(user.token, "api-token");
+//! assert_eq!(leaf_token.expose(), "api-token");
 //! # }
 //! ```
 
@@ -233,10 +237,12 @@ impl<T> TracingRedacted for TracingRedactedValue<T> {}
 /// # Example
 ///
 /// `tracing::field::valuable` is hidden by upstream `tracing` unless the crate
-/// is compiled with `RUSTFLAGS="--cfg tracing_unstable"`, so this example cannot
-/// be compiled by ordinary doctest runs.
+/// is compiled with `RUSTFLAGS="--cfg tracing_unstable"`. Run this example with
+/// `RUSTFLAGS="--cfg tracing_unstable" cargo test --doc -p redactable --features tracing-valuable`.
 ///
-/// ```ignore
+/// ```
+/// # #![allow(hidden_glob_reexports)]
+/// # pub use redactable::*;
 /// use redactable::{Secret, Sensitive};
 /// use redactable::tracing::TracingValuableExt;
 ///
@@ -248,10 +254,16 @@ impl<T> TracingRedacted for TracingRedactedValue<T> {}
 ///     password: String,
 /// }
 ///
+/// # fn main() {
 /// let user = User { username: "alice".into(), password: "secret".into() };
 ///
 /// let redacted = user.tracing_redacted_valuable();
-/// tracing::info!(user = tracing::field::valuable(&redacted));
+/// ::tracing::info!(user = ::tracing::field::valuable(&redacted));
+/// let checked = redacted.into_inner();
+/// assert_eq!(checked.username, "alice");
+/// assert_eq!(checked.password, "[REDACTED]");
+/// assert_eq!(user.password, "secret");
+/// # }
 /// ```
 #[cfg(feature = "tracing-valuable")]
 pub trait TracingValuableExt {

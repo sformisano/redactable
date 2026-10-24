@@ -73,14 +73,14 @@ task-owned directory with enough space:
 ```sh
 bash .github/scripts/check-skillcatalog.sh
 python3 .github/scripts/check-skill-links.py
-cargo test --locked --doc --manifest-path cargo-fixtures/readme-examples/Cargo.toml
 ```
 
 The catalog check uses a checksum-pinned SkillCatalog CLI and disposable config;
 it does not register the catalog or change installed profiles. The link check
 checks every skill's Markdown destinations and heading anchors against this
 checkout, including absolute links to this repository. API examples live in the
-product docs and run in the existing consumer doctest fixture. The former 0.13
+product docs and run through the [consumer doctest commands](../CONTRIBUTING.md#examples),
+including the explicit configuration for tracing Valuable. The former 0.13
 skill-example harness is retired.
 
 Packaging checks do not validate judgment. Review changed guidance against code

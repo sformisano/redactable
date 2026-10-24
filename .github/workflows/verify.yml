@@ -105,10 +105,10 @@ jobs:
         run: cargo test --locked --workspace --all-targets --all-features
 
       - name: Doc tests (all features)
-        run: cargo test --locked --doc --workspace --all-features
+        run: RUSTFLAGS="--cfg tracing_unstable" cargo test --locked --doc --workspace --all-features
 
       - name: README consumer examples
-        run: cargo test --locked --doc --manifest-path cargo-fixtures/readme-examples/Cargo.toml
+        run: RUSTFLAGS="--cfg tracing_unstable" cargo test --locked --doc --manifest-path cargo-fixtures/readme-examples/Cargo.toml
 
       - name: Rustdoc warnings
         run: RUSTDOCFLAGS="-D warnings" cargo doc --locked --workspace --all-features --no-deps

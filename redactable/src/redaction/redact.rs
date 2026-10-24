@@ -10,13 +10,13 @@
 //! ## How `PolicyApplicable` Works
 //!
 //! For a field like:
-//! ```ignore
+//! ```text
 //! #[sensitive(Secret)]
 //! api_keys: Option<Vec<String>>
 //! ```
 //!
 //! The generated code calls:
-//! ```ignore
+//! ```text
 //! PolicyApplicable::apply_policy::<Secret, _>(api_keys, mapper)
 //! ```
 //!

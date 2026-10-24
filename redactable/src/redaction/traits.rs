@@ -34,7 +34,7 @@ use crate::policy::{RedactionPolicy, TextRedactionPolicy};
 /// `String` and `Cow<str>` have built-in implementations for all policies.
 /// For your own types, implement this trait for the specific policy you need:
 ///
-/// ```ignore
+/// ```text
 /// impl SensitiveWithPolicy<MyPolicy> for MyType {
 ///     fn redact_with_policy(self, policy: &TextRedactionPolicy) -> Self { ... }
 ///     fn redacted_string(&self, policy: &TextRedactionPolicy) -> String { ... }

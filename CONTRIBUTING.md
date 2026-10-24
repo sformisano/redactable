@@ -35,13 +35,19 @@ check current source and tests for technical claims.
 Run the README's consumer doctests after changing runnable examples:
 
 ```sh
-cargo test --locked --doc --manifest-path cargo-fixtures/readme-examples/Cargo.toml
+RUSTFLAGS="--cfg tracing_unstable" cargo test --locked --doc --manifest-path cargo-fixtures/readme-examples/Cargo.toml
+RUSTFLAGS="--cfg tracing_unstable" cargo test --locked --doc --workspace --all-features
 ```
 
-Keep imports, dependencies, and expected output accurate. Use `compile_fail` for
-rejected usage and `ignore` for incomplete sketches or examples needing an external runtime.
-The ignored tracing and logging sketches need the relevant integration tests;
-the README doctest command does not execute them.
+The consumer fixture enables `tracing-valuable`; its capture subscriber checks
+actual tracing output, including the upstream interface enabled by `tracing_unstable`.
+Keep imports, dependencies, and expected output accurate. Complete runnable
+examples with setup and assertions. Use `compile_fail` for intentional rejection,
+`text` for syntax fragments, and `no_run` only when execution requires external
+resources. A `no_run` example still needs complete, compilable setup.
+Separate successful examples from rejected calls so failures cannot pass for
+unrelated missing names or dependencies. Source derive documentation links to
+the consumer-tested public examples without adding a runtime dependency cycle.
 
 Before submitting, read each changed section in order. Check that its heading
 matches the question it answers, and that every moved contract remains reachable.

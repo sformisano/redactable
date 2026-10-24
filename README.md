@@ -327,7 +327,12 @@ own fields, the choice depends on whether you own the type:
 - **Foreign types:** if the whole field is public, use `#[not_sensitive]`.
   For example, with a timeout type from another crate:
 
-  ```rust,ignore
+  ```rust
+  use redactable::{Redactable, Sensitive};
+  # mod external_crate {
+  #     #[derive(Clone, Debug, serde::Serialize)]
+  #     pub struct Timeout(pub u64);
+  # }
   use external_crate::Timeout;
 
   #[derive(Clone, Sensitive, serde::Serialize)]
@@ -335,6 +340,8 @@ own fields, the choice depends on whether you own the type:
       #[not_sensitive]
       timeout: Timeout,  // skips RedactableWithMapper entirely
   }
+  let config = Config { timeout: Timeout(30) };
+  assert_eq!(config.redact().timeout.0, 30);
   ```
 
   `#[not_sensitive]` is the declaration for a non-sensitive foreign field. When the foreign value is sensitive, [Wrapper types for foreign types](#foreign-types) shows the `SensitiveValue<T, P>` route.
@@ -610,7 +617,16 @@ For raw leaves, choose a policy or `#[not_sensitive]`. For other types:
 - **Foreign types:** if the field is public, use `#[not_sensitive]` to render
   its ordinary `Display`. For example, with a context type from another crate:
 
-  ```rust,ignore
+  ```rust
+  use redactable::{RedactableWithFormatter, SensitiveDisplay};
+  # mod external_crate {
+  #     pub struct ErrorContext;
+  #     impl std::fmt::Display for ErrorContext {
+  #         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+  #             f.write_str("upstream timed out")
+  #         }
+  #     }
+  # }
   use external_crate::ErrorContext;
 
   #[derive(SensitiveDisplay)]
@@ -621,6 +637,8 @@ For raw leaves, choose a policy or `#[not_sensitive]`. For other types:
           ctx: ErrorContext,  // renders via Display, skips RedactableWithFormatter
       },
   }
+  let error = AppError::WithContext { ctx: ErrorContext };
+  assert_eq!(error.redacted_display().to_string(), "context: upstream timed out");
   ```
 
   `#[not_sensitive]` is the declaration for a non-sensitive foreign field. See [Wrapper types for foreign types](#foreign-types) for the sensitive case.
@@ -777,7 +795,7 @@ struct Config {
 
 ```rust
 use std::fmt::{Display, Formatter, Result as FmtResult};
-use redactable::NotSensitiveDisplay;
+use redactable::{NotSensitiveDisplay, RedactableWithFormatter, ToRedacted};
 
 /// Retry using backoff
 #[derive(Clone, NotSensitiveDisplay)]
@@ -794,6 +812,10 @@ impl Display for RetryDecision {
         }
     }
 }
+let decision = RetryDecision::Retry { delay_ms: 1000 };
+assert_eq!(decision.redacted_display().to_string(), "Retry after 1000ms");
+assert_eq!(decision.to_redacted().text(), "Retry after 1000ms");
+assert_eq!(RetryDecision::Abort.to_redacted().text(), "Abort");
 ```
 
 `NotSensitiveDisplay` works inside both `Sensitive` and `SensitiveDisplay`
@@ -803,8 +825,8 @@ it unchanged during structural traversal.
 You can also derive the public `Display` implementation with `displaydoc`.
 Add it as a dependency to use this version:
 
-```rust,ignore
-use redactable::NotSensitiveDisplay;
+```rust
+use redactable::{NotSensitiveDisplay, ToRedacted};
 
 #[derive(Clone, displaydoc::Display, NotSensitiveDisplay)]
 enum RetryDecision {
@@ -813,7 +835,8 @@ enum RetryDecision {
     /// Do not retry
     Abort,
 }
-// Now RetryDecision has Display (from displaydoc), RedactableWithFormatter, slog::Value, etc.
+assert_eq!(RetryDecision::Retry.to_redacted().text(), "Retry using backoff");
+assert_eq!(RetryDecision::Abort.to_redacted().text(), "Do not retry");
 ```
 
 ## Wrapper types
@@ -963,24 +986,24 @@ can expose it even when logging the containing `user` would redact it.
 policy, and `.expose()` gives you deliberate access to the original value.
 Use either an attribute on a bare field or an unannotated `SensitiveValue` field.
 
-With your application's logger configured:
+Formatting the wrapper applies its policy while its raw value remains available:
 
-```rust,ignore
+```rust
+use redactable::{Secret, Sensitive, SensitiveValue};
+
 #[derive(Clone, Sensitive, serde::Serialize)]
 struct User {
-    email: SensitiveValue<String, Pii>,  // The value IS a wrapper, not a bare String
+    email: SensitiveValue<String, Secret>,
 }
 
 let user = User { email: SensitiveValue::from(String::from("alice@example.com")) };
 
-// ✅ Safe: Debug shows the policy-redacted value, not the raw email
-log::info!("Email: {:?}", user.email);
-
-// ✅ Safe: explicit call for redacted form
-log::info!("Email: {}", user.email.redacted());
-
-// ⚠️ Intentional: .expose() for raw access (code review catches this)
+assert_eq!(format!("{:?}", user.email), "SensitiveValue(\"[REDACTED]\")");
+assert_eq!(user.email.redacted(), "[REDACTED]");
+assert!(!format!("{user:?}").contains("alice@example.com"));
 let raw = user.email.expose();
+assert_eq!(raw, "alice@example.com");
+assert_eq!(serde_json::to_value(&user).unwrap()["email"], "alice@example.com");
 ```
 
 Compare with `#[sensitive(P)]` attributes, where the field is a bare type at runtime:
@@ -1100,7 +1123,8 @@ tracing = "0.1"
 
 With your application's tracing subscriber configured:
 
-```rust,ignore
+```rust
+# use redactable_readme_examples::capture_tracing;
 use redactable::{Email, Secret, Sensitive};
 use redactable::tracing::TracingRedactedDebugExt;
 
@@ -1121,7 +1145,12 @@ let event = AuthEvent {
 };
 
 // Redacts a clone before the value reaches the tracing subscriber.
+# let fields = capture_tracing(|| {
 tracing::info!(event = event.tracing_redacted_debug());
+# });
+# assert_eq!(fields["event"], "AuthEvent { api_key: \"[REDACTED]\", user_email: \"[REDACTED]\", action: \"login\" }");
+# assert!(!fields["event"].contains("sk-secret-key-12345"));
+assert_eq!(event.api_key, "sk-secret-key-12345");
 // Production output: AuthEvent { api_key: "[REDACTED]", user_email: "[REDACTED]", action: "login" }
 ```
 
@@ -1142,7 +1171,8 @@ valuable = { version = "0.1", features = ["derive"] }
 
 Build this example with `RUSTFLAGS="--cfg tracing_unstable"`:
 
-```rust,ignore
+```rust
+# use redactable_readme_examples::capture_tracing;
 use redactable::{Email, Secret, Sensitive};
 use redactable::tracing::TracingValuableExt;
 
@@ -1163,7 +1193,14 @@ let event = AuthEvent {
 };
 
 let redacted = event.tracing_redacted_valuable();
+# let fields = capture_tracing(|| {
 tracing::info!(event = tracing::field::valuable(&redacted));
+# });
+# assert_eq!(serde_json::from_str::<serde_json::Value>(&fields["event"]).unwrap(), serde_json::json!({
+#     "api_key": "[REDACTED]", "user_email": "al***@example.com", "action": "login"
+# }));
+# assert!(!fields["event"].contains("sk-secret-key-12345"));
+assert_eq!(event.api_key, "sk-secret-key-12345");
 // Logged: {api_key: "[REDACTED]", user_email: "al***@example.com", action: "login"}
 ```
 
@@ -1179,18 +1216,25 @@ inserted data can appear in later output.
 
 **For flat display values** (without `valuable`):
 
-```rust,ignore
+```rust
+# use redactable_readme_examples::capture_tracing;
 use redactable::{Email, Secret, SensitiveValue};
 use redactable::tracing::TracingRedactedExt;
 
 let api_key: SensitiveValue<String, Secret> = SensitiveValue::from(String::from("sk-secret-key-12345"));
 let user_email: SensitiveValue<String, Email> = SensitiveValue::from(String::from("alice@example.com"));
 
+# let fields = capture_tracing(|| {
 tracing::info!(
     api_key = api_key.tracing_redacted(),
     user_email = user_email.tracing_redacted(),
     action = "login"
 );
+# });
+# assert_eq!(fields["api_key"], "[REDACTED]");
+# assert_eq!(fields["user_email"], "al***@example.com");
+# assert_eq!(fields["action"], "login");
+# assert!(!format!("{fields:?}").contains("sk-secret-key-12345"));
 // Logged: api_key="[REDACTED]" user_email="al***@example.com" action="login"
 ```
 
@@ -1220,10 +1264,10 @@ Public declarations and bypasses remain the author's disclosure decision.
 For slog, use `SlogRedacted` with `slog::Value` and pass the value to slog's
 field API:
 
-With `user`, `api_token`, and your logger supplied by the application, the
-first two calls compile. The raw email call is deliberately rejected:
+The helper accepts a selected structured view and a protected leaf:
 
-```rust,ignore
+```rust
+use redactable::{Secret, Sensitive, SensitiveValue};
 use redactable::slog::{SlogRedacted, SlogRedactedExt};
 
 macro_rules! slog_safe {
@@ -1234,20 +1278,42 @@ macro_rules! slog_safe {
     }};
 }
 
+#[derive(Clone, Sensitive, serde::Serialize)]
+struct User {
+    #[not_sensitive]
+    user_id: u64,
+    #[sensitive(Secret)]
+    email: String,
+}
+let user = User { user_id: 42, email: "private-contact@example.com".into() };
+let api_token = SensitiveValue::<String, Secret>::from("api-token-canary".to_owned());
+let logger = slog::Logger::root(slog::Discard, slog::o!());
 let user_fields = user.slog_redacted_json();
+assert_eq!(user_fields.json()["user_id"], 42);
+assert_eq!(user_fields.json()["email"], "[REDACTED]");
 slog_safe!(logger, "user logged in"; "user" => &user_fields);
 
 // ✅ Works: SensitiveValue implements SlogRedacted
 slog_safe!(logger, "auth"; "token" => &api_token);  // SensitiveValue<String, Secret>
+assert_eq!(user.email, "private-contact@example.com");
+```
 
-// ❌ Won't compile: raw String doesn't implement SlogRedacted
-slog_safe!(logger, "user"; "email" => &user.email);
+Raw strings fail the same marker bound:
+
+```compile_fail
+use redactable::slog::SlogRedacted;
+
+fn assert_slog_safe<T: SlogRedacted + slog::Value>(_: &T) {}
+let raw_email = String::from("private-contact@example.com");
+assert_slog_safe(&raw_email);
 ```
 
 For structural tracing fields, require the redacting extension trait and call
 its adapter:
 
-```rust,ignore
+```rust
+# use redactable_readme_examples::capture_tracing;
+use redactable::{Secret, Sensitive};
 use redactable::tracing::TracingRedactedDebugExt;
 
 macro_rules! trace_safe {
@@ -1257,6 +1323,31 @@ macro_rules! trace_safe {
         tracing::info!($($key = $value.tracing_redacted_debug()),*);
     }};
 }
+#[derive(Clone, Sensitive, serde::Serialize)]
+struct Request {
+    #[not_sensitive]
+    request_id: String,
+    #[sensitive(Secret)]
+    token: String,
+}
+let request = Request { request_id: "request-42".into(), token: "request-token-canary".into() };
+# let fields = capture_tracing(|| {
+trace_safe!(request = request);
+# });
+# assert!(fields["request"].contains("request-42"));
+# assert!(fields["request"].contains("[REDACTED]"));
+# assert!(!fields["request"].contains("request-token-canary"));
+assert_eq!(request.token, "request-token-canary");
+```
+
+An undecided raw string cannot satisfy that structural-output bound:
+
+```compile_fail
+use redactable::tracing::TracingRedactedDebugExt;
+
+fn assert_tracing_safe<T: TracingRedactedDebugExt>(_: &T) {}
+let raw_token = String::from("raw-token-canary");
+assert_tracing_safe(&raw_token);
 ```
 
 ### `ToRedacted` for custom pipelines

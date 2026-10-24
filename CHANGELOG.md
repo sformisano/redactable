@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+### Tests
+
+- Runnable README and source documentation examples compile and execute in CI,
+  including tracing Valuable under its explicit upstream configuration.
+- Logging examples check emitted fields and protected-value absence, raw-value
+  rejection uses separate compile-fail examples, and syntax fragments use text.
+
 ## 0.15.1 - 2026-10-24
 
 ### Changed

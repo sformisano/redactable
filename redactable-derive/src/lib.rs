@@ -239,27 +239,8 @@ pub fn derive_not_sensitive(input: TokenStream) -> TokenStream {
 ///
 /// # Example
 ///
-/// ```ignore
-/// use redactable::NotSensitiveDisplay;
-/// use std::fmt::{Display, Formatter, Result as FmtResult};
-///
-/// #[derive(NotSensitiveDisplay)]
-/// enum RetryDecision {
-///     Retry,
-///     Abort,
-/// }
-///
-/// impl Display for RetryDecision {
-///     fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
-///         formatter.write_str(match self {
-///             Self::Retry => "Retry",
-///             Self::Abort => "Abort",
-///         })
-///     }
-/// }
-///
-/// assert_eq!(RetryDecision::Retry.to_string(), "Retry");
-/// ```
+/// The [public display example](https://github.com/sformisano/redactable/blob/main/README.md#notsensitivedisplay)
+/// shows a complete implementation using this derive and a manual `Display`.
 #[proc_macro_derive(NotSensitiveDisplay, attributes(sensitive, not_sensitive, redactable))]
 pub fn derive_not_sensitive_display(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);

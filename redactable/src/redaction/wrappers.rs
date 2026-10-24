@@ -214,13 +214,15 @@ where
 /// Note: This type coexists with the `#[derive(NotSensitive)]` macro. The derive
 /// macro is for types you own; this wrapper is for foreign types you don't own.
 ///
-/// ```ignore
+/// ```
+/// # mod other_crate { pub struct ForeignConfig { pub timeout: u64 } }
 /// use other_crate::ForeignConfig;
 /// use redactable::{BypassRedaction, Redactable};
 ///
 /// fn audit<T: Redactable>(value: T) -> T { value.redact() }
 ///
-/// let checked = audit(BypassRedaction(ForeignConfig::default()));
+/// let checked = audit(BypassRedaction(ForeignConfig { timeout: 30 }));
+/// assert_eq!(checked.0.timeout, 30);
 /// ```
 #[derive(Clone, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct BypassRedaction<T>(pub T);

@@ -249,12 +249,25 @@ where
 ///
 /// ## Example
 ///
-/// ```ignore
-/// #[derive(Clone, Sensitive)]
+/// ```
+/// # #![allow(hidden_glob_reexports)]
+/// # pub use redactable::*;
+/// use redactable::{Redactable, Secret, Sensitive};
+///
+/// #[derive(Clone, Sensitive, serde::Serialize)]
 /// struct User {
-///     #[sensitive(Email)]
-///     emails: Option<Vec<String>>,  // Works! Recursively applies Email to each String
+///     #[not_sensitive]
+///     request_id: String,
+///     #[sensitive(Secret)]
+///     recovery_codes: Option<Vec<String>>,
 /// }
+/// # fn main() {
+/// let user = User { request_id: "request-42".into(), recovery_codes: Some(vec!["recovery-code-canary".into()]) };
+/// let diagnostic = user.clone().redact();
+/// assert_eq!(diagnostic.request_id, "request-42");
+/// assert_eq!(diagnostic.recovery_codes, Some(vec!["[REDACTED]".into()]));
+/// assert_eq!(user.recovery_codes.unwrap()[0], "recovery-code-canary");
+/// # }
 /// ```
 #[diagnostic::on_unimplemented(
     message = "`{Self}` cannot have a policy applied",
