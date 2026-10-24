@@ -5,19 +5,24 @@ metadata:
   skillcatalog/display_name: "Redactable Core Model"
   skillcatalog/author: "Salvatore Formisano"
   skillcatalog/created_at: "2026-04-29T15:18:46Z"
-  skillcatalog/updated_at: "2026-09-30T00:00:00Z"
+  skillcatalog/updated_at: "2026-10-24T00:00:00Z"
 ---
 # Redactable Core Model
 
 Use Redactable when typed Rust values need an explicit disclosure policy for
-logs, diagnostics, or other selected output. This guidance targets 0.14; check
-the consumer's locked version before applying it to older code.
+logs, diagnostics, or other selected output. This guidance targets 0.15; check
+the consumer's locked version before applying version-specific contracts.
 
 ## Decide what is being protected
 
 - Name the output, its audience, and the data it may reveal before selecting a
   policy. A value acceptable in one diagnostic channel may be unsuitable in
   another. Use separate projections when their disclosure needs differ.
+- Preserve the context that audience needs to explain an operation. Choose
+  masking field by field for concrete credentials, unnecessary personal data,
+  or a stated domain confidentiality rule. Free-form or caller-supplied text
+  does not establish such a rule. Compiler declarations express the decision;
+  they do not require every field to be secret.
 - Redact at the observation boundary. Keep raw application data for business
   operations that need it; do not replace stored values, queue payloads, or API
   inputs with redacted copies unless that is the intended product behavior.
@@ -38,9 +43,10 @@ Use field attributes when the policy belongs to one containing representation.
 Consider a policy-bearing leaf wrapper when the value travels independently and
 accidental direct formatting is likely. Neither choice redacts raw serialization.
 
-The compiler checks declarations on every structural field and every referenced
-template field. It cannot determine whether a public declaration is true or a
-policy reveals too much. Omitted fields in a display-only type are outside that
+The compiler checks declarations on structural fields and referenced template
+fields, with documented exceptions for opaque values. It cannot determine
+whether a public declaration reveals too much or a mask removes needed context.
+Omitted fields in a display-only type are outside that
 formatting path; review other uses of those fields without assuming they require
 structural redaction.
 
@@ -61,6 +67,7 @@ before reaching the redaction boundary. Trace the complete path first.
 - [Getting started and protection boundary](https://github.com/sformisano/redactable/blob/main/README.md#what-redaction-protects)
 - [Traversal contracts](https://github.com/sformisano/redactable/blob/main/docs/reference.md#low-level-traversal)
 - [Generated output behavior](https://github.com/sformisano/redactable/blob/main/docs/reference.md#generated-debug-and-ordinary-display)
+- [Field disclosure choices](https://github.com/sformisano/redactable/blob/main/.skillcatalog/catalog/skills/redactable-field-policies/SKILL.md#preserve-useful-context-for-the-audience)
 
 The sibling skills divide the remaining decisions: `redactable-derive-selection`
 owns output shape; `redactable-field-policies` owns disclosure;

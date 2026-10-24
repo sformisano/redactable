@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- Bundled consumer skills preserve useful diagnostic context and require concrete
+  field-level reasons for masking. Guidance distinguishes confidentiality from
+  output limits and verifies useful output alongside protected-value absence.
+  The catalog targets Redactable 0.15 and covers its producer forwarding behavior.
+
 ## 0.15.0 - 2026-10-23
 
 ### Breaking

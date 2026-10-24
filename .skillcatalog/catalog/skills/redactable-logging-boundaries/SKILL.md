@@ -5,11 +5,11 @@ metadata:
   skillcatalog/display_name: "Redactable Logging Boundaries"
   skillcatalog/author: "Salvatore Formisano"
   skillcatalog/created_at: "2026-04-29T15:18:46Z"
-  skillcatalog/updated_at: "2026-09-30T00:00:00Z"
+  skillcatalog/updated_at: "2026-10-24T00:00:00Z"
 ---
 # Redactable Logging Boundaries
 
-For Redactable 0.14, trace the value from its source to the actual output writer.
+For Redactable 0.15, trace the value from its source to the actual output writer.
 Apply a redacted operation or reviewed adapter before sensitive data reaches
 that writer, including error reports and ad hoc diagnostics.
 
@@ -19,6 +19,10 @@ Prefer a `ToRedacted`-based interface for a custom output pipeline. It rejects
 undeclared raw values, but admits public declarations and bypasses. Review those
 declarations and the implementation; a trait bound alone proves no confidentiality.
 The writer must use the resulting projection, not extract and format a raw field.
+Retain the operation's useful identity, query, transition and outcome context.
+A projection that replaces an entire request or result with a mask can satisfy
+the trait while preventing diagnosis. Generic envelopes delegate typed keys,
+filters and results to their own policies instead of discarding them.
 
 Do not serialize or interpolate sensitive data into a string before conversion.
 Neither a bypass wrapper nor the low-level free `redact(value)` function repairs
@@ -29,7 +33,9 @@ dumps need the same path inspection as explicit log statements.
 
 - Use a structured producer when downstream tools need fields, and a display
   producer when a selected message is sufficient. A text accessor rendering
-  compact JSON is still text to the sink.
+  compact JSON is still text to the sink. A text-only producer's `json()` is
+  an object with a `message` field; it is not a scalar string. Assert the actual
+  representation when composing nested projections.
 - Use the named slog JSON adapter for a redacted object. Direct borrowed
   structural values emit a fixed placeholder; that protects content but can
   discard the diagnostics the caller expected. Inspect the drain's output.
@@ -60,14 +66,18 @@ failure into raw fallback output, and do not promise panic isolation.
 
 Use `RedactedList` when item count needs a limit, but assess its visible omitted
 count. It does not bound bytes, depth, allocations, or per-item policy work.
-Set any additional resource limits at the application boundary.
+Set any additional resource limits at the application boundary. Output limits
+control size and relevance separately from confidentiality; label omissions
+and counts accordingly instead of calling all omitted content secret.
 
 ## Verify the emitted result
 
 Capture the actual logger or subscriber output using synthetic sensitive values.
 Assert both the expected useful fields and the absence of forbidden raw values.
-Check error and fallback paths too. Shape-only assertions cannot prove masking,
-and an output that hides everything may still fail the diagnostic requirement.
+Include realistic public context alongside protected values in the same record.
+Check nested and before/after projections, error and fallback paths, and unchanged
+business values and raw serialization where supported. Shape-only assertions or
+the presence of a mask cannot establish useful, correctly protected output.
 
 ## Mechanics
 

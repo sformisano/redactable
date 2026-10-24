@@ -5,11 +5,11 @@ metadata:
   skillcatalog/display_name: "Redactable Wrappers And Escape Hatches"
   skillcatalog/author: "Salvatore Formisano"
   skillcatalog/created_at: "2026-04-29T15:18:46Z"
-  skillcatalog/updated_at: "2026-09-30T00:00:00Z"
+  skillcatalog/updated_at: "2026-10-24T00:00:00Z"
 ---
 # Redactable Wrappers And Escape Hatches
 
-For Redactable 0.14, choose a wrapper to express a disclosure decision, not to
+For Redactable 0.15, choose a wrapper to express a disclosure decision, not to
 hide a trait error. A bypass is an explicit public-data assertion.
 
 ## Keep a policy with a leaf when needed
@@ -18,11 +18,20 @@ Prefer `SensitiveValue<T, P>` when a sensitive leaf travels independently of its
 containing type or direct formatting is a realistic mistake. A field attribute
 governs the containing type's output; it does not protect direct access to a bare
 field. The wrapper's `Debug` applies its policy, but its serialization stays raw.
+Choose the policy from a concrete confidentiality requirement. An operational
+ID, title or message does not need a secret wrapper merely because it is text
+or comes from a caller. A typed projection can retain useful parts of a locator
+while excluding credential components.
 
 Treat a structured foreign value as an atomic leaf only if a local policy can
 account for every sensitive part. Its structural and text implementations can
 differ: audit both. A wrapper does not discover or walk nested annotations.
 Use a separate local projection when only a few approved fields are needed.
+If type erasure has removed a domain's field policies, recover a producer from
+the owning mapping before observing its values. Otherwise make that omission
+explicit while retaining available operation metadata. Do not replace nested
+policies with raw serialization or describe absent policy information as proof
+that the entire value is confidential.
 
 ## Keep a bypass as narrow as its justification
 

@@ -5,11 +5,11 @@ metadata:
   skillcatalog/display_name: "Redactable Derive Selection"
   skillcatalog/author: "Salvatore Formisano"
   skillcatalog/created_at: "2026-04-29T15:18:46Z"
-  skillcatalog/updated_at: "2026-09-30T00:00:00Z"
+  skillcatalog/updated_at: "2026-10-24T00:00:00Z"
 ---
 # Redactable Derive Selection
 
-For Redactable 0.14, choose from the output the caller needs and the containing
+For Redactable 0.15, choose from the output the caller needs and the containing
 types that must use it. Do not select a derive merely to satisfy a trait error.
 
 ## Choose the smallest sufficient output
@@ -25,12 +25,19 @@ types that must use it. Do not select a derive merely to satisfy a trait error.
 Use a separate log-view type when one type would otherwise serve incompatible
 audiences or require a second producer implementation. A dual derive is useful
 when both outputs are needed, not simply because it performs more checks.
+The name `Sensitive` selects traversal; individual fields can remain public.
+Keep useful diagnostic context visible under its audience's disclosure policy.
 
 ## Assess the consequences
 
 - Structural producers clone, redact, and serialize. Consider cost, borrow
   conflicts, and whether the source type can support those operations. Prefer a
   small projection for large, locked, or unsuitable foreign values.
+- An opaque business wrapper can implement borrowed `ToRedacted` by delegating
+  to its existing diagnostic view. Do not add structural mutation or an error
+  display contract merely to make a derive fit. In 0.15, supported forwarding
+  containers preserve the inner producer without adding clone or serialization
+  requirements; arbitrary scalars and collections still need a declared producer.
 - Do not derive `Sensitive` or `SensitiveDual` on a type implementing `Drop`.
   It is unsupported even when all fields are `Copy` and compilation succeeds.
   Select an output projection without that destructor.
@@ -50,8 +57,9 @@ when both outputs are needed, not simply because it performs more checks.
 
 First decide whether the field is sensitive, explicitly public, or a nested
 type with its own behavior. Preserve that decision while fixing the type bounds
-or choosing a projection. Never blanket-add public declarations during an
-upgrade. A successful compile cannot validate the resulting disclosure.
+or choosing a projection. Neither blanket public declarations nor blanket
+`Secret` annotations resolve the field's meaning. A successful compile cannot
+validate disclosure or diagnostic usefulness.
 
 A field policy on a nested structured type is usually the wrong ownership of
 the decision. Let its own policies run instead. For an unsupported shape, read
@@ -64,3 +72,4 @@ the relevant trait contract before changing data ownership or adding a bypass.
 - [Destructor restriction](https://github.com/sformisano/redactable/blob/main/docs/reference.md#types-that-implement-drop)
 - [Template syntax](https://github.com/sformisano/redactable/blob/main/README.md#template-syntax)
 - [Upgrade instructions](https://github.com/sformisano/redactable/blob/main/docs/reference.md#upgrading)
+- [Field disclosure choices](https://github.com/sformisano/redactable/blob/main/.skillcatalog/catalog/skills/redactable-field-policies/SKILL.md#preserve-useful-context-for-the-audience)
