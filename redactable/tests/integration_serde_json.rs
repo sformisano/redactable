@@ -1,7 +1,7 @@
 //! Integration tests for serde_json::Value support.
 //!
 //! serde_json::Value is treated as an opaque leaf type. Supported recursive policy application
-//! fully redacts it to Value::String("[REDACTED]"). This is safe-by-default.
+//! replaces it with Value::String("[REDACTED]"). Typed diagnostic views retain selected fields.
 
 mod policy_application {
     use redactable::{Redactable, Secret, Sensitive, Token};
@@ -457,7 +457,7 @@ mod nested_structs {
 }
 
 mod real_world_scenarios {
-    use redactable::{Redactable, Secret, Sensitive, Token};
+    use redactable::{Redactable, Secret, Sensitive};
     use serde_json::{Value, json};
 
     #[test]
@@ -469,7 +469,7 @@ mod real_world_scenarios {
             #[not_sensitive]
             message: String,
             payload: Option<Value>,
-            #[sensitive(Token)]
+            #[not_sensitive]
             request_id: String,
         }
 
@@ -486,14 +486,25 @@ mod real_world_scenarios {
             request_id: "req_abc123def456".to_string(),
         };
 
-        let redacted = response.redact();
+        let original = serde_json::to_value(&response).unwrap();
+        let redacted = response.clone().redact();
         assert_eq!(redacted.status, 200);
         assert_eq!(redacted.message, "Success");
         assert_eq!(
             redacted.payload,
             Some(Value::String("[REDACTED]".to_string()))
         );
-        assert_eq!(redacted.request_id, "************f456");
+        assert_eq!(redacted.request_id, "req_abc123def456");
+        assert_eq!(
+            serde_json::to_value(&redacted).unwrap(),
+            json!({
+                "status": 200,
+                "message": "Success",
+                "payload": "[REDACTED]",
+                "request_id": "req_abc123def456"
+            })
+        );
+        assert_eq!(serde_json::to_value(&response).unwrap(), original);
     }
 
     #[test]
@@ -506,6 +517,18 @@ mod real_world_scenarios {
             timestamp: u64,
             #[sensitive(Secret)]
             payload: Value,
+        }
+
+        #[derive(Clone, Sensitive, serde::Serialize)]
+        struct WebhookDiagnostic {
+            #[not_sensitive]
+            event_type: String,
+            #[not_sensitive]
+            timestamp: u64,
+            #[not_sensitive]
+            user_id: String,
+            #[sensitive(Secret)]
+            email: String,
         }
 
         let event = WebhookEvent {
@@ -521,9 +544,26 @@ mod real_world_scenarios {
             }),
         };
 
-        let redacted = event.redact();
+        let original = serde_json::to_value(&event).unwrap();
+        let diagnostic = WebhookDiagnostic {
+            event_type: event.event_type.clone(),
+            timestamp: event.timestamp,
+            user_id: event.payload["user_id"].as_str().unwrap().to_owned(),
+            email: event.payload["email"].as_str().unwrap().to_owned(),
+        };
+        assert_eq!(
+            serde_json::to_value(diagnostic.redact()).unwrap(),
+            json!({
+                "event_type": "user.created",
+                "timestamp": 1704067200,
+                "user_id": "usr_123",
+                "email": "[REDACTED]"
+            })
+        );
+        let redacted = event.clone().redact();
         assert_eq!(redacted.event_type, "user.created");
         assert_eq!(redacted.timestamp, 1704067200);
         assert_eq!(redacted.payload, Value::String("[REDACTED]".to_string()));
+        assert_eq!(serde_json::to_value(&event).unwrap(), original);
     }
 }

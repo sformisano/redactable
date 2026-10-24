@@ -7,15 +7,16 @@
 
 use redactable::{
     Email, Redactable, RedactableMapper, RedactableWithMapper, Secret, Sensitive, SensitiveDisplay,
-    SensitiveDual, Token,
+    SensitiveDual,
 };
 use std::fmt::Display;
 
 /// Exact README tracing fixture with production-compiled generated `Debug`.
 #[derive(Clone, Sensitive, serde::Serialize)]
 pub struct AuthEvent {
-    #[sensitive(Token)]
+    #[sensitive(Secret)]
     pub api_key: String,
+    // Support diagnostics retain a mailbox prefix and domain to distinguish contacts.
     #[sensitive(Email)]
     pub user_email: String,
     #[not_sensitive]

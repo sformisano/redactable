@@ -1,6 +1,6 @@
 use crate::slog_capture::{CapturedValue, CapturingSerializer, serialize_to_capture};
 use redactable::slog::SlogRedactedExt;
-use redactable::{Secret, Sensitive, Token};
+use redactable::{Secret, Sensitive};
 use serde::Serialize;
 
 #[test]
@@ -8,7 +8,7 @@ fn redacts_enum_variants() {
     #[derive(Clone, Sensitive, Serialize)]
     enum Credential {
         ApiKey {
-            #[sensitive(Token)]
+            #[sensitive(Secret)]
             key: String,
         },
         Password {
@@ -29,7 +29,7 @@ fn redacts_enum_variants() {
 
     if let Some(CapturedValue::Serde(json)) = serializer.get("cred") {
         let key = json["ApiKey"]["key"].as_str().unwrap();
-        assert_eq!(key, "****************f456");
+        assert_eq!(key, "[REDACTED]");
     } else {
         panic!("Expected Serde value");
     }

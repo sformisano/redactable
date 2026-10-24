@@ -1,6 +1,6 @@
 use crate::slog_capture::{CapturedValue, CapturingSerializer, serialize_to_capture};
 use redactable::slog::SlogRedactedExt;
-use redactable::{Email, PhoneNumber, Pii, Secret, Sensitive};
+use redactable::{Email, PhoneNumber, Secret, Sensitive};
 use serde::Serialize;
 
 #[test]
@@ -35,11 +35,12 @@ fn redacts_simple_struct() {
 fn applies_different_policies() {
     #[derive(Clone, Sensitive, Serialize)]
     struct Contact {
+        // Support uses mailbox and phone fragments to distinguish contact routes.
         #[sensitive(Email)]
         email: String,
         #[sensitive(PhoneNumber)]
         phone: String,
-        #[sensitive(Pii)]
+        #[sensitive(Secret)]
         full_name: String,
     }
 
@@ -57,7 +58,7 @@ fn applies_different_policies() {
     if let Some(CapturedValue::Serde(json)) = serializer.get("contact") {
         assert_eq!(json["email"].as_str().unwrap(), "al***@example.com");
         assert_eq!(json["phone"].as_str().unwrap(), "********4567");
-        assert_eq!(json["full_name"].as_str().unwrap(), "*********th");
+        assert_eq!(json["full_name"].as_str().unwrap(), "[REDACTED]");
     } else {
         panic!("Expected Serde value for 'contact' key");
     }

@@ -18,10 +18,10 @@ impl RedactionPolicy for FullRedact {
     }
 }
 
-/// Custom policy that keeps last 4 characters (like a token)
+/// Support payment views retain the last four card digits for transaction matching.
 #[derive(Clone, Copy)]
-struct PartiallyVisible;
-impl RedactionPolicy for PartiallyVisible {
+struct CardSuffix;
+impl RedactionPolicy for CardSuffix {
     type Kind = TextPolicyKind;
 
     fn policy() -> TextRedactionPolicy {
@@ -38,8 +38,8 @@ impl RedactionPolicy for PartiallyVisible {
 /// Expected behavior: `#[sensitive(Policy)]` should work on Option<T>,
 /// Vec<T>, Box<T> and apply the policy to the inner value(s).
 mod wrapper_types_with_policy {
-    use super::{FullRedact, PartiallyVisible};
-    use redactable::{Email, PhoneNumber, Redactable, Secret, Sensitive};
+    use super::FullRedact;
+    use redactable::{Email, PhoneNumber, Redactable, Secret, Sensitive, ToRedacted};
 
     #[test]
     fn applies_policy_to_option_string() {
@@ -47,6 +47,7 @@ mod wrapper_types_with_policy {
         struct UserProfile {
             #[not_sensitive]
             username: String,
+            // Support uses mailbox and phone fragments to distinguish contact routes.
             #[sensitive(Email)]
             email: Option<String>,
             #[sensitive(PhoneNumber)]
@@ -84,7 +85,7 @@ mod wrapper_types_with_policy {
             event_type: String,
             #[sensitive(FullRedact)]
             affected_users: Vec<String>,
-            #[sensitive(PartiallyVisible)]
+            #[sensitive(FullRedact)]
             ip_addresses: Vec<String>,
         }
 
@@ -104,7 +105,7 @@ mod wrapper_types_with_policy {
             redacted.affected_users,
             vec!["[REDACTED]", "[REDACTED]", "[REDACTED]"]
         );
-        assert_eq!(redacted.ip_addresses, vec!["*********.100", "*****0.50"]);
+        assert_eq!(redacted.ip_addresses, vec!["[REDACTED]", "[REDACTED]"]);
 
         let empty_log = AuditLog {
             event_type: "system".into(),
@@ -124,24 +125,47 @@ mod wrapper_types_with_policy {
             algorithm: String,
             #[sensitive(Secret)]
             key: Box<String>,
-            #[sensitive(Secret)]
+            #[not_sensitive]
             iv: Box<String>,
         }
 
         let payload = EncryptedPayload {
             algorithm: "AES-256-GCM".into(),
             key: Box::new("super_secret_encryption_key_12345".into()),
-            iv: Box::new("initialization_vector_abc".into()),
+            iv: Box::new("000102030405060708090a0b".into()),
         };
 
-        let redacted = payload.redact();
+        let original = serde_json::to_value(&payload).unwrap();
+        let redacted = payload.clone().redact();
         assert_eq!(redacted.algorithm, "AES-256-GCM");
         assert_eq!(*redacted.key, "[REDACTED]");
-        assert_eq!(*redacted.iv, "[REDACTED]");
+        assert_eq!(*redacted.iv, "000102030405060708090a0b");
+        assert_eq!(
+            payload.to_redacted().json(),
+            serde_json::json!({
+                "algorithm": "AES-256-GCM", "key": "[REDACTED]", "iv": "000102030405060708090a0b"
+            })
+        );
+        assert_eq!(serde_json::to_value(&payload).unwrap(), original);
+        assert_eq!(*payload.key, "super_secret_encryption_key_12345");
     }
 
     #[test]
     fn handles_mixed_wrapper_types() {
+        #[derive(Clone, Sensitive, serde::Serialize)]
+        struct ConnectionSettings {
+            #[not_sensitive]
+            host: String,
+            #[not_sensitive]
+            port: u16,
+            #[not_sensitive]
+            database: String,
+            #[not_sensitive]
+            username: String,
+            #[sensitive(Secret)]
+            password: String,
+        }
+
         #[derive(Clone, Sensitive, serde::Serialize)]
         struct DatabaseConfig {
             #[not_sensitive]
@@ -151,34 +175,56 @@ mod wrapper_types_with_policy {
             #[sensitive(Secret)]
             password: Option<String>,
             #[sensitive(Secret)]
-            ssl_cert: Box<String>,
-            #[sensitive(PartiallyVisible)]
-            connection_strings: Vec<String>,
+            tls_private_key: Box<String>,
+            connections: Vec<ConnectionSettings>,
         }
 
         let config = DatabaseConfig {
             host: "db.example.com".into(),
             port: 5432,
             password: Some("super_secret_db_password".into()),
-            ssl_cert: Box::new("-----BEGIN CERTIFICATE-----...".into()),
-            connection_strings: vec![
-                "postgres://user:pass@host1:5432/db".into(),
-                "postgres://user:pass@host2:5432/db".into(),
+            tls_private_key: Box::new("-----BEGIN PRIVATE KEY-----\nMC4CAQAwBQYDK2VwBCIEIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\n-----END PRIVATE KEY-----".into()),
+            connections: vec![
+                ConnectionSettings { host: "primary.example.com".into(), port: 5432, database: "reviews".into(), username: "review_service".into(), password: "primary-password-canary".into() },
+                ConnectionSettings { host: "replica.example.com".into(), port: 5433, database: "reviews_archive".into(), username: "review_service".into(), password: "replica-password-canary".into() },
             ],
         };
 
-        let redacted = config.redact();
+        let original = serde_json::to_value(&config).unwrap();
+        let redacted = config.clone().redact();
         assert_eq!(redacted.host, "db.example.com");
         assert_eq!(redacted.port, 5432);
         assert_eq!(redacted.password, Some("[REDACTED]".into()));
-        assert_eq!(*redacted.ssl_cert, "[REDACTED]");
+        assert_eq!(*redacted.tls_private_key, "[REDACTED]");
+        assert_eq!(redacted.connections[0].host, "primary.example.com");
+        assert_eq!(redacted.connections[0].database, "reviews");
+        assert_eq!(redacted.connections[0].password, "[REDACTED]");
+        assert_eq!(redacted.connections[1].host, "replica.example.com");
+        assert_eq!(redacted.connections[1].port, 5433);
+        assert_eq!(redacted.connections[1].database, "reviews_archive");
+        assert_eq!(redacted.connections[1].password, "[REDACTED]");
+        let diagnostic = config.to_redacted();
         assert_eq!(
-            redacted.connection_strings,
-            vec![
-                "******************************2/db",
-                "******************************2/db"
-            ]
+            diagnostic.json(),
+            serde_json::json!({
+                "host": "db.example.com", "port": 5432, "password": "[REDACTED]", "tls_private_key": "[REDACTED]",
+                "connections": [
+                    {"host": "primary.example.com", "port": 5432, "database": "reviews", "username": "review_service", "password": "[REDACTED]"},
+                    {"host": "replica.example.com", "port": 5433, "database": "reviews_archive", "username": "review_service", "password": "[REDACTED]"}
+                ]
+            })
         );
+        for secret in [
+            "super_secret_db_password",
+            "BEGIN PRIVATE KEY",
+            "primary-password-canary",
+            "replica-password-canary",
+        ] {
+            assert!(!diagnostic.text().contains(secret));
+            assert!(!format!("{config:?}").contains(secret));
+        }
+        assert_eq!(serde_json::to_value(&config).unwrap(), original);
+        assert_eq!(config.connections[0].password, "primary-password-canary");
     }
 }
 
@@ -190,7 +236,6 @@ mod wrapper_types_with_policy {
 /// Expected behavior: PhantomData<T> should be automatically handled as a
 /// pass-through (no redaction needed).
 mod phantom_data {
-    use super::PartiallyVisible;
     use redactable::{Redactable, Secret, Sensitive};
     use std::marker::PhantomData;
 
@@ -198,7 +243,7 @@ mod phantom_data {
     fn works_in_generic_struct() {
         #[derive(Clone, Sensitive, serde::Serialize)]
         struct TypedId<T> {
-            #[sensitive(PartiallyVisible)]
+            #[not_sensitive]
             id: String,
             _marker: PhantomData<T>,
         }
@@ -219,8 +264,8 @@ mod phantom_data {
         let redacted_user = user_id.redact();
         let redacted_order = order_id.redact();
 
-        assert_eq!(redacted_user.id, "*************6789");
-        assert_eq!(redacted_order.id, "**************4321");
+        assert_eq!(redacted_user.id, "user_abc123456789");
+        assert_eq!(redacted_order.id, "order_xyz987654321");
     }
 
     #[test]
@@ -272,8 +317,8 @@ mod phantom_data {
 ///
 /// These tests combine multiple features to simulate realistic usage patterns.
 mod real_world_scenarios {
-    use super::PartiallyVisible;
-    use redactable::{Email, PhoneNumber, Pii, Redactable, Secret, Sensitive};
+    use super::CardSuffix;
+    use redactable::{Redactable, Secret, Sensitive};
     use std::marker::PhantomData;
 
     #[test]
@@ -286,11 +331,11 @@ mod real_world_scenarios {
             username: String,
             #[not_sensitive]
             is_active: bool,
-            #[sensitive(Pii)]
+            #[sensitive(Secret)]
             full_name: String,
-            #[sensitive(Email)]
+            #[sensitive(Secret)]
             email: String,
-            #[sensitive(PhoneNumber)]
+            #[sensitive(Secret)]
             phone: Option<String>,
             #[sensitive(Secret)]
             password_hash: String,
@@ -319,9 +364,9 @@ mod real_world_scenarios {
         assert_eq!(redacted.id, 12345);
         assert_eq!(redacted.username, "johndoe");
         assert!(redacted.is_active);
-        assert_eq!(redacted.full_name, "******oe");
-        assert_eq!(redacted.email, "jo******@example.com");
-        assert_eq!(redacted.phone, Some("***********4567".into()));
+        assert_eq!(redacted.full_name, "[REDACTED]");
+        assert_eq!(redacted.email, "[REDACTED]");
+        assert_eq!(redacted.phone, Some("[REDACTED]".into()));
         assert_eq!(redacted.password_hash, "[REDACTED]");
         assert_eq!(
             redacted.recovery_codes,
@@ -358,7 +403,7 @@ mod real_world_scenarios {
             amount_cents: i64,
             #[not_sensitive]
             currency: String,
-            #[sensitive(PartiallyVisible)]
+            #[sensitive(CardSuffix)]
             card_number: String,
             #[sensitive(Secret)]
             cvv: Option<String>,

@@ -1,7 +1,7 @@
 use crate::log_redacted;
 use redactable::{
     Redactable, RedactionPolicy, Secret, Sensitive, SensitiveValue, SensitiveWithPolicy,
-    TextPolicyKind, TextRedactionPolicy, Token,
+    TextPolicyKind, TextRedactionPolicy,
 };
 
 #[test]
@@ -40,9 +40,9 @@ fn passes_through_unchanged_when_implementing_redactable_container() {
 #[test]
 fn redacts_via_sensitive_wrapper() {
     #[derive(Clone, Debug, PartialEq, serde::Serialize)]
-    struct ExternalId(String);
+    struct ExternalRecoveryCode(String);
 
-    impl SensitiveWithPolicy<Secret> for ExternalId {
+    impl SensitiveWithPolicy<Secret> for ExternalRecoveryCode {
         fn redact_with_policy(self, policy: &TextRedactionPolicy) -> Self {
             Self(policy.apply_to(&self.0))
         }
@@ -56,39 +56,41 @@ fn redacts_via_sensitive_wrapper() {
     struct Record {
         #[sensitive(Secret)]
         token: String,
-        external_id: SensitiveValue<ExternalId, Secret>,
+        recovery_code: SensitiveValue<ExternalRecoveryCode, Secret>,
     }
 
     let record = Record {
         token: "secret".to_string(),
-        external_id: SensitiveValue::from(ExternalId("external".to_string())),
+        recovery_code: SensitiveValue::from(ExternalRecoveryCode(
+            "recovery-code-canary".to_string(),
+        )),
     };
 
     let redacted = record.redact();
     assert_eq!(redacted.token, "[REDACTED]");
     assert_eq!(
-        redacted.external_id.expose(),
-        &ExternalId("[REDACTED]".to_string())
+        redacted.recovery_code.expose(),
+        &ExternalRecoveryCode("[REDACTED]".to_string())
     );
 }
 
 #[test]
 fn redacts_via_policy_trait() {
     #[derive(Clone, Debug, PartialEq, serde::Serialize)]
-    struct ExternalType(String);
+    struct ExternalAccountNumber(String);
 
     #[derive(Clone, Copy)]
-    struct ExternalTypePolicy;
+    struct AccountNumberPolicy;
 
-    impl RedactionPolicy for ExternalTypePolicy {
+    impl RedactionPolicy for AccountNumberPolicy {
         type Kind = TextPolicyKind;
 
         fn policy() -> TextRedactionPolicy {
-            TextRedactionPolicy::keep_last(2)
+            TextRedactionPolicy::keep_last(4)
         }
     }
 
-    impl SensitiveWithPolicy<ExternalTypePolicy> for ExternalType {
+    impl SensitiveWithPolicy<AccountNumberPolicy> for ExternalAccountNumber {
         fn redact_with_policy(self, policy: &TextRedactionPolicy) -> Self {
             Self(policy.apply_to(&self.0))
         }
@@ -100,32 +102,46 @@ fn redacts_via_policy_trait() {
 
     #[derive(Clone, Sensitive, serde::Serialize)]
     struct Record {
-        id: SensitiveValue<ExternalType, ExternalTypePolicy>,
+        account_number: SensitiveValue<ExternalAccountNumber, AccountNumberPolicy>,
     }
 
     let record = Record {
-        id: SensitiveValue::from(ExternalType("external".into())),
+        account_number: SensitiveValue::from(ExternalAccountNumber("123456789012".into())),
     };
 
     let redacted = record.clone().redact();
-    assert_eq!(redacted.id.expose(), &ExternalType("******al".to_string()));
-    assert_eq!(log_redacted(&record.id).text(), "******al");
+    assert_eq!(
+        redacted.account_number.expose(),
+        &ExternalAccountNumber("********9012".to_string())
+    );
+    assert_eq!(log_redacted(&record.account_number).text(), "********9012");
 }
 
 #[test]
 fn chooses_trait_based_on_wrapper_usage() {
     #[derive(Clone, PartialEq, Sensitive, serde::Serialize)]
-    struct UserId {
+    struct AccountNumber {
         #[not_sensitive]
-        prefix: String,
+        scheme: String,
         #[sensitive(Secret)]
         value: String,
     }
 
-    impl SensitiveWithPolicy<Token> for UserId {
+    // Support diagnostics correlate accounts by their final four digits.
+    #[derive(Clone, Copy)]
+    struct SupportAccountNumber;
+    impl RedactionPolicy for SupportAccountNumber {
+        type Kind = TextPolicyKind;
+
+        fn policy() -> TextRedactionPolicy {
+            TextRedactionPolicy::keep_last(4)
+        }
+    }
+
+    impl SensitiveWithPolicy<SupportAccountNumber> for AccountNumber {
         fn redact_with_policy(self, policy: &TextRedactionPolicy) -> Self {
             Self {
-                prefix: "redacted".into(),
+                scheme: "support-last-four".into(),
                 value: policy.apply_to(&self.value),
             }
         }
@@ -137,32 +153,35 @@ fn chooses_trait_based_on_wrapper_usage() {
 
     #[derive(Clone, Sensitive, serde::Serialize)]
     struct AccountTraversed {
-        user_id: UserId,
+        account_number: AccountNumber,
     }
 
     #[derive(Clone, Sensitive, serde::Serialize)]
     struct AccountAsLeaf {
-        user_id: SensitiveValue<UserId, Token>,
+        account_number: SensitiveValue<AccountNumber, SupportAccountNumber>,
     }
 
-    let user_id = UserId {
-        prefix: "usr".into(),
+    let account_number = AccountNumber {
+        scheme: "customer-account".into(),
         value: "12345678".into(),
     };
 
-    // Unannotated field uses Sensitive (traverses fields)
+    // Structural traversal preserves the scheme and applies the number's full mask.
     let account_traversed = AccountTraversed {
-        user_id: user_id.clone(),
+        account_number: account_number.clone(),
     };
     let redacted_traversed = account_traversed.redact();
-    assert_eq!(redacted_traversed.user_id.prefix, "usr");
-    assert_eq!(redacted_traversed.user_id.value, "[REDACTED]");
+    assert_eq!(redacted_traversed.account_number.scheme, "customer-account");
+    assert_eq!(redacted_traversed.account_number.value, "[REDACTED]");
 
-    // SensitiveValue<T, Policy> wrapper uses SensitiveWithPolicy (redacts as unit)
+    // The leaf policy selects its own scheme and last-four representation.
     let account_as_leaf = AccountAsLeaf {
-        user_id: SensitiveValue::from(user_id.clone()),
+        account_number: SensitiveValue::from(account_number.clone()),
     };
     let redacted_as_leaf = account_as_leaf.redact();
-    assert_eq!(redacted_as_leaf.user_id.expose().prefix, "redacted");
-    assert_eq!(redacted_as_leaf.user_id.expose().value, "****5678");
+    assert_eq!(
+        redacted_as_leaf.account_number.expose().scheme,
+        "support-last-four"
+    );
+    assert_eq!(redacted_as_leaf.account_number.expose().value, "****5678");
 }

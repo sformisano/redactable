@@ -204,6 +204,11 @@ fn production_auth_event_tracing_matches_documentation() {
         user_email: EMAIL.to_owned(),
         action: "login".to_owned(),
     };
+    assert_eq!(
+        event.to_redacted().json(),
+        serde_json::json!({"api_key": "[REDACTED]", "user_email": "al***@example.com", "action": "login"})
+    );
+    assert_eq!(serde_json::to_value(&event).unwrap()["api_key"], API_KEY);
 
     let fields = capture_fields(|| tracing::info!(event = event.tracing_redacted_debug()));
     let output = debug_text(field_named(&fields, "event"), "event");

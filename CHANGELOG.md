@@ -19,6 +19,11 @@
 
 - Real slog-drain regressions check useful execution and review context alongside
   protected credentials, nested before/after values, and unchanged raw data.
+- API and login scenarios retain request IDs and attempt counts. A webhook
+  diagnostic view retains its user ID while protecting personal data.
+- Database and encryption scenarios retain endpoint and nonce context while
+  protecting passwords, private keys, and recovery codes. Authentication
+  fixtures match the README's full credential protection.
 
 ## 0.15.0 - 2026-10-23
 

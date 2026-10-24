@@ -1,5 +1,5 @@
 mod structs {
-    use redactable::{Redactable, Secret, Sensitive, Token};
+    use redactable::{Redactable, Secret, Sensitive};
     use std::collections::HashMap;
 
     #[test]
@@ -21,7 +21,7 @@ mod structs {
     fn redacts_nested_maps() {
         #[derive(Clone, Sensitive, serde::Serialize)]
         struct ApiKeyEntry {
-            #[sensitive(Token)]
+            #[sensitive(Secret)]
             key: String,
         }
 
@@ -33,8 +33,7 @@ mod structs {
             },
         );
         let redacted = map.redact();
-        // Token keeps last 4
-        assert_eq!(redacted.get("primary").unwrap().key, "**********c123");
+        assert_eq!(redacted.get("primary").unwrap().key, "[REDACTED]");
     }
 
     #[test]
@@ -102,7 +101,7 @@ mod structs {
 }
 
 mod tuple_structs {
-    use redactable::{Redactable, Secret, Sensitive, Token};
+    use redactable::{Redactable, Secret, Sensitive};
 
     #[test]
     fn redacts_annotated_fields() {
@@ -117,11 +116,11 @@ mod tuple_structs {
     }
 
     #[test]
-    fn applies_different_policies_to_different_fields() {
+    fn protects_credentials_and_keeps_public_tuple_context() {
         #[derive(Clone, Sensitive, serde::Serialize)]
         struct AuthCredentials(
             #[sensitive(Secret)] String,
-            #[sensitive(Token)] String,
+            #[sensitive(Secret)] String,
             #[not_sensitive] String,
         );
 
@@ -129,20 +128,20 @@ mod tuple_structs {
         let redacted = creds.redact();
 
         assert_eq!(redacted.0, "[REDACTED]");
-        assert_eq!(redacted.1, "*************3def"); // Token keeps last 4
+        assert_eq!(redacted.1, "[REDACTED]");
         assert_eq!(redacted.2, "alice");
     }
 }
 
 mod enums {
-    use redactable::{Redactable, Secret, Sensitive, Token};
+    use redactable::{Redactable, Secret, Sensitive};
 
     #[test]
     fn redacts_struct_variant_fields() {
         #[derive(Clone, Sensitive, serde::Serialize)]
         enum Credential {
             ApiKey {
-                #[sensitive(Token)]
+                #[sensitive(Secret)]
                 key: String,
             },
             Password {
@@ -158,7 +157,7 @@ mod enums {
 
         match &redacted {
             Credential::ApiKey { key } => {
-                assert_eq!(key, "****************3456");
+                assert_eq!(key, "[REDACTED]");
             }
             _ => panic!("Wrong variant"),
         }
@@ -179,7 +178,7 @@ mod enums {
     fn redacts_tuple_variant_fields() {
         #[derive(Clone, Sensitive, serde::Serialize)]
         enum Auth {
-            ApiKey(#[sensitive(Token)] String),
+            ApiKey(#[sensitive(Secret)] String),
             Basic(#[sensitive(Secret)] String, #[not_sensitive] String),
             None,
         }
@@ -187,7 +186,7 @@ mod enums {
         let api_key = Auth::ApiKey("sk_live_abc123def456ghi".into());
         let redacted = api_key.redact();
         match redacted {
-            Auth::ApiKey(key) => assert_eq!(key, "*******************6ghi"),
+            Auth::ApiKey(key) => assert_eq!(key, "[REDACTED]"),
             _ => panic!("Wrong variant"),
         }
 

@@ -1,6 +1,6 @@
 use crate::slog_capture::{CapturedValue, CapturingSerializer, serialize_to_capture};
 use redactable::slog::SlogRedactedExt;
-use redactable::{Secret, Sensitive, Token};
+use redactable::{Secret, Sensitive};
 use serde::Serialize;
 use std::collections::HashMap;
 
@@ -8,16 +8,15 @@ use std::collections::HashMap;
 fn redacts_vec_elements() {
     #[derive(Clone, Sensitive, Serialize)]
     struct ApiKeys {
-        #[sensitive(Token)]
+        #[sensitive(Secret)]
         keys: Vec<String>,
+        #[not_sensitive]
+        public_client_id: String,
     }
 
     let list = ApiKeys {
-        keys: vec![
-            "sk_live_abc123def456".into(),
-            "sk_test_xyz789ghi012".into(),
-            "pk_live_jkl345mno678".into(),
-        ],
+        keys: vec!["sk_live_abc123def456".into(), "sk_test_xyz789ghi012".into()],
+        public_client_id: "pk_live_jkl345mno678".into(),
     };
 
     let redacted = list.slog_redacted_json();
@@ -27,10 +26,10 @@ fn redacts_vec_elements() {
 
     if let Some(CapturedValue::Serde(json)) = serializer.get("list") {
         let keys = json["keys"].as_array().unwrap();
-        assert_eq!(keys.len(), 3);
-        assert_eq!(keys[0].as_str().unwrap(), "****************f456");
-        assert_eq!(keys[1].as_str().unwrap(), "****************i012");
-        assert_eq!(keys[2].as_str().unwrap(), "****************o678");
+        assert_eq!(keys.len(), 2);
+        assert_eq!(keys[0].as_str().unwrap(), "[REDACTED]");
+        assert_eq!(keys[1].as_str().unwrap(), "[REDACTED]");
+        assert_eq!(json["public_client_id"], "pk_live_jkl345mno678");
     } else {
         panic!("Expected Serde value for 'list' key");
     }

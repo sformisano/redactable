@@ -70,8 +70,7 @@ mod sensitive_value {
 
     mod in_container {
         use redactable::{
-            Redactable, Secret, Sensitive, SensitiveValue, SensitiveWithPolicy,
-            TextRedactionPolicy, Token,
+            Redactable, Secret, Sensitive, SensitiveValue, SensitiveWithPolicy, TextRedactionPolicy,
         };
         use serde::Serialize;
 
@@ -79,22 +78,22 @@ mod sensitive_value {
         fn redacts_when_container_is_redacted() {
             #[derive(Clone, Sensitive, Serialize)]
             struct Config {
-                api_key: SensitiveValue<String, Token>,
+                api_key: SensitiveValue<String, Secret>,
             }
 
             let config = Config {
                 api_key: SensitiveValue::from("sk_live_abc123def".to_string()),
             };
             let redacted = config.redact();
-            assert_eq!(redacted.api_key.expose(), "*************3def");
+            assert_eq!(redacted.api_key.expose(), "[REDACTED]");
         }
 
         #[test]
         fn works_with_custom_leaf_type() {
             #[derive(Clone, PartialEq, Debug, Serialize)]
-            struct UserId(String);
+            struct RecoveryCode(String);
 
-            impl SensitiveWithPolicy<Secret> for UserId {
+            impl SensitiveWithPolicy<Secret> for RecoveryCode {
                 fn redact_with_policy(self, policy: &TextRedactionPolicy) -> Self {
                     Self(policy.apply_to(&self.0))
                 }
@@ -106,14 +105,19 @@ mod sensitive_value {
 
             #[derive(Clone, Sensitive, Serialize)]
             struct Request {
-                user_id: SensitiveValue<UserId, Secret>,
+                recovery_code: SensitiveValue<RecoveryCode, Secret>,
             }
 
             let request = Request {
-                user_id: SensitiveValue::from(UserId("user_12345".to_string())),
+                recovery_code: SensitiveValue::from(RecoveryCode(
+                    "recovery_code_12345".to_string(),
+                )),
             };
             let redacted = request.redact();
-            assert_eq!(redacted.user_id.expose(), &UserId("[REDACTED]".to_string()));
+            assert_eq!(
+                redacted.recovery_code.expose(),
+                &RecoveryCode("[REDACTED]".to_string())
+            );
         }
 
         #[test]
@@ -138,7 +142,7 @@ mod sensitive_value {
         fn works_in_vec() {
             #[derive(Clone, Sensitive, Serialize)]
             struct Tokens {
-                values: Vec<SensitiveValue<String, Token>>,
+                values: Vec<SensitiveValue<String, Secret>>,
             }
 
             let tokens = Tokens {
@@ -149,8 +153,8 @@ mod sensitive_value {
             };
             let redacted = tokens.redact();
 
-            assert_eq!(redacted.values[0].expose(), "**********c123");
-            assert_eq!(redacted.values[1].expose(), "**********z789");
+            assert_eq!(redacted.values[0].expose(), "[REDACTED]");
+            assert_eq!(redacted.values[1].expose(), "[REDACTED]");
         }
     }
 }
@@ -287,14 +291,14 @@ mod orphan_rule_workaround {
     };
     use serde::Serialize;
 
-    // Simulate a foreign type from another crate
+    // Support diagnostics identify customer accounts by their final four digits.
     #[derive(Clone, PartialEq, Debug, Serialize)]
-    struct ForeignId(String);
+    struct ForeignAccountNumber(String);
 
     #[derive(Clone, Copy)]
-    struct ForeignIdPolicy;
+    struct AccountNumberPolicy;
 
-    impl RedactionPolicy for ForeignIdPolicy {
+    impl RedactionPolicy for AccountNumberPolicy {
         type Kind = TextPolicyKind;
 
         fn policy() -> TextRedactionPolicy {
@@ -302,7 +306,7 @@ mod orphan_rule_workaround {
         }
     }
 
-    impl SensitiveWithPolicy<ForeignIdPolicy> for ForeignId {
+    impl SensitiveWithPolicy<AccountNumberPolicy> for ForeignAccountNumber {
         fn redact_with_policy(self, policy: &TextRedactionPolicy) -> Self {
             Self(policy.apply_to(&self.0))
         }
@@ -314,39 +318,42 @@ mod orphan_rule_workaround {
 
     #[test]
     fn redacts_foreign_type_via_sensitive_wrapper() {
-        let wrapped = SensitiveValue::<ForeignId, ForeignIdPolicy>::from(ForeignId(
-            "external_12345".to_string(),
-        ));
-        assert_eq!(wrapped.redacted(), "**********2345");
+        let wrapped = SensitiveValue::<ForeignAccountNumber, AccountNumberPolicy>::from(
+            ForeignAccountNumber("123456789012".to_string()),
+        );
+        assert_eq!(wrapped.redacted(), "********9012");
     }
 
     #[test]
     fn redacts_foreign_type_in_container() {
         #[derive(Clone, Sensitive, Serialize)]
         struct Integration {
-            external_id: SensitiveValue<ForeignId, ForeignIdPolicy>,
+            customer_account_number: SensitiveValue<ForeignAccountNumber, AccountNumberPolicy>,
             #[sensitive(Secret)]
             api_key: String,
         }
 
         let integration = Integration {
-            external_id: SensitiveValue::from(ForeignId("ext_abcdefgh".to_string())),
+            customer_account_number: SensitiveValue::from(ForeignAccountNumber(
+                "1234567890123456".to_string(),
+            )),
             api_key: "secret_key".to_string(),
         };
         let redacted = integration.redact();
 
         assert_eq!(
-            redacted.external_id.expose(),
-            &ForeignId("********efgh".to_string())
+            redacted.customer_account_number.expose(),
+            &ForeignAccountNumber("************3456".to_string())
         );
         assert_eq!(redacted.api_key, "[REDACTED]");
     }
 
     #[test]
     fn converts_to_the_sink_value() {
-        let wrapped =
-            SensitiveValue::<ForeignId, ForeignIdPolicy>::from(ForeignId("id_xyz123".to_string()));
-        assert_eq!(wrapped.to_redacted().text(), "*****z123");
+        let wrapped = SensitiveValue::<ForeignAccountNumber, AccountNumberPolicy>::from(
+            ForeignAccountNumber("12345678".to_string()),
+        );
+        assert_eq!(wrapped.to_redacted().text(), "****5678");
     }
 
     #[test]
@@ -381,7 +388,7 @@ mod orphan_rule_workaround {
 }
 
 mod combined_wrappers {
-    use redactable::{BypassRedaction, Redactable, Secret, Sensitive, SensitiveValue, Token};
+    use redactable::{BypassRedaction, Redactable, Secret, Sensitive, SensitiveValue};
     use serde::Serialize;
 
     #[test]
@@ -395,7 +402,7 @@ mod combined_wrappers {
         struct Service {
             #[sensitive(Secret)]
             credentials: String,
-            api_token: SensitiveValue<String, Token>,
+            api_token: SensitiveValue<String, Secret>,
             metadata: BypassRedaction<ForeignMetadata>,
         }
 
@@ -409,7 +416,7 @@ mod combined_wrappers {
         let redacted = service.redact();
 
         assert_eq!(redacted.credentials, "[REDACTED]");
-        assert_eq!(redacted.api_token.expose(), "*************3def");
+        assert_eq!(redacted.api_token.expose(), "[REDACTED]");
         assert_eq!(redacted.metadata.version, "1.0.0");
     }
 

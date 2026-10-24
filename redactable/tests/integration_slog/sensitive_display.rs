@@ -3,8 +3,8 @@ use std::fmt::{Debug, Display, Formatter, Result as FmtResult};
 use crate::log_redacted;
 use crate::slog_capture::{CapturedValue, CapturingSerializer, serialize_to_capture};
 use redactable::{
-    Pii, Redactable, RedactableMapper, RedactableWithFormatter, RedactableWithMapper, Secret,
-    Sensitive, SensitiveDisplay, Token,
+    Redactable, RedactableMapper, RedactableWithFormatter, RedactableWithMapper, Secret, Sensitive,
+    SensitiveDisplay,
 };
 use serde::Serialize;
 
@@ -31,7 +31,7 @@ fn emits_redacted_string() {
             password: String,
             #[not_sensitive]
             context: NonSerializable,
-            #[sensitive(Secret)]
+            #[not_sensitive]
             attempts: usize,
         },
     }
@@ -51,11 +51,16 @@ fn emits_redacted_string() {
     if let Some(CapturedValue::Str(value)) = serializer.get("error") {
         assert_eq!(
             value,
-            "invalid login for alice [REDACTED] NonSerializable { _detail: \"remote\" } 0"
+            "invalid login for alice [REDACTED] NonSerializable { _detail: \"remote\" } 3"
         );
     } else {
         panic!("Expected Str value for 'error' key");
     }
+    let LoginError::InvalidCredentials {
+        password, attempts, ..
+    } = &err;
+    assert_eq!(password, "hunter2");
+    assert_eq!(*attempts, 3);
 }
 
 #[test]
@@ -86,7 +91,7 @@ fn handles_nested_errors() {
     enum InnerError {
         #[error("invalid api_key {api_key}")]
         InvalidApiKey {
-            #[sensitive(Token)]
+            #[sensitive(Secret)]
             api_key: String,
         },
     }
@@ -119,7 +124,7 @@ fn handles_nested_errors() {
     serialize_to_capture(&err, "error", &mut serializer);
 
     if let Some(CapturedValue::Str(value)) = serializer.get("error") {
-        assert_eq!(value, "user alice invalid api_key ****************f456");
+        assert_eq!(value, "user alice invalid api_key [REDACTED]");
     } else {
         panic!("Expected Str value for 'error' key");
     }
@@ -266,7 +271,7 @@ fn handles_positional_fields_with_doc_comment() {
     #[derive(SensitiveDisplay)]
     enum DocPositionalError {
         /// code {0} name {1:?}
-        Invalid(#[not_sensitive] String, #[sensitive(Pii)] String),
+        Invalid(#[not_sensitive] String, #[sensitive(Secret)] String),
     }
 
     let err = DocPositionalError::Invalid("E42".into(), "John Smith".into());
@@ -275,7 +280,7 @@ fn handles_positional_fields_with_doc_comment() {
     serialize_to_capture(&err, "error", &mut serializer);
 
     if let Some(CapturedValue::Str(value)) = serializer.get("error") {
-        assert_eq!(value, "code E42 name \"********th\"");
+        assert_eq!(value, "code E42 name \"[REDACTED]\"");
     } else {
         panic!("Expected Str value for 'error' key");
     }

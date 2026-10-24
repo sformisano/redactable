@@ -25,12 +25,12 @@ fn debug_keeps_production_redaction_in_tests() {
 // Its single expansion coordinates both implementations.
 mod dual_derive {
     use redactable::{
-        Redactable, RedactableWithFormatter, Sensitive, SensitiveDisplay, SensitiveDual, Token,
+        Redactable, RedactableWithFormatter, Secret, Sensitive, SensitiveDisplay, SensitiveDual,
     };
 
     /// {0}
     #[derive(Clone, SensitiveDual, serde::Serialize)]
-    struct Email(#[sensitive(Token)] String);
+    struct Email(#[sensitive(Secret)] String);
 
     #[test]
     fn used_inside_sensitive_container() {
@@ -48,23 +48,21 @@ mod dual_derive {
 
         let redacted = profile.redact();
         assert_eq!(redacted.name, "alice");
-        // Token policy applied via RedactableWithMapper from Sensitive
-        assert_eq!(redacted.email.0, "*************.com");
+        assert_eq!(redacted.email.0, "[REDACTED]");
     }
 
     #[test]
     fn display_formatting_works() {
         let email = Email("alice@example.com".into());
         let display = format!("{}", RedactableWithFormatter::redacted_display(&email));
-        // Token policy applied via RedactableWithFormatter from SensitiveDisplay
-        assert_eq!(display, "*************.com");
+        assert_eq!(display, "[REDACTED]");
     }
 
     #[test]
     fn structural_redaction_works_directly() {
         let email = Email("alice@example.com".into());
         let redacted = email.redact();
-        assert_eq!(redacted.0, "*************.com");
+        assert_eq!(redacted.0, "[REDACTED]");
     }
 
     #[test]
@@ -73,7 +71,7 @@ mod dual_derive {
         // Test builds preserve the production redacted template.
         let email = Email("alice@example.com".into());
         let debug = format!("{email:?}");
-        assert_eq!(debug, "*************.com");
+        assert_eq!(debug, "[REDACTED]");
     }
 
     #[test]
@@ -93,6 +91,6 @@ mod dual_derive {
             "{}",
             RedactableWithFormatter::redacted_display(&notification)
         );
-        assert_eq!(display, "notification to *************.com");
+        assert_eq!(display, "notification to [REDACTED]");
     }
 }

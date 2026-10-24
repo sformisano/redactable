@@ -1,13 +1,13 @@
 use crate::slog_capture::{CapturedValue, CapturingSerializer, serialize_to_capture};
 use redactable::slog::SlogRedactedExt;
-use redactable::{Pii, Secret, Sensitive};
+use redactable::{Secret, Sensitive};
 use serde::Serialize;
 
 #[test]
 fn redacts_nested_struct() {
     #[derive(Clone, Sensitive, Serialize)]
     struct Address {
-        #[sensitive(Pii)]
+        #[sensitive(Secret)]
         street: String,
         #[not_sensitive]
         city: String,
@@ -39,10 +39,7 @@ fn redacts_nested_struct() {
     if let Some(CapturedValue::Serde(json)) = serializer.get("person") {
         assert_eq!(json["name"], "Bob");
         assert_eq!(json["ssn"], "[REDACTED]");
-        assert_eq!(
-            json["address"]["street"].as_str().unwrap(),
-            "*************et"
-        );
+        assert_eq!(json["address"]["street"].as_str().unwrap(), "[REDACTED]");
         assert_eq!(json["address"]["city"], "Springfield");
     } else {
         panic!("Expected Serde value for 'person' key");

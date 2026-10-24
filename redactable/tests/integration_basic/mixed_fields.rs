@@ -1,4 +1,4 @@
-use redactable::{Redactable, Secret, Sensitive, Token};
+use redactable::{Redactable, Secret, Sensitive};
 
 #[test]
 fn applies_correct_policy_to_each_field() {
@@ -11,8 +11,8 @@ fn applies_correct_policy_to_each_field() {
         #[not_sensitive]
         name: String,
         #[sensitive(Secret)]
-        internal_score: i32,
-        #[sensitive(Token)]
+        recovery_pin: u32,
+        #[sensitive(Secret)]
         api_key: String,
         #[not_sensitive]
         public_data: String,
@@ -22,7 +22,7 @@ fn applies_correct_policy_to_each_field() {
         id: 12345,
         ssn: "123-45-6789".into(),
         name: "John Doe".into(),
-        internal_score: 95,
+        recovery_pin: 428731,
         api_key: "sk_test_abc123456789".into(),
         public_data: "visible".into(),
     };
@@ -32,7 +32,7 @@ fn applies_correct_policy_to_each_field() {
     assert_eq!(redacted.id, 12345);
     assert_eq!(redacted.ssn, "[REDACTED]");
     assert_eq!(redacted.name, "John Doe");
-    assert_eq!(redacted.internal_score, 0);
-    assert_eq!(redacted.api_key, "****************6789");
+    assert_eq!(redacted.recovery_pin, 0);
+    assert_eq!(redacted.api_key, "[REDACTED]");
     assert_eq!(redacted.public_data, "visible");
 }
