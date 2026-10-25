@@ -5,7 +5,7 @@ metadata:
   skillcatalog/display_name: "Redactable Wrappers And Escape Hatches"
   skillcatalog/author: "Salvatore Formisano"
   skillcatalog/created_at: "2026-04-29T15:18:46Z"
-  skillcatalog/updated_at: "2026-10-24T00:00:00Z"
+  skillcatalog/updated_at: "2026-10-25T00:00:00Z"
 ---
 # Redactable Wrappers And Escape Hatches
 
@@ -35,6 +35,15 @@ that the entire value is confidential.
 
 ## Keep a bypass as narrow as its justification
 
+For a custom logging projection, compare the consumer version's supported
+output representations before settling on a bypass. A named view can derive
+`Sensitive` when its fields still need policies, or `NotSensitive` when its
+complete serialized projection is already approved for that output audience.
+Keep construction of a prepared view with the owner that selects and protects
+its contents. Neither a public derive nor a bypass checks that those decisions
+are correct. Declaring the original raw payload or nested sensitive fields
+public removes their protection.
+
 For a field in a type you own, an explicit public field declaration is usually
 clearer than changing the field's type. Use `BypassRedaction` when the value
 itself must satisfy a redaction bound and its entire passthrough is justified.
@@ -51,9 +60,12 @@ expected content, including whether an empty summary loses needed diagnostics.
 When replacing deprecated `BypassTextRedaction`, review the changed `Debug`
 formatting, including literal newlines; this is not merely a rename.
 
-Do not introduce a local compatibility wrapper when an upstream wrapper already
-meets the ownership and output contract. Do not replace a real redacting
-projection with a passthrough just because their trait sets look similar.
+A named application view owns a selected output contract. A wrapper that only
+duplicates an upstream type's ownership or trait plumbing adds no such contract.
+Use the upstream wrapper when it already meets that need. A format-specific
+bypass remains appropriate for one-off prepared output when another application
+type adds no useful meaning. Do not replace a real redacting projection with a
+passthrough just because their trait sets look similar.
 
 ## Follow raw values after extraction
 
@@ -70,6 +82,7 @@ a diagnostic test merely because an accessor appears.
 
 ## Mechanics
 
+- [JSON output-view example](https://github.com/sformisano/redactable/blob/main/README.md#json-payloads-need-an-output-view)
 - [Wrapper contracts and deprecation differences](https://github.com/sformisano/redactable/blob/main/docs/reference.md#wrapper-contracts)
 - [Foreign-type implementation example](https://github.com/sformisano/redactable/blob/main/README.md#foreign-types)
 - [Attribute versus wrapper behavior](https://github.com/sformisano/redactable/blob/main/README.md#protecting-individual-fields)
