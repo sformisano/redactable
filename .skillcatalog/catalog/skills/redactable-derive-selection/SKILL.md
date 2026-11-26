@@ -5,11 +5,11 @@ metadata:
   skillcatalog/display_name: "Redactable Derive Selection"
   skillcatalog/author: "Salvatore Formisano"
   skillcatalog/created_at: "2026-04-29T15:18:46Z"
-  skillcatalog/updated_at: "2026-10-24T00:00:00Z"
+  skillcatalog/updated_at: "2026-11-26T23:33:56Z"
 ---
 # Redactable Derive Selection
 
-For Redactable 0.15, choose from the output the caller needs and the containing
+For Redactable 0.16, choose from the output the caller needs and the containing
 types that must use it. Do not select a derive merely to satisfy a trait error.
 
 ## Choose the smallest sufficient output
@@ -35,7 +35,7 @@ Keep useful diagnostic context visible under its audience's disclosure policy.
   small projection for large, locked, or unsuitable foreign values.
 - An opaque business wrapper can implement borrowed `ToRedacted` by delegating
   to its existing diagnostic view. Do not add structural mutation or an error
-  display contract merely to make a derive fit. In 0.15, supported forwarding
+  display contract merely to make a derive fit. Supported forwarding
   containers preserve the inner producer without adding clone or serialization
   requirements; arbitrary scalars and collections still need a declared producer.
 - Do not derive `Sensitive` or `SensitiveDual` on a type implementing `Drop`.

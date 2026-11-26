@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.16.0 - 2026-11-27
 
 ### Added
 
@@ -8,6 +8,9 @@
   `ToRedacted` for every field, including display and debug text. Select
   `logging::Sink::Log`, `Sink::Slog(logger)`, or `Sink::Tracing` in the
   application. The existing format-specific bypasses allow explicit disclosure.
+- Checked structured fields retain nested JSON with a Serde-aware `log` backend
+  or slog drain. Stable tracing emits compact JSON text. A tracing subscriber
+  with Valuable support can receive nested values.
 - `ToRedacted::to_redacted_cow()` lets a sink borrow an existing
   `RedactedValue` or produce an owned one from a domain type.
 - The opt-in `log` feature adds `.log_redacted_json()` for `ToRedacted`
@@ -18,6 +21,8 @@
 
 ### Compatibility
 
+- With glob imports from both Redactable and a logging crate, qualify a level
+  macro such as `redactable::info!` or import it by name.
 - If you import both `slog::Value` and `serde::Serialize` and call
   `.serialize(...)` directly on a `RedactedValue`, name the trait explicitly,
   for example `slog::Value::serialize(&value, record, key, serializer)`.

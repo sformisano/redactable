@@ -38,12 +38,12 @@ types and logging adapters.
 
 ### Quick examples
 
-These examples use the 0.15 series and require Rust 1.97 or later.
+These examples use the 0.16 series and require Rust 1.97 or later.
 The structured example also uses Serde to make the redacted value serializable:
 
 ```toml
 [dependencies]
-redactable = "0.15"
+redactable = "0.16"
 serde = { version = "1", features = ["derive"] }
 ```
 
@@ -1079,12 +1079,11 @@ deliberately, use `BypassJsonRedaction(&value)` for JSON,
 ### log
 
 The opt-in `log` feature enables `log/kv_serde`. The application initializes
-its logger. This example uses a local checkout of Redactable and the JSON
-formatter from `flexi_logger`.
+its logger. This example uses the JSON formatter from `flexi_logger`.
 
 ```toml
 [dependencies]
-redactable = { path = "../redactable/redactable", features = ["log"] }
+redactable = { version = "0.16", features = ["log"] }
 flexi_logger = { version = "0.31", default-features = false, features = ["json", "kv"] }
 serde = { version = "1", features = ["derive"] }
 ```
@@ -1136,7 +1135,7 @@ fields selected by the producer. This example writes them through a JSON drain.
 
 ```toml
 [dependencies]
-redactable = { version = "0.15", features = ["slog"] }
+redactable = { version = "0.16", features = ["slog"] }
 serde = { version = "1", features = ["derive"] }
 slog = "2.8"
 slog-json = { version = "2.6", features = ["nested-values"] }
@@ -1217,7 +1216,7 @@ tracing. For an existing native `tracing::info!` call that needs redacted
 
 ```toml
 [dependencies]
-redactable = { version = "0.15", features = ["tracing"] }
+redactable = { version = "0.16", features = ["tracing"] }
 serde = { version = "1", features = ["derive"] }
 tracing = "0.1"
 ```
@@ -1266,7 +1265,7 @@ implementation and passes the redacted value to `tracing::field::valuable`.
 
 ```toml
 [dependencies]
-redactable = { version = "0.15", features = ["tracing-valuable"] }
+redactable = { version = "0.16", features = ["tracing-valuable"] }
 serde = { version = "1", features = ["derive"] }
 tracing = "0.1"
 valuable = { version = "0.1", features = ["derive"] }

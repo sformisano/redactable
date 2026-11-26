@@ -416,8 +416,8 @@ an owned copy. Stable tracing writes compact JSON into a string. With
 and arrays. Ordinary JSON numbers stay numeric. With
 `serde_json/arbitrary_precision`, a decimal whose spelling changes on a
 round trip through a finite float (such as `1.00`) is emitted as its original
-text. Both `:%` and `:?` borrow stored text when available. They render compact JSON into a string for a JSON-only
-producer.
+text. Both `:%` and `:?` borrow stored text when available. They render compact
+JSON into a string for a JSON-only producer.
 
 Each field supplied must have a unique name other than `message`. Inherited
 logger context, span fields, subscriber-added attributes, and forwarding through

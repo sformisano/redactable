@@ -1,7 +1,7 @@
 # Redactable skill catalog
 
 The editable catalog lives in [catalog](catalog/). Its guidance targets
-Redactable 0.15. Skills guide decisions; the
+Redactable 0.16. Skills guide decisions; the
 [README](../README.md) and [reference](../docs/reference.md) own API mechanics.
 The README's [disclosure decision](../README.md#choose-what-diagnostics-retain)
 owns the product baseline for useful context and protected values.
@@ -12,7 +12,7 @@ Sibling mentions no longer declare circular installation dependencies: each
 skill stands alone and links to the product documentation it needs. Skill links
 are absolute repository URLs so they remain usable after installation elsewhere.
 They point at current documentation; use the consumer's locked revision when its
-version differs from the catalog's 0.15 target.
+version differs from the catalog's 0.16 target.
 
 ## Installation
 

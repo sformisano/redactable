@@ -5,11 +5,11 @@ metadata:
   skillcatalog/display_name: "Redactable Review Checklist"
   skillcatalog/author: "Salvatore Formisano"
   skillcatalog/created_at: "2026-04-29T15:18:46Z"
-  skillcatalog/updated_at: "2026-10-24T00:00:00Z"
+  skillcatalog/updated_at: "2026-11-26T23:33:56Z"
 ---
 # Redactable Review Checklist
 
-For Redactable 0.15, review the path to observable output, not just the presence
+For Redactable 0.16, review the path to observable output, not just the presence
 of annotations. Confirm the consumer's locked version first.
 
 ## Review questions

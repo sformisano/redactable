@@ -5,11 +5,11 @@ metadata:
   skillcatalog/display_name: "Redactable Logging Boundaries"
   skillcatalog/author: "Salvatore Formisano"
   skillcatalog/created_at: "2026-04-29T15:18:46Z"
-  skillcatalog/updated_at: "2026-10-24T00:00:00Z"
+  skillcatalog/updated_at: "2026-11-26T23:33:56Z"
 ---
 # Redactable Logging Boundaries
 
-For Redactable 0.15, trace the value from its source to the actual output writer.
+For Redactable 0.16, trace the value from its source to the actual output writer.
 Apply a redacted operation or reviewed adapter before sensitive data reaches
 that writer, including error reports and ad hoc diagnostics.
 

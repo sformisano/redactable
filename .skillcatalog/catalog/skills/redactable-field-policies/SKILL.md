@@ -5,11 +5,11 @@ metadata:
   skillcatalog/display_name: "Redactable Field Policies"
   skillcatalog/author: "Salvatore Formisano"
   skillcatalog/created_at: "2026-04-29T15:18:46Z"
-  skillcatalog/updated_at: "2026-10-24T00:00:00Z"
+  skillcatalog/updated_at: "2026-11-26T23:33:56Z"
 ---
 # Redactable Field Policies
 
-For Redactable 0.15, choose field disclosure from the intended audience and the
+For Redactable 0.16, choose field disclosure from the intended audience and the
 value's meaning. Confirm the consumer's locked version before applying library
 contracts. A policy name does not establish the right disclosure.
 The [product disclosure decision](https://github.com/sformisano/redactable/blob/main/README.md#choose-what-diagnostics-retain)
