@@ -51,8 +51,10 @@ Neither form walks nested sensitive fields.
 
 At an output boundary, select a format-specific bypass only after reviewing
 that complete representation. `Debug`, `Display`, and JSON may reveal different
-data. A debug bypass around request metadata, an error context, or an SDK object
-requires inspection of the actual formatter, not trust in its type name.
+data. In checked log fields, both `:%` and `:?` use a producer's selected text.
+Wrapping a value in `BypassDebugRedaction` deliberately selects its own `Debug`
+output. Inspect the actual formatter for request metadata, error context, and
+SDK objects.
 
 For an authored public summary, prefer `BypassDisplayRedaction` in new code.
 It does not inspect or sanitize the string. Check interpolation sources and

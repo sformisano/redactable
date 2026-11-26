@@ -167,7 +167,7 @@ pub trait TracingRedactedExt {
 
 impl<T: ToRedacted + ?Sized> TracingRedactedExt for T {
     fn tracing_redacted(&self) -> DisplayValue<String> {
-        display(self.to_redacted().text())
+        display(self.to_redacted_cow().text())
     }
 }
 

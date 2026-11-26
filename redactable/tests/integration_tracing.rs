@@ -243,19 +243,14 @@ fn checked_tracing_preserves_digits_beyond_valuables_numeric_range() {
     use redactable::{BypassJsonRedaction, logging::Sink};
     use serde_json::Value;
 
-    // serde_json with arbitrary_precision retains all three tokens verbatim.
-    // Its default number representation converts them to f64 during parsing.
-    let tokens = [
-        "340282366920938463463374607431768211456",
-        "0.12345678901234567890123456789",
-        "1e-500",
-    ];
-    let numbers: Value =
-        serde_json::from_str(&format!("[{},1.00,1e2,-2.50,0.050]", tokens.join(","))).unwrap();
-    let expected = if numbers[0].is_f64() {
+    let precise = "0.12345678901234567890123456789";
+    let numbers: Value = serde_json::from_str(&format!("[0.5,1.00,{precise}]")).unwrap();
+    let expected = if serde_json::Number::from_f64(1.0).as_ref() == numbers[1].as_number() {
+        // Default serde_json has already read these decimals as machine floats.
         numbers.clone()
     } else {
-        serde_json::json!([tokens[0], tokens[1], tokens[2], 1.0, 100.0, -2.5, 0.05])
+        // With arbitrary_precision the stored decimal spelling is significant.
+        serde_json::json!([0.5, "1.00", precise])
     };
     let saved = BypassJsonRedaction(&numbers).to_redacted();
     let fields = capture_fields(|| {

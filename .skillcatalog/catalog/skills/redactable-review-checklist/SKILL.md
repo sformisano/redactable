@@ -35,8 +35,11 @@ of annotations. Confirm the consumer's locked version first.
    credentials. Erased values need a domain-aware projection or an explicit
    omission reason, while available identity and source metadata remain useful.
 4. **Is the output path appropriate?** Check structural versus display needs,
-   destructor restrictions, clone/borrow costs, and actual logger output. Review
-   an unannotated JSON field's direct `Debug` separately from structural redaction.
+   destructor restrictions, clone/borrow costs, and actual logger output. For a
+   checked event, verify field selectors and bypasses. Trace inherited logger
+   context, subscriber-added fields, and native bridges to their own sources.
+   Review an unannotated JSON field's direct `Debug` separately from structural
+   redaction.
 5. **What changed outside compiler coverage?** For a newly added field omitted
    from a display template, review its other outputs. Intentional omission is a
    valid display-only design. Require structural redaction only when that path
@@ -47,7 +50,8 @@ of annotations. Confirm the consumer's locked version first.
    remains a finding; a successful compile does not resolve it.
 7. **What proves the result?** Require independently written expected output for
    the relevant paths, realistic short/window-boundary policy samples, and actual
-   sink capture when an integration changes. Pair shape checks with exact values.
+   sink capture when an integration changes. Check whether nested data arrives
+   as an object or an encoded string. Pair shape checks with exact values.
    Assert useful values remain visible and protected values are absent together.
    Include previous/current values and accepted unknown vocabulary where the
    contract supports them. Check actual `Debug` and formatted output separately

@@ -11,6 +11,42 @@ use crate::{
 const SECRET_KEY: &str = "PRIVATE-ACCOUNT-4901";
 const SECRET_VALUE: &str = "PRIVATE-TOKEN-1902";
 
+#[cfg(any(feature = "log", feature = "slog", feature = "tracing"))]
+#[test]
+fn checked_text_borrows_the_declared_string_from_a_snapshot() {
+    let text = String::from("approved text");
+    let address = text.as_ptr();
+    let snapshot = super::RedactedValue::from_text_and_json(text, json!({"status": "ready"}));
+    assert_eq!(
+        crate::__redactable_field!(text & snapshot).as_ptr(),
+        address
+    );
+}
+
+#[cfg(feature = "slog")]
+#[test]
+fn owned_slog_json_reuses_the_produced_json() {
+    use crate::{RedactedValue, SlogRedactedExt};
+    use std::cell::Cell;
+
+    struct Once(Cell<Option<RedactedValue>>);
+    impl ToRedacted for Once {
+        fn to_redacted(&self) -> RedactedValue {
+            self.0.take().expect("the adapter runs the producer once")
+        }
+    }
+
+    let text = String::from("approved JSON");
+    let address = text.as_ptr();
+    let dual = RedactedValue::from_text_and_json("summary".into(), serde_json::Value::String(text));
+    let projected = Once(Cell::new(Some(dual))).slog_redacted_json();
+    assert_eq!(
+        projected.structured().unwrap().as_str().unwrap().as_ptr(),
+        address
+    );
+    assert_eq!(projected.text(), r#""approved JSON""#);
+}
+
 #[derive(Clone, PartialEq, Eq, Hash, Serialize, Sensitive)]
 struct AccountKey(#[sensitive(Secret)] String);
 

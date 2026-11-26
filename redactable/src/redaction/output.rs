@@ -83,17 +83,23 @@ pub struct RedactedValue {
 }
 
 impl RedactedValue {
+    const MESSAGE_KEY: &str = "message";
+
     /// Returns the redacted text for this value.
     ///
     /// A JSON-only value answers with its JSON rendered as compact text, which
     /// is what a text sink such as `tracing`'s display path emits for it.
     #[must_use]
     pub fn text(&self) -> String {
+        self.text_view().into_owned()
+    }
+
+    pub(crate) fn text_view(&self) -> Cow<'_, str> {
         match (&self.text, &self.json) {
-            (Some(text), _) => text.clone(),
-            (None, Some(json)) => json.to_string(),
+            (Some(text), _) => Cow::Borrowed(text),
+            (None, Some(json)) => Cow::Owned(json.to_string()),
             // Unreachable: every constructor sets at least one representation.
-            (None, None) => String::new(),
+            (None, None) => Cow::Borrowed(""),
         }
     }
 
@@ -110,7 +116,14 @@ impl RedactedValue {
     }
 
     pub(crate) fn message_field(&self) -> (&'static str, &str) {
-        ("message", self.text.as_deref().unwrap_or_default())
+        (Self::MESSAGE_KEY, self.text.as_deref().unwrap_or_default())
+    }
+
+    #[cfg(feature = "slog")]
+    pub(crate) fn into_json(self) -> JsonValue {
+        self.json.unwrap_or_else(|| {
+            JsonValue::from_iter([(Self::MESSAGE_KEY, self.text.unwrap_or_default())])
+        })
     }
 
     pub(crate) fn from_text(text: String) -> Self {

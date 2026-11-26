@@ -64,7 +64,7 @@ When library behavior changes, inspect the skill that owns the affected decision
 | `redactable-derive-selection` | Structured, text, dual, or public output | [Derive contracts](../docs/reference.md#what-each-derive-generates) |
 | `redactable-field-policies` | What each field may reveal | [Policies](../README.md#policies-and-reference), [supported types](../docs/reference.md#supported-types) |
 | `redactable-wrappers-and-escape-hatches` | Policy ownership, foreign types, bypasses | [Wrapper contracts](../docs/reference.md#wrapper-contracts) |
-| `redactable-logging-boundaries` | Conversion, sink representation, cost | [Adapter contracts](../docs/reference.md#output-and-adapter-contracts) |
+| `redactable-logging-boundaries` | Checked fields, sink representation, cost | [Checked logging](../README.md#checked-logging), [adapter contracts](../docs/reference.md#output-and-adapter-contracts) |
 | `redactable-review-checklist` | Evidence and findings across an existing change | [Testing](../docs/reference.md#testing-redacted-output), [upgrades](../docs/reference.md#upgrading) |
 
 Run these checks from the repository root, with `TMPDIR` set to an existing

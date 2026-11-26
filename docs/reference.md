@@ -57,7 +57,7 @@ The sensitive derives also generate the integrations enabled by `slog` and
 - `Redactable`: the derive is an explicit declaration, so the type may be
   redacted and used inside sensitive containers
 - `RedactableWithFormatter`: delegates to `Display::fmt` (allows use inside `SensitiveDisplay` containers)
-- `ToRedacted`: emits the `Display` text for `slog_redacted()` and `tracing_redacted()`
+- `ToRedacted`: emits the type's `Display` text as its declared output
 - `slog::Value` and `SlogRedacted`: when `slog` feature is enabled
 - `TracingRedacted`: when `tracing` feature is enabled
 
@@ -403,13 +403,25 @@ redacts only at construction; reading its text or JSON does not repeat that work
 The result retains no reference to the source and has no public constructor,
 `From`, or `Deserialize` implementation.
 
-The checked level macros call `ToRedacted::to_redacted_cow()` for each field.
-Its default implementation runs the existing producer once. A saved
-`RedactedValue` returns a borrow, including through references, `Option`,
-`Box`, `Rc`, and `Arc`. A slog drain that queues fields for later can request
-an owned copy. With stable tracing, the encoder writes JSON into a string.
-Structured tracing preserves a number as text when conversion through Serde's
-integer and floating-point accessors would change its decimal value.
+The checked level macros evaluate the sink expression once. The selected
+backend's native event macro controls when it evaluates fields. Each supplied
+field uses `ToRedacted::to_redacted_cow()`. Its default calls the existing
+producer. A saved `RedactedValue` returns a borrow, including through references,
+`Some`, `Box`, `Rc`, and `Arc`.
+
+A plain field uses the producer's JSON. `log` and synchronous slog serialization
+can borrow stored JSON directly. A slog drain that queues fields can request
+an owned copy. Stable tracing writes compact JSON into a string. With
+`tracing-valuable` and `--cfg tracing_unstable`, tracing visits nested objects
+and arrays. Ordinary JSON numbers stay numeric. With
+`serde_json/arbitrary_precision`, a decimal whose spelling changes on a
+round trip through a finite float (such as `1.00`) is emitted as its original
+text. Both `:%` and `:?` borrow stored text when available. They render compact JSON into a string for a JSON-only
+producer.
+
+Each field supplied must have a unique name other than `message`. Inherited
+logger context, span fields, subscriber-added attributes, and forwarding through
+bridges such as `tracing/log-always` follow the application's configuration.
 
 `.log_redacted_json()`, `.slog_redacted_json()`, and `.tracing_redacted()` run
 the producer at the call.
@@ -429,12 +441,11 @@ whole-value placeholder; it does not preserve fields.
 
 ### Serialization failure
 
-JSON producers and JSON adapters use `serialize_redacted_json` for the final
-serialization step. If Serde returns an error, the entire JSON representation
-becomes the string `"[REDACTED]"`. No partial object or serializer error text is
-included. For a dual producer, its separately rendered template text remains
-available. This conversion does not catch panics in cloning, redaction,
-formatting, or serialization.
+If Serde returns an error while a producer builds its JSON, the entire
+representation becomes the string `"[REDACTED]"`. A dual producer retains its
+separately rendered template text. Serialization of a saved `RedactedValue`
+propagates errors from the destination serializer. Cloning, redaction,
+formatting, and serialization can still panic.
 
 `serialize_redacted_json` performs no redaction itself. Its input must already
 be the desired projection; serializing an original value through it preserves
@@ -712,6 +723,15 @@ Valid paths beneath absent options, empty collections, or scalar parents can rem
 Include populated samples to exercise those paths.
 
 ## Upgrading
+
+When enabling a logging integration, qualify level macros (`redactable::info!`,
+`::log::info!`, `::slog::info!`, or `::tracing::info!`) or import them by name.
+Glob imports from both Redactable and a logging crate can make an unqualified
+`info!` or another level macro ambiguous.
+
+With `redaction`, `RedactedValue` implements `serde::Serialize`. If both
+`serde::Serialize` and `slog::Value` are in scope, qualify calls to
+`serde::Serialize::serialize` or `slog::Value::serialize` on a saved value.
 
 For the 0.15 upgrade, check downstream `ToRedacted` implementations for overlap
 with producer forwarding. [Migration from 0.14](../CHANGELOG.md#migration-from-014)

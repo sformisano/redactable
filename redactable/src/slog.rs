@@ -32,7 +32,10 @@
 //! It does not configure `slog`, define redaction policy, or attempt to validate
 //! that a `Redactable` implementation performs correct redaction.
 
-use std::fmt::{Debug, Display};
+use std::{
+    borrow::Cow,
+    fmt::{Debug, Display},
+};
 
 #[cfg(feature = "tracing")]
 use crate::tracing::TracingRedacted;
@@ -262,7 +265,11 @@ pub trait SlogRedactedExt: ToRedacted {
     /// string `"[REDACTED]"`.
     #[must_use]
     fn slog_redacted_json(&self) -> RedactedValue {
-        RedactedValue::from_json(self.to_redacted().json())
+        let json = match self.to_redacted_cow() {
+            Cow::Owned(value) => value.into_json(),
+            Cow::Borrowed(value) => value.json(),
+        };
+        RedactedValue::from_json(json)
     }
 }
 
@@ -327,8 +334,8 @@ where
         key: Key,
         serializer: &mut dyn Serializer,
     ) -> SlogResult {
-        let text = self.0.to_redacted_cow().text();
-        serializer.emit_str(key, &text)
+        let value = self.0.to_redacted_cow();
+        serializer.emit_str(key, &value.text_view())
     }
 }
 

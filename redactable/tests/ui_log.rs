@@ -15,4 +15,5 @@ fn checked_log_rejects_undeclared_fields_and_message_data() {
     }
     tests.compile_fail("tests/ui/log_unchecked_messages_rejected.rs");
     tests.compile_fail("tests/ui/log_unchecked_field_syntax_rejected.rs");
+    tests.compile_fail("tests/ui/log_duplicate_fields_rejected.rs");
 }

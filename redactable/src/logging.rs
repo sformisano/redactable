@@ -5,6 +5,7 @@
 //! [`crate::ToRedacted`]. A plain field selects the structured view.
 //! Both `:%` and `:?` select the producer's [redacted text](crate::RedactedValue::text).
 //! Messages are fixed string literals. Use `{{` and `}}` to emit literal braces.
+//! Each field name must be unique, including its raw identifier spelling.
 //! The event text reserves the field name `message`, including its raw
 //! identifier spelling `r#message`.
 //!
@@ -87,6 +88,11 @@ impl Sink {
 }
 
 #[doc(hidden)]
+pub fn __text(value: &crate::RedactedValue) -> std::borrow::Cow<'_, str> {
+    value.text_view()
+}
+
+#[doc(hidden)]
 #[macro_export]
 macro_rules! __redactable_field {
     (json $value:expr) => {
@@ -95,7 +101,9 @@ macro_rules! __redactable_field {
         )
     };
     (text $value:expr) => {
-        $crate::RedactedValue::text(&$crate::ToRedacted::to_redacted_cow(&$value))
+        ::core::convert::AsRef::<::core::primitive::str>::as_ref(
+            &$crate::logging::__text($crate::__redactable_field!(json $value)),
+        )
     };
     ([] $value:expr) => { $crate::__redactable_field!(json $value) };
     ([%] $value:expr) => { $crate::__redactable_field!(text $value) };
@@ -137,11 +145,18 @@ macro_rules! __redactable_event {
         $crate::__redactable_event!(@modes [] ($level, $sink, [], $message))
     };
     ($level:ident, $sink:expr, $($key:ident $(:$mode:tt)? = $value:expr),+ $(,)?; $message:literal $(,)?) => {{
-        $($crate::__redactable_event!(@key $key);)+
+        $crate::__redactable_event!(@keys [$($key),+] $);
         $crate::__redactable_event!(
             @modes [$($($mode)?)+] ($level, $sink, [$($key [$($mode)?] ($value)),+], $message)
         )
     }};
+    (@keys [$($key:ident),+] $dollar:tt) => {
+        $($crate::__redactable_event!(@key $key);)+
+        // Rust rejects repeated macro binding names and accepts keyword identifiers.
+        // The forwarded dollar sign introduces a binding for each supplied key.
+        #[allow(unused_macros)]
+        macro_rules! __redactable_unique_field_names { ($($dollar $key:tt),+) => {}; }
+    };
     (@key message) => {
         ::core::compile_error!("the field name `message` is reserved for the event message")
     };

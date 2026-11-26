@@ -72,7 +72,7 @@ fn native_level_filter_decides_whether_checked_fields_run() {
 
 #[cfg(all(feature = "log", feature = "tracing"))]
 #[test]
-fn one_callsite_sends_each_event_only_to_the_selected_receiver() {
+fn one_callsite_matches_the_native_routing_of_each_sink() {
     use std::sync::atomic::{AtomicUsize, Ordering::Relaxed};
     use tracing::{Event, Metadata, Subscriber, span};
 
@@ -113,20 +113,24 @@ fn one_callsite_sends_each_event_only_to_the_selected_receiver() {
     let logger = Logger::root(capture, slog::o!());
     let tracing_events = Arc::new(Count::default());
     tracing::subscriber::with_default(Arc::clone(&tracing_events), || {
-        for (sink, expected) in [
-            (Sink::Log, [1, 0, 0]),
-            (Sink::Slog(logger), [1, 1, 0]),
-            (Sink::Tracing, [1, 1, 1]),
-        ] {
+        let take_counts = || {
+            [
+                LOG.0.swap(0, Relaxed),
+                std::mem::take(&mut *slog_records.lock().unwrap()).len(),
+                tracing_events.0.swap(0, Relaxed),
+            ]
+        };
+        for sink in [Sink::Log, Sink::Slog(logger), Sink::Tracing] {
+            // Native tracing may also forward an event to the log facade.
+            match &sink {
+                Sink::Log => log::info!(value = 1_u8; "routed"),
+                Sink::Slog(logger) => slog::info!(logger, "routed"; "value" => 1_u8),
+                Sink::Tracing => tracing::info!(value = 1_u8, "routed"),
+                _ => unreachable!(),
+            }
+            let native = take_counts();
             redactable::info!(sink, value = (); "routed");
-            assert_eq!(
-                [
-                    LOG.0.load(Relaxed),
-                    slog_records.lock().unwrap().len(),
-                    tracing_events.0.load(Relaxed)
-                ],
-                expected
-            );
+            assert_eq!(take_counts(), native, "{sink:?}");
         }
     });
 }

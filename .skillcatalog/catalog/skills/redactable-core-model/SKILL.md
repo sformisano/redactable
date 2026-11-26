@@ -52,8 +52,9 @@ structural redaction.
 
 ## Recognize the limits
 
-Require an explicit redacted operation or reviewed logging adapter on paths that
-may carry sensitive data. A derive elsewhere in the object graph is insufficient.
+Use Redactable's checked logging macros when every field at a log call needs
+a declared policy. For other observation paths, trace the redacted operation
+or reviewed adapter that produces the output.
 The low-level free `redact(value)` function can leave raw leaves unchanged.
 Generated `Debug` also differs by derive and field declaration; do not infer its
 disclosure from the word “redacted.”

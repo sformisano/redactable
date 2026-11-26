@@ -46,7 +46,8 @@ workspace = true
 # the pair must always ship and resolve together.
 redactable-derive = { version = "=0.15.2", path = "../redactable-derive" }
 serde = { version = "1", optional = true, features = ["derive"] }
-serde_json = { version = "1", optional = true }
+# The structured tracing adapter reads 128-bit integers from JSON numbers.
+serde_json = { version = "1.0.130", optional = true }
 log = { version = "0.4", optional = true, features = ["kv_serde"] }
 erased-serde = { version = "0.3", optional = true }
 slog = { version = "2.8", optional = true, features = ["nested-values"] }

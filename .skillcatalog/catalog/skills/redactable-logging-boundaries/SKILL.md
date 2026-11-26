@@ -15,10 +15,12 @@ that writer, including error reports and ad hoc diagnostics.
 
 ## Make the boundary explicit
 
-Prefer a `ToRedacted`-based interface for a custom output pipeline. It rejects
-undeclared raw values, but admits public declarations and bypasses. Review those
-declarations and the implementation; a trait bound alone proves no confidentiality.
-The writer must use the resulting projection, not extract and format a raw field.
+Use Redactable's checked level macros when every field supplied at a log call
+must have a declared policy. Choose `logging::Sink` in the application. Put
+variable data in named fields and keep the event message a fixed literal.
+For a custom output pipeline, accept `ToRedacted` at the boundary and pass the
+resulting `RedactedValue` to the writer. Review public declarations and bypasses
+against the intended audience.
 Retain the operation's useful identity, query, transition and outcome context.
 A projection that replaces an entire request or result with a mask can satisfy
 the trait while preventing diagnosis. Generic envelopes delegate typed keys,
@@ -26,8 +28,10 @@ filters and results to their own policies instead of discarding them.
 
 Do not serialize or interpolate sensitive data into a string before conversion.
 Neither a bypass wrapper nor the low-level free `redact(value)` function repairs
-that string. Ordinary error `Display`, error chains, span fields, and debug
-dumps need the same path inspection as explicit log statements.
+that string. Review ordinary error `Display`, error chains, debug dumps,
+inherited slog context, and subscriber-added fields at their source. If a
+native bridge such as `tracing/log-always` forwards events, inspect the output
+of each destination that needs the same disclosure and field shape.
 
 ## Choose the output the sink actually needs
 
@@ -36,14 +40,19 @@ dumps need the same path inspection as explicit log statements.
   compact JSON is still text to the sink. A text-only producer's `json()` is
   an object with a `message` field; it is not a scalar string. Assert the actual
   representation when composing nested projections.
-- Use the named slog JSON adapter for a redacted object. Direct borrowed
-  structural values emit a fixed placeholder; that protects content but can
-  discard the diagnostics the caller expected. Inspect the drain's output.
-  The [runnable slog example](https://github.com/sformisano/redactable/blob/main/README.md#slog)
-  shows the field-preserving route and required nested-value drain features.
-- Choose tracing text, redacted `Debug`, or structured valuable output from
-  downstream requirements. Exercise the subscriber and feature configuration
-  used by the application before claiming structured output works.
+- In a checked macro, use a plain field for the producer's JSON. Both `:%`
+  and `:?` select the producer's declared text. A format-specific bypass
+  deliberately exposes the wrapped Display, Debug, or JSON representation.
+- For nested objects and arrays, configure a `log` backend that serializes
+  key-value fields or a slog drain with nested-value support. An existing
+  native `log` or slog call can use its named JSON adapter. Native slog emits
+  a whole-value placeholder for a borrowed `Sensitive` or `SensitiveDual`
+  source. Check that useful fields survive in the drain's output.
+- A checked tracing plain field carries compact JSON text on stable tracing.
+  For nested output, enable `tracing-valuable`, build with
+  `--cfg tracing_unstable`, and exercise a Valuable-aware subscriber. Existing
+  native tracing calls can select their display, redacted `Debug`, or
+  typed `Valuable` adapter.
 - `Sensitive` masks annotated fields in generated `Debug` and delegates other
   fields to their own `Debug`. `SensitiveDisplay` and `SensitiveDual` render
   policy-shaped templates. An unannotated opaque JSON field can therefore be
@@ -59,11 +68,12 @@ ownership, and live `RefCell` borrows before putting them on frequent or critica
 paths. Borrowed display formatting has different behavior; a consuming adapter
 can avoid the outer clone but not every clone during nested traversal.
 
-An owned `RedactedValue` records conversion at construction. Borrowed formatting
-and the slog text adapter can run again when formatted or emitted. Choose the
-lifetime deliberately when source state or policy cost matters. Valuable
-projections can expose interior-mutable redacted objects; do not assume the
-wrapper reapplies redaction after caller-driven mutation.
+Retain a `RedactedValue` when several sinks need the same snapshot. Pass it
+by reference to a checked macro or to Serde to reuse the stored JSON.
+Checked text fields borrow stored text or render compact JSON when the value
+has only JSON. Queued slog drains can request an owned copy. Borrowed formatting and the native slog text adapter can run again on
+emission. The native typed `Valuable` adapter can expose interior-mutable
+redacted objects, so later traversal can observe caller-driven mutation.
 
 Serialization errors replace the whole JSON output with a placeholder. Policies,
 clones, formatters, and serializers can still panic. Do not turn a logging
@@ -86,7 +96,8 @@ the presence of a mask cannot establish useful, correctly protected output.
 
 ## Mechanics
 
-- [Logging integration examples](https://github.com/sformisano/redactable/blob/main/README.md#integrations)
+- [Checked logging and backend selection](https://github.com/sformisano/redactable/blob/main/README.md#checked-logging)
+- [Runnable JSON logger example](https://github.com/sformisano/redactable/blob/main/README.md#log)
 - [Output, timing, failure, and adapter contracts](https://github.com/sformisano/redactable/blob/main/docs/reference.md#output-and-adapter-contracts)
 - [Collection output](https://github.com/sformisano/redactable/blob/main/docs/reference.md#bounded-list-output)
 - [Testing redacted output](https://github.com/sformisano/redactable/blob/main/docs/reference.md#testing-redacted-output)

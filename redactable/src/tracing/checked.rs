@@ -57,7 +57,7 @@ mod structured {
         Array(&'a [Json]),
         Message(&'static str, &'a str),
         Scalar(Value<'a>),
-        // A Serde arbitrary-precision number can exceed Valuable's numeric range.
+        // Valuable has no arbitrary-precision number type.
         NumberText(String),
     }
 
@@ -94,35 +94,10 @@ mod structured {
                 .or_else(|| n.as_i128().map(Value::I128))
                 .or_else(|| {
                     let float = n.as_f64()?;
-                    let encoded = Number::from_f64(float)?;
-                    // arbitrary_precision compares spellings, even for 1.00 and 1.0.
-                    let round_trips = &encoded == n
-                        || decimal_parts(n)
-                            .is_some_and(|parts| decimal_parts(&encoded).as_ref() == Some(&parts));
-                    round_trips.then_some(Value::F64(float))
+                    (Number::from_f64(float).as_ref() == Some(n)).then_some(Value::F64(float))
                 });
             value.map_or_else(|| Node::NumberText(n.to_string()), Node::Scalar)
         }
-    }
-
-    // A signed coefficient and a power of ten compare JSON numbers without rounding.
-    fn decimal_parts(number: &Number) -> Option<(String, i64)> {
-        let token = number.to_string();
-        let (mantissa, exponent) = token.split_once(['e', 'E']).unwrap_or((&token, "0"));
-        let (integer, fraction) = mantissa.split_once('.').unwrap_or((mantissa, ""));
-        let digits = format!("{}{fraction}", integer.trim_start_matches('-'));
-        let significant = digits.trim_matches('0');
-        if significant.is_empty() {
-            return Some(("0".into(), 0));
-        }
-        let trailing_zeros = digits.len() - digits.trim_end_matches('0').len();
-        let power = exponent
-            .parse::<i64>()
-            .ok()?
-            .checked_sub(i64::try_from(fraction.len()).ok()?)?
-            .checked_add(i64::try_from(trailing_zeros).ok()?)?;
-        let sign = if integer.starts_with('-') { "-" } else { "" };
-        Some((format!("{sign}{significant}"), power))
     }
 
     impl Valuable for JsonField<'_> {

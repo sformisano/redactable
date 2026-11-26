@@ -1,0 +1,15 @@
+error: duplicate matcher binding
+ --> tests/ui/log_duplicate_fields_rejected.rs:5:5
+  |
+5 |     redactable::info!(sink, user = (), other = (), user:? = (); "repeated name");
+  |     ---------------------------------------------------------------------------- in this macro invocation
+  |
+  = note: this error originates in the macro `$crate::__redactable_event` which comes from the expansion of the macro `redactable::info` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error: duplicate matcher binding
+ --> tests/ui/log_duplicate_fields_rejected.rs:6:5
+  |
+6 |     redactable::warn!(sink, r#type = (), type:% = (); "repeated keyword");
+  |     --------------------------------------------------------------------- in this macro invocation
+  |
+  = note: this error originates in the macro `$crate::__redactable_event` which comes from the expansion of the macro `redactable::warn` (in Nightly builds, run with -Z macro-backtrace for more info)
