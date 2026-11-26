@@ -153,6 +153,7 @@ jobs:
           - redaction
           - mask-map-keys
           - json
+          - log
           - slog
           - tracing
           - tracing-valuable

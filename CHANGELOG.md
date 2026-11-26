@@ -1,5 +1,21 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- The opt-in `log` feature adds `.log_redacted_json()` for `ToRedacted`
+  producers. Backends that serialize structured fields can record nested JSON
+  objects and arrays.
+- `RedactedValue` implements Serde's `Serialize` with the `redaction` feature
+  and `log::kv::ToValue` with `log`. Both borrow the stored output.
+
+### Compatibility
+
+- If you import both `slog::Value` and `serde::Serialize` and call
+  `.serialize(...)` directly on a `RedactedValue`, name the trait explicitly,
+  for example `slog::Value::serialize(&value, record, key, serializer)`.
+
 ## 0.15.2 - 2026-10-24
 
 ### Tests

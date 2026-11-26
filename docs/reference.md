@@ -314,6 +314,7 @@ Use `RedactedList` for a [bounded slice of producers](#bounded-list-output).
 | Method | Required bounds |
 |---|---|
 | `.to_redacted()` | `ToRedacted` |
+| `.log_redacted_json()` | `ToRedacted` |
 | `.slog_redacted()` | `ToRedacted + Sized` |
 | `.slog_redacted_json()` | `ToRedacted` |
 | `.tracing_redacted()` | `ToRedacted` |
@@ -322,9 +323,9 @@ Use `RedactedList` for a [bounded slice of producers](#bounded-list-output).
 | `.into_tracing_redacted_debug()` | `Redactable + Debug` |
 | `.into_tracing_redacted_valuable()` | `Redactable + Valuable` |
 
-`.to_redacted()`, `.slog_redacted_json()`, and `.tracing_redacted()` also accept
-unsized producers, including `&dyn ToRedacted`. `.slog_redacted()` retains its
-`Sized` requirement.
+`.to_redacted()`, `.log_redacted_json()`, `.slog_redacted_json()`, and
+`.tracing_redacted()` also accept unsized producers, including `&dyn ToRedacted`.
+`.slog_redacted()` retains its `Sized` requirement.
 
 ### Producer composition
 
@@ -401,9 +402,17 @@ redacts only at construction; reading its text or JSON does not repeat that work
 The result retains no reference to the source and has no public constructor,
 `From`, or `Deserialize` implementation.
 
-`.slog_redacted_json()` and `.tracing_redacted()` run the producer at the call.
+`.log_redacted_json()`, `.slog_redacted_json()`, and `.tracing_redacted()` run
+the producer at the call.
 `.slog_redacted()` holds a reference and runs it each time slog serializes the record.
 `.redacted_display()` remains a borrowed formatting view.
+
+With `redaction`, Serde serializes a borrowed `RedactedValue` in the same shape
+as `.json()`. It borrows the stored JSON, including null, or writes a single
+`message` field for text-only output. A dual value uses its JSON representation.
+With `log`, the same value implements `log::kv::ToValue`. A backend that
+serializes key-value fields can read the value directly from a record.
+
 For the structured slog route and its nested drain setup, see the
 [runnable logging example](../README.md#slog).
 Direct borrowed native `Sensitive` and `SensitiveDual` output remains a fixed
@@ -436,7 +445,8 @@ The producer determines what work happens inside the adapter:
 
 Structural producers inherit every `Clone` panic. A traversed `RefCell` with a
 live mutable borrow therefore panics when the producer runs.
-This applies through `.slog_redacted()`, `.slog_redacted_json()`, and `.tracing_redacted()`.
+This applies through `.log_redacted_json()`, `.slog_redacted()`,
+`.slog_redacted_json()`, and `.tracing_redacted()`.
 
 Display producers borrow the source. Generated text/secret formatting needs no
 `Clone`; IP-map projections still clone keys and hashers. `SensitiveDisplay`

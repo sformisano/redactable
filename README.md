@@ -1029,6 +1029,56 @@ Local structured types should derive `Sensitive` instead.
 
 ## Integrations
 
+### log
+
+Redactable's opt-in `log` feature enables `log/kv_serde`. Use
+`.log_redacted_json()` to pass a producer's redacted JSON as a field. Choose
+a backend that serializes the fields to preserve nested objects and arrays.
+This example uses a local checkout of Redactable and initializes `flexi_logger`
+in the application.
+
+```toml
+[dependencies]
+redactable = { path = "../redactable/redactable", features = ["log"] }
+log = "0.4"
+flexi_logger = { version = "0.31", default-features = false, features = ["json", "kv"] }
+serde = { version = "1", features = ["derive"] }
+```
+
+```rust
+use flexi_logger::{Logger, json_format};
+use redactable::{LogRedactedExt, Secret, Sensitive};
+
+#[derive(Clone, Sensitive, serde::Serialize)]
+struct User {
+    #[not_sensitive]
+    roles: Vec<String>,
+    #[sensitive(Secret)]
+    access_token: String,
+}
+
+# let dir = tempfile::tempdir()?;
+# let path = dir.path().join("auth.log");
+let _logger = Logger::try_with_str("info")?
+    .format(json_format)
+#   .log_to_file(flexi_logger::FileSpec::try_from(&path)?)
+    .start()?;
+let user = User { roles: vec!["reader".into()], access_token: "example-token".into() };
+log::info!(user = user.log_redacted_json(); "signed in");
+# log::logger().flush();
+# let line = std::fs::read_to_string(path)?;
+# let record: serde_json::Value = serde_json::from_str(&line)?;
+# assert_eq!(record["text"], "signed in");
+# assert_eq!(record["kv"]["user"], serde_json::json!({"roles": ["reader"], "access_token": "[REDACTED]"}));
+# assert!(!line.contains("example-token"));
+# Ok::<(), Box<dyn std::error::Error>>(())
+```
+
+The `kv.user` field contains `{"roles":["reader"],"access_token":"[REDACTED]"}`.
+If you already hold a `RedactedValue`, pass it directly as
+`log::info!(user = &value; "signed in")`. The backend reads the stored
+JSON without cloning it or running the producer again.
+
 ### slog
 
 For structured records, use `.slog_redacted_json()` to keep the fields selected
@@ -1359,6 +1409,8 @@ can read as text or JSON.
 
 - `text()` returns the redacted text, or compact JSON when only JSON is available.
 - `json()` returns the redacted JSON, or `{"message": text}` for a text-only value.
+- Serde serializes `&RedactedValue` in the same shape. Use
+  `serde_json::to_writer(writer, &value)` to write it without cloning the stored JSON.
 - `SensitiveDual` supplies both representations from the same call.
 
 The five derives generate `ToRedacted` for you. The logger chooses its format
@@ -1507,6 +1559,7 @@ individual traits and logging outputs.
 
 | Output | Use |
 |---|---|
+| log, structured JSON | `.log_redacted_json()` or a borrowed `&RedactedValue` |
 | slog, structured JSON | `.slog_redacted_json()` |
 | slog, the type's chosen text representation | `.slog_redacted()` |
 | tracing, the type's chosen text representation | `.tracing_redacted()` |

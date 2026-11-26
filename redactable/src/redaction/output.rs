@@ -16,8 +16,8 @@ use std::{
     sync::Arc,
 };
 
-use serde::Serialize;
-use serde_json::{Value as JsonValue, json};
+use serde::{Serialize, Serializer};
+use serde_json::Value as JsonValue;
 
 use super::{
     display::RedactedFormatterRef,
@@ -63,6 +63,10 @@ pub fn serialize_redacted_json<T: Serialize>(value: T) -> JsonValue {
 /// [`Self::json`] always answer, adapting the stored representation when the
 /// requested one was not built.
 ///
+/// Serde borrows this value and serializes the same shape as [`Self::json`]
+/// without cloning its stored JSON. Text-only values serialize as
+/// `{"message": text}`.
+///
 /// Redaction finishes when the value is constructed; the accessors only convert
 /// the stored result. Nothing here is deferred, so holding a `RedactedValue`
 /// never keeps the original value reachable and never runs a policy a second
@@ -99,12 +103,13 @@ impl RedactedValue {
     /// both returns the JSON its producer built.
     #[must_use]
     pub fn json(&self) -> JsonValue {
-        match (&self.json, &self.text) {
-            (Some(json), _) => json.clone(),
-            (None, Some(text)) => json!({ "message": text }),
-            // Unreachable: every constructor sets at least one representation.
-            (None, None) => json!({ "message": "" }),
-        }
+        self.json
+            .clone()
+            .unwrap_or_else(|| JsonValue::from_iter([self.message_field()]))
+    }
+
+    fn message_field(&self) -> (&'static str, &str) {
+        ("message", self.text.as_deref().unwrap_or_default())
     }
 
     pub(crate) fn from_text(text: String) -> Self {
@@ -137,6 +142,15 @@ impl RedactedValue {
     #[cfg(feature = "slog")]
     pub(crate) fn structured(&self) -> Option<&JsonValue> {
         self.json.as_ref()
+    }
+}
+
+impl Serialize for RedactedValue {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        match &self.json {
+            Some(json) => json.serialize(serializer),
+            None => serializer.collect_map([self.message_field()]),
+        }
     }
 }
 

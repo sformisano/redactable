@@ -55,6 +55,27 @@ mod json_value {
     }
 
     #[test]
+    fn serde_serializes_borrowed_sink_values_as_the_selected_json() {
+        let array = json!([null, {"approved": true}]);
+        let dual = Decision {
+            owner: "Ada".into(),
+            approved: true,
+        }
+        .to_redacted();
+        for (saved, expected) in [
+            (BypassJsonRedaction(&array).to_redacted(), array),
+            (
+                BypassDisplayRedaction("declined").to_redacted(),
+                json!({"message": "declined"}),
+            ),
+            (().to_redacted(), Value::Null),
+            (dual, json!({"owner": "[REDACTED]", "approved": true})),
+        ] {
+            assert_eq!(serde_json::to_value(&saved).unwrap(), expected);
+        }
+    }
+
+    #[test]
     fn generated_json_reaches_sink_and_retains_dual_template_and_raw_transport() {
         let decision = Decision {
             owner: "Ada".into(),
