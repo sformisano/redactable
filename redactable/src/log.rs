@@ -1,11 +1,30 @@
 //! Structured redacted fields for the `log` crate.
 //!
 //! The application chooses and initializes a backend that serializes
-//! `log` key-value fields through Serde.
+//! `log` key-value fields through Serde. Use [`crate::logging::Sink::Log`]
+//! with Redactable's checked logging macros.
 
 use ::log::kv::{ToValue, Value};
 
 use crate::{RedactedValue, ToRedacted};
+
+// Resolve the exact log dependency used by this crate in macro expansions.
+#[doc(hidden)]
+pub use ::log::{Level as __Level, log as __log};
+
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __redactable_emit_log {
+    ($level:ident, $destination:expr, [], $message:expr) => {
+        $crate::log::__log!($crate::log::__Level::$level, "{}", $message)
+    };
+    ($level:ident, $destination:expr, [$($key:ident [$($mode:tt)?] ($value:expr)),+], $message:expr) => {
+        $crate::log::__log!(
+            $crate::log::__Level::$level,
+            $($key = $crate::__redactable_field!([$($mode)?] $value)),+; "{}", $message
+        )
+    };
+}
 
 /// Extension trait for logging a producer's redacted JSON through `log`.
 ///

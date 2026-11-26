@@ -32,9 +32,9 @@
 //! and `serde_json`.
 //!
 //! The free `redact()` function uses the lower-level mapper and can leave raw
-//! leaves unchanged. It is not a logging boundary. The `log`, `slog`, and
-//! `tracing` integrations have their own feature flags. This crate performs
-//! no I/O or logging and does not validate your policy choices.
+//! leaves unchanged. It is not a logging boundary. Enable `log`, `slog`, or
+//! `tracing` to emit checked events through a backend your application configures.
+//! You choose what each field may disclose.
 //!
 //! The five derive macros live in `redactable-derive` and are re-exported here.
 
@@ -91,6 +91,8 @@ extern crate self as redactable;
 pub mod __private;
 #[cfg(feature = "log")]
 pub mod log;
+#[cfg(any(feature = "log", feature = "slog", feature = "tracing"))]
+pub mod logging;
 #[cfg(feature = "policy")]
 pub mod policy;
 #[cfg(feature = "redaction")]

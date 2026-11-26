@@ -4,10 +4,7 @@
 
 use std::{cell::Cell, collections::BTreeMap, sync::OnceLock};
 
-use log::{
-    LevelFilter, Log, Metadata, Record,
-    kv::{Error, Key, Value, VisitSource},
-};
+use log::{LevelFilter, Log, Metadata, Record};
 use redactable::log::LogRedactedExt;
 use redactable::{
     BypassJsonRedaction, RedactedValue, Secret, Sensitive, SensitiveDual, SensitiveValue,
@@ -15,22 +12,12 @@ use redactable::{
 };
 use redactable_test_fixtures::{FixtureUser, GenericDualFixture};
 use serde::{Serialize, Serializer, ser::Error as _, ser::SerializeMap};
-use serde_json::{Map, Value as JsonValue, json};
+use serde_json::{Value as JsonValue, json};
+
+#[path = "support/log_capture.rs"]
+mod log_capture;
 
 const RAW_TOKEN: &str = "private-log-token-2705";
-
-#[derive(Default)]
-struct Fields(Map<String, JsonValue>);
-
-impl<'kvs> VisitSource<'kvs> for Fields {
-    fn visit_pair(&mut self, key: Key<'kvs>, value: Value<'kvs>) -> Result<(), Error> {
-        self.0.insert(
-            key.as_str().to_owned(),
-            serde_json::to_value(value).unwrap(),
-        );
-        Ok(())
-    }
-}
 
 struct Capture(OnceLock<JsonValue>);
 
@@ -40,9 +27,7 @@ impl Log for Capture {
     }
 
     fn log(&self, record: &Record<'_>) {
-        let mut fields = Fields::default();
-        record.key_values().visit(&mut fields).unwrap();
-        self.0.set(JsonValue::Object(fields.0)).unwrap();
+        self.0.set(log_capture::fields(record)).unwrap();
     }
 
     fn flush(&self) {}

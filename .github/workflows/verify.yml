@@ -135,7 +135,7 @@ jobs:
         run: cargo test --locked -p redactable --features tracing-valuable --test integration_tracing
 
       - name: Unstable valuable tracing integration
-        run: RUSTFLAGS="--cfg tracing_unstable" cargo test --locked -p redactable --test integration_tracing --features tracing-valuable valuable_structured_output
+        run: RUSTFLAGS="--cfg tracing_unstable" cargo test --locked -p redactable --test integration_tracing --features tracing-valuable
 
       - name: Package contents
         run: .github/scripts/verify-package-contents.sh
@@ -190,6 +190,14 @@ jobs:
           else
             cargo check --locked -p redactable --no-default-features --features "$FEATURE"
           fi
+
+      - name: Checked logging with an isolated backend
+        if: matrix.feature == 'log' || matrix.feature == 'slog' || matrix.feature == 'tracing'
+        env:
+          FEATURE: ${{ matrix.feature }}
+        run: >-
+          cargo test --locked -p redactable --no-default-features --features "$FEATURE"
+          --test integration_checked_log --test integration_checked_slog --test integration_tracing --test ui_log
 
       - name: Strict rustdoc for isolated feature
         env:

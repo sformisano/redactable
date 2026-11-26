@@ -1,0 +1,29 @@
+error: there is no argument named `secret`
+ --> tests/ui/log_unchecked_messages_rejected.rs:5:5
+  |
+5 |     redactable::info!(sink, "signed in {secret}");
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  |
+  = note: did you intend to capture a variable `secret` from the surrounding scope?
+  = note: to avoid ambiguity, `format_args!` cannot capture variables when the format string is expanded from a macro
+  = note: this error originates in the macro `::core::concat` which comes from the expansion of the macro `redactable::info` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error: no rules expected `secret`
+ --> tests/ui/log_unchecked_messages_rejected.rs:6:56
+  |
+6 |     redactable::warn!(sink, data = (); "signed in {}", secret);
+  |                                                        ^^^^^^ no rules expected this token in macro call
+  |
+  = note: while trying to match sequence end
+
+error: no rules expected `secret`
+ --> tests/ui/log_unchecked_messages_rejected.rs:7:41
+  |
+7 |     redactable::error!(sink, data = (); secret);
+  |                                         ^^^^^^ no rules expected this token in macro call
+  |
+note: while trying to match meta-variable `$message:literal`
+ --> src/logging.rs
+  |
+  |     ($level:ident, $sink:expr, $($key:ident $(:$mode:tt)? = $value:expr),+ $(,)?; $message:literal $(,)?) => {{
+  |                                                                                   ^^^^^^^^^^^^^^^^

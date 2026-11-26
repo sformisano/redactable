@@ -21,5 +21,8 @@ syn = { version = "2.0", features = ["extra-traits", "visit"] }
 # Keep the module layout on foo.rs + foo/ rather than foo/mod.rs.
 mod_module_files = "warn"
 
+[workspace.lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ["cfg(tracing_unstable)"] }
+
 [patch.crates-io]
 redactable-derive = { path = "redactable-derive" }

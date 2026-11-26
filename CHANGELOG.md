@@ -4,6 +4,12 @@
 
 ### Added
 
+- `redactable::error!`, `warn!`, `info!`, `debug!`, and `trace!` require
+  `ToRedacted` for every field, including display and debug text. Select
+  `logging::Sink::Log`, `Sink::Slog(logger)`, or `Sink::Tracing` in the
+  application. The existing format-specific bypasses allow explicit disclosure.
+- `ToRedacted::to_redacted_cow()` lets a sink borrow an existing
+  `RedactedValue` or produce an owned one from a domain type.
 - The opt-in `log` feature adds `.log_redacted_json()` for `ToRedacted`
   producers. Backends that serialize structured fields can record nested JSON
   objects and arrays.

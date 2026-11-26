@@ -338,6 +338,7 @@ checksum = "f8dcc9c7d52a811697d2151c701e0d08956f92b0e24136cf4cf27b57a6a0d9bf"
 name = "redactable"
 version = "0.15.2"
 dependencies = [
+ "erased-serde 0.3.31",
  "log",
  "redactable-derive",
  "serde",
@@ -363,7 +364,6 @@ version = "0.0.0"
 dependencies = [
  "displaydoc",
  "flexi_logger",
- "log",
  "redactable",
  "serde",
  "serde_json",

@@ -83,6 +83,7 @@ dependencies = [
 name = "redactable"
 version = "0.15.2"
 dependencies = [
+ "erased-serde",
  "redactable-derive",
  "serde",
  "serde_json",

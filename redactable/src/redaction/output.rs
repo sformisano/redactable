@@ -11,6 +11,7 @@ mod map_keys;
 mod tests;
 
 use std::{
+    borrow::Cow,
     fmt::{Debug, Formatter, Result as FmtResult},
     rc::Rc,
     sync::Arc,
@@ -108,7 +109,7 @@ impl RedactedValue {
             .unwrap_or_else(|| JsonValue::from_iter([self.message_field()]))
     }
 
-    fn message_field(&self) -> (&'static str, &str) {
+    pub(crate) fn message_field(&self) -> (&'static str, &str) {
         ("message", self.text.as_deref().unwrap_or_default())
     }
 
@@ -134,12 +135,7 @@ impl RedactedValue {
         }
     }
 
-    /// Reports the structured representation a sink should prefer.
-    ///
-    /// This is the crate-private discriminant the logging adapters branch on:
-    /// `slog` emits nested Serde when it is `Some` and a string otherwise. It
-    /// exists only in that configuration, since `slog` is its one caller.
-    #[cfg(feature = "slog")]
+    /// Borrows the stored JSON, if the producer supplied it.
     pub(crate) fn structured(&self) -> Option<&JsonValue> {
         self.json.as_ref()
     }
@@ -147,7 +143,7 @@ impl RedactedValue {
 
 impl Serialize for RedactedValue {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        match &self.json {
+        match self.structured() {
             Some(json) => json.serialize(serializer),
             None => serializer.collect_map([self.message_field()]),
         }
@@ -217,11 +213,26 @@ pub trait ToRedacted {
     /// borrowed value instead.
     #[must_use]
     fn to_redacted(&self) -> RedactedValue;
+
+    /// Returns the same diagnostic view as [`Self::to_redacted`], borrowing a
+    /// previously produced value when available.
+    ///
+    /// The default implementation calls the producer once and owns its result.
+    /// [`RedactedValue`] borrows itself. References and supported containers
+    /// forward the inner producer's choice.
+    #[must_use]
+    fn to_redacted_cow(&self) -> Cow<'_, RedactedValue> {
+        Cow::Owned(self.to_redacted())
+    }
 }
 
 impl ToRedacted for RedactedValue {
     fn to_redacted(&self) -> RedactedValue {
         self.clone()
+    }
+
+    fn to_redacted_cow(&self) -> Cow<'_, RedactedValue> {
+        Cow::Borrowed(self)
     }
 }
 
@@ -230,6 +241,13 @@ impl<T: ToRedacted> ToRedacted for Option<T> {
         self.as_ref().map_or_else(
             || RedactedValue::from_json(JsonValue::Null),
             ToRedacted::to_redacted,
+        )
+    }
+
+    fn to_redacted_cow(&self) -> Cow<'_, RedactedValue> {
+        self.as_ref().map_or_else(
+            || Cow::Owned(self.to_redacted()),
+            ToRedacted::to_redacted_cow,
         )
     }
 }
@@ -244,11 +262,19 @@ impl<T: ToRedacted + ?Sized> ToRedacted for &T {
     fn to_redacted(&self) -> RedactedValue {
         T::to_redacted(self)
     }
+
+    fn to_redacted_cow(&self) -> Cow<'_, RedactedValue> {
+        T::to_redacted_cow(self)
+    }
 }
 
 impl<T: ToRedacted + ?Sized> ToRedacted for &mut T {
     fn to_redacted(&self) -> RedactedValue {
         T::to_redacted(self)
+    }
+
+    fn to_redacted_cow(&self) -> Cow<'_, RedactedValue> {
+        T::to_redacted_cow(self)
     }
 }
 
@@ -256,17 +282,29 @@ impl<T: ToRedacted + ?Sized> ToRedacted for Box<T> {
     fn to_redacted(&self) -> RedactedValue {
         T::to_redacted(self)
     }
+
+    fn to_redacted_cow(&self) -> Cow<'_, RedactedValue> {
+        T::to_redacted_cow(self)
+    }
 }
 
 impl<T: ToRedacted + ?Sized> ToRedacted for Rc<T> {
     fn to_redacted(&self) -> RedactedValue {
         T::to_redacted(self)
     }
+
+    fn to_redacted_cow(&self) -> Cow<'_, RedactedValue> {
+        T::to_redacted_cow(self)
+    }
 }
 
 impl<T: ToRedacted + ?Sized> ToRedacted for Arc<T> {
     fn to_redacted(&self) -> RedactedValue {
         T::to_redacted(self)
+    }
+
+    fn to_redacted_cow(&self) -> Cow<'_, RedactedValue> {
+        T::to_redacted_cow(self)
     }
 }
 

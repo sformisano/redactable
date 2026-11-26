@@ -402,6 +402,7 @@ name = "redactable"
 version = "0.15.2"
 dependencies = [
  "chrono",
+ "erased-serde 0.3.31",
  "log",
  "proptest",
  "redactable-derive",
@@ -415,6 +416,7 @@ dependencies = [
  "trybuild",
  "uuid",
  "valuable",
+ "valuable-serde",
 ]
 
 [[package]]
@@ -837,6 +839,16 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn",
+]
+
+[[package]]
+name = "valuable-serde"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2ee0548edecd1b907be7e67789923b7d02275b9ba4a33ebc33300e2c947a8cb1"
+dependencies = [
+ "serde",
+ "valuable",
 ]
 
 [[package]]

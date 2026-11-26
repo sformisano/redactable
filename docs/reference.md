@@ -314,6 +314,7 @@ Use `RedactedList` for a [bounded slice of producers](#bounded-list-output).
 | Method | Required bounds |
 |---|---|
 | `.to_redacted()` | `ToRedacted` |
+| `.to_redacted_cow()` | `ToRedacted` |
 | `.log_redacted_json()` | `ToRedacted` |
 | `.slog_redacted()` | `ToRedacted + Sized` |
 | `.slog_redacted_json()` | `ToRedacted` |
@@ -323,7 +324,7 @@ Use `RedactedList` for a [bounded slice of producers](#bounded-list-output).
 | `.into_tracing_redacted_debug()` | `Redactable + Debug` |
 | `.into_tracing_redacted_valuable()` | `Redactable + Valuable` |
 
-`.to_redacted()`, `.log_redacted_json()`, `.slog_redacted_json()`, and
+`.to_redacted()`, `.to_redacted_cow()`, `.log_redacted_json()`, `.slog_redacted_json()`, and
 `.tracing_redacted()` also accept unsized producers, including `&dyn ToRedacted`.
 `.slog_redacted()` retains its `Sized` requirement.
 
@@ -401,6 +402,14 @@ redacts only at construction; reading its text or JSON does not repeat that work
 `to_redacted()` borrows its receiver and returns an owned `RedactedValue`.
 The result retains no reference to the source and has no public constructor,
 `From`, or `Deserialize` implementation.
+
+The checked level macros call `ToRedacted::to_redacted_cow()` for each field.
+Its default implementation runs the existing producer once. A saved
+`RedactedValue` returns a borrow, including through references, `Option`,
+`Box`, `Rc`, and `Arc`. A slog drain that queues fields for later can request
+an owned copy. With stable tracing, the encoder writes JSON into a string.
+Structured tracing preserves a number as text when conversion through Serde's
+integer and floating-point accessors would change its decimal value.
 
 `.log_redacted_json()`, `.slog_redacted_json()`, and `.tracing_redacted()` run
 the producer at the call.
