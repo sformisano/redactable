@@ -1,12 +1,12 @@
-error[E0277]: `NoDebug` doesn't implement `Debug`
+error[E0277]: `NoDebug` doesn't implement `std::fmt::Debug`
  --> tests/ui/not_sensitive_debug_requires_debug.rs:8:20
   |
 8 |     require_output(&BypassDebugRedaction(NoDebug));
-  |     -------------- ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ the trait `Debug` is not implemented for `NoDebug`
+  |     -------------- ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ the trait `std::fmt::Debug` is not implemented for `NoDebug`
   |     |
   |     required by a bound introduced by this call
   |
-  = note: add `#[derive(Debug)]` to `NoDebug` or manually `impl Debug for NoDebug`
+  = note: add `#[derive(Debug)]` to `NoDebug` or manually `impl std::fmt::Debug for NoDebug`
 help: the trait `ToRedacted` is implemented for `BypassDebugRedaction<T>`
  --> src/redaction/escape_hatches.rs
   |
