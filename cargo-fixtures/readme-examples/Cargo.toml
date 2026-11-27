@@ -10,7 +10,6 @@ publish = false
 [dependencies]
 redactable = { path = "../../redactable", features = ["log", "slog", "tracing-valuable"] }
 displaydoc = "0.2"
-flexi_logger = { version = "0.31", default-features = false, features = ["json", "kv"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 slog = "2.8"
@@ -19,4 +18,5 @@ tracing = "0.1"
 valuable = { version = "0.1", features = ["derive"] }
 
 [dev-dependencies]
+flexi_logger = { version = "0.31", default-features = false, features = ["json", "kv"] }
 tempfile = "3"

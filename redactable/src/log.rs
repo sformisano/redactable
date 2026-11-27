@@ -1,8 +1,8 @@
 //! Structured redacted fields for the `log` crate.
 //!
-//! The application chooses and initializes a backend that serializes
-//! `log` key-value fields through Serde. Use [`crate::logging::Sink::Log`]
-//! with Redactable's checked logging macros.
+//! Redactable's checked macros use the application's installed `log` logger
+//! by default. A backend that serializes key-value fields through Serde can
+//! record nested objects and arrays.
 
 use ::log::kv::{ToValue, Value};
 

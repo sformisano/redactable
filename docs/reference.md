@@ -406,10 +406,17 @@ Calling `.json()` returns an owned copy.
 The result retains no reference to the source and has no public constructor,
 `From`, or `Deserialize` implementation.
 
-The checked level macros evaluate the sink expression once. The selected
-backend's native event macro controls when it evaluates fields. Each supplied
-field uses `ToRedacted::to_redacted_cow()`. Its default calls the existing
-producer. A saved `RedactedValue` returns a borrow, including through references,
+The checked level macros use the application's installed `log` logger by
+default when the `log` feature is enabled. Call `logging::set_sink` once to
+choose a backend for the process. A second call returns `SetSinkError`.
+An explicit `sink:` selects the destination for one event and is evaluated
+once. With `log` disabled, calls without a `sink:` before registration skip
+their fields and message arguments.
+
+The selected backend's native event macro controls when it evaluates the
+fields and message arguments. Each supplied value uses
+`ToRedacted::to_redacted_cow()`. Its default calls the existing producer.
+A saved `RedactedValue` returns a borrow, including through references,
 `Some`, `Box`, `Rc`, and `Arc`.
 
 A plain field uses the producer's JSON. `log` and synchronous slog serialization
@@ -422,9 +429,16 @@ round trip through a finite float (such as `1.00`) is emitted as its original
 text. Both `:%` and `:?` borrow stored text when available. They render compact
 JSON into a string for a JSON-only producer.
 
-Each field supplied must have a unique name other than `message`. Inherited
-logger context, span fields, subscriber-added attributes, and forwarding through
-bridges such as `tracing/log-always` follow the application's configuration.
+In `info!(user; "signed in")`, `user` is shorthand for `user = user`.
+Each field supplied must have a unique name other than `message`.
+Format arguments use the same declared text as a text field. For example,
+`info!(user; "handled {}", job)` records a structured user and formats the
+job's text. `{:?}` quotes and escapes that text using Rust's string
+formatting. Supply named arguments explicitly as `info!("{id}", id = job)`.
+
+Inherited logger context, span fields, subscriber-added attributes, and
+forwarding through bridges such as `tracing/log-always` follow the
+application's configuration.
 
 `.log_redacted_json()`, `.slog_redacted_json()`, and `.tracing_redacted()` run
 the producer at the call.

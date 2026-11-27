@@ -38,11 +38,12 @@
 //!
 //! # Checked logging
 //!
-//! Enable the `log`, `slog`, or `tracing` feature and choose a `logging::Sink`
-//! in your application. In `redactable::info!(sink, user = &user; "signed in")`,
-//! the compiler requires `user` to implement `ToRedacted`. Display and debug
-//! fields have the same requirement. To publish an ordinary string explicitly,
-//! write `channel:% = BypassDisplayRedaction(&channel)`.
+//! Enable the `log` feature to use your application's installed logger.
+//! Write `redactable::info!(user; "signed in")` for a structured field or
+//! `redactable::info!("signed in as {}", user)` for a message. Both require
+//! `user` to implement `ToRedacted`. To publish an ordinary string explicitly,
+//! use `BypassDisplayRedaction(&channel)`. Applications using slog or tracing
+//! can choose their destination once with `logging::set_sink`.
 //!
 //! A logger with Serde support for structured fields can serialize a saved
 //! `&RedactedValue` directly. See the

@@ -6,22 +6,19 @@
 //! Use `SlogRedactedExt::slog_redacted_json` for selected structured fields.
 //! Direct borrowed `Sensitive` and `SensitiveDual` output is an opaque placeholder.
 //!
-//! With [`crate::logging::Sink::Slog`], Redactable's checked macros select JSON
-//! for plain fields. The `:%` and `:?` selectors use the producer's redacted text.
+//! Select your logger once with [`crate::logging::set_sink`] and
+//! [`crate::logging::Sink::Slog`]. Redactable's checked macros select JSON for
+//! plain fields. The `:%` and `:?` selectors use the producer's redacted text.
 //! A nested-value drain can read an existing snapshot by reference or request
 //! an owned copy for asynchronous logging.
 //!
 //! ```compile_fail
-//! use redactable::logging::Sink;
-//! let sink = Sink::Slog(::slog::Logger::root(::slog::Discard, ::slog::o!()));
-//! redactable::info!(sink, count = 42_u32; "reviewed");
+//! redactable::info!(count = 42_u32; "reviewed");
 //! ```
 //!
 //! ```compile_fail
-//! use redactable::logging::Sink;
-//! let sink = Sink::Slog(::slog::Logger::root(::slog::Discard, ::slog::o!()));
 //! let token = String::from("raw token");
-//! redactable::warn!(sink, token:? = &token; "retrying");
+//! redactable::warn!(token:?; "retrying");
 //! ```
 //!
 //! It is responsible for:

@@ -1,5 +1,5 @@
 use flexi_logger::{FileSpec, Logger, json_format};
-use redactable::{BypassDisplayRedaction, Secret, Sensitive, info, logging::Sink};
+use redactable::{Secret, Sensitive, info};
 use serde_json::{Value, json};
 
 #[derive(Clone, Sensitive, serde::Serialize)]
@@ -23,7 +23,7 @@ fn writes_redacted_nested_fields() -> Result<(), Box<dyn std::error::Error>> {
         roles: vec!["reader".into()],
         access_token: "example-token".into(),
     };
-    info!(Sink::Log, user = &user, channel:% = BypassDisplayRedaction("web"); "signed in");
+    info!(user; "signed in");
     logger.flush();
 
     let line = std::fs::read_to_string(path)?;
@@ -32,7 +32,6 @@ fn writes_redacted_nested_fields() -> Result<(), Box<dyn std::error::Error>> {
     assert_eq!(
         record["kv"],
         json!({
-            "channel": "web",
             "user": {"access_token": "[REDACTED]", "roles": ["reader"]}
         })
     );

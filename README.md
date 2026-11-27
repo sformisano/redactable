@@ -1021,53 +1021,65 @@ Local structured types should derive `Sensitive` instead.
 
 ### Checked logging
 
-Use Redactable's `error!`, `warn!`, `info!`, `debug!`, and `trace!` to require a
-logging policy for each field you supply. Choose a `redactable::logging::Sink`
-in the application and pass it to the code that logs. The same call works with
-each backend, including when Cargo enables several integrations together.
-
-| Cargo feature | Application selects | What a plain field records |
-|---|---|---|
-| `log` | `Sink::Log` | A Serde value, including nested objects and arrays, for a backend that writes key-value fields |
-| `slog` | `Sink::Slog(logger)` | A Serde value for a drain that supports nested values |
-| `tracing` | `Sink::Tracing` | Compact JSON in a string field |
-| `tracing-valuable` with `--cfg tracing_unstable` | `Sink::Tracing` | A structured value for a subscriber with Valuable support |
+Enable the `log`, `slog`, or `tracing` Cargo feature. Import Redactable's
+`error!`, `warn!`, `info!`, `debug!`, or `trace!` and pass your message and
+data. Every field and message argument must implement
+`ToRedacted`. Types that derive `Sensitive` or `NotSensitive` already do.
 
 ```rust
-use redactable::{info, logging::Sink, Secret, SensitiveValue};
+use redactable::{info, NotSensitive};
 
-fn signed_in(sink: &Sink, token: &SensitiveValue<String, Secret>) {
-    info!(sink, token:% = token; "signed in");
-}
+#[derive(NotSensitive, serde::Serialize)]
+struct JobId(u64);
+
+let job = JobId(42);
+info!("worker started");
+info!(job; "job accepted");
+info!("completed {}", job);
 ```
 
-A plain `key = value` selects the producer's JSON, including `{"message": ...}`
-for text-only output. Both `key:% = value` and `key:? = value` select its declared
-text. All three forms require `ToRedacted`. Use a fixed message and put variable
-data in fields. Give each top-level field a unique name. The name `message`
-is reserved for the event message. For a fieldless event, write
-`info!(sink, "started")`. Use `{{` and `}}` for literal braces. A bare string
-fails to compile even in a display field.
+`info!(job; "job accepted")` is shorthand for `info!(job = job; "job accepted")`.
+A plain field carries the type's JSON, including `{"message": ...}` for
+text-only output. Use `job:%` or `job:?` for its declared text. Field names
+must be unique, and `message` is reserved for the event message.
+
+Message arguments also use the type's declared text. Supply them after the
+format string, as in `info!("completed {id}", id = job)`. A bare string fails
+to compile even when formatted with `{}` or `{:?}`.
 
 ```compile_fail
-use redactable::{info, logging::Sink};
+use redactable::info;
 
-fn signed_in(sink: &Sink, token: String) {
-    info!(sink, token:% = token; "signed in");
-}
+let raw = String::from("example-token");
+info!("received {}", raw);
 ```
 
-Types that derive `Sensitive` or `NotSensitive` can go straight into a field.
-A saved `&RedactedValue` also works directly. The macros reuse its stored
-output without running redaction again. To publish an ordinary value
-deliberately, use `BypassJsonRedaction(&value)` for JSON,
-`BypassDisplayRedaction(&value)` for its Display text, or
-`BypassDebugRedaction(&value)` for its Debug text.
+A saved `&RedactedValue` works directly as a field or message argument.
+To publish an ordinary value deliberately, use `BypassJsonRedaction(&value)`,
+`BypassDisplayRedaction(&value)`, or `BypassDebugRedaction(&value)` for the
+representation you intend to expose.
+
+The application configures its backend once. The calls above work with all
+three integrations.
+
+| Cargo feature | Application setup | What a plain field records |
+|---|---|---|
+| `log` | Install your usual `log` logger | Nested JSON with a backend that serializes key-value fields |
+| `slog` | Call `set_sink(Sink::Slog(logger))?` | Nested JSON with a drain that supports nested values |
+| `tracing` | Install your subscriber and call `set_sink(Sink::Tracing)?` | Compact JSON in a string field |
+| `tracing-valuable` with `--cfg tracing_unstable` | Same setup as `tracing` | A structured value for a subscriber with Valuable support |
+
+Import `set_sink` and `Sink` from `redactable::logging` when selecting a
+backend explicitly. Calls with no `sink:` use native `log` until then if
+its feature is enabled. With `log` disabled, those calls begin emitting after
+setup. A request with its own slog logger can select the destination for one
+call with `info!(sink: &request_sink, job; "job accepted")`.
 
 ### log
 
-The opt-in `log` feature enables `log/kv_serde`. The application initializes
-its logger. This example uses the JSON formatter from `flexi_logger`.
+The opt-in `log` feature enables `log/kv_serde` and uses the logger your
+application installs. This example uses `flexi_logger` because its JSON
+formatter writes structured fields as objects and arrays.
 
 ```toml
 [dependencies]
@@ -1078,7 +1090,7 @@ serde = { version = "1", features = ["derive"] }
 
 ```rust
 use flexi_logger::{Logger, json_format};
-use redactable::{info, logging::Sink, BypassDisplayRedaction, Secret, Sensitive};
+use redactable::{info, Secret, Sensitive};
 
 #[derive(Clone, Sensitive, serde::Serialize)]
 struct User {
@@ -1090,12 +1102,11 @@ struct User {
 
 fn main() -> Result<(), flexi_logger::FlexiLoggerError> {
     let _logger = Logger::try_with_str("info")?.format(json_format).start()?;
-    let sink = Sink::Log;
     let user = User {
         roles: vec!["reader".into()],
         access_token: "example-token".into(),
     };
-    info!(sink, user = &user, channel:% = BypassDisplayRedaction("web"); "signed in");
+    info!(user; "signed in");
     Ok(())
 }
 ```
@@ -1107,7 +1118,6 @@ location, the record contains these fields.
 {
   "text": "signed in",
   "kv": {
-    "channel": "web",
     "user": {"access_token": "[REDACTED]", "roles": ["reader"]}
   }
 }
@@ -1121,9 +1131,10 @@ ordinary raw fields too. Use `redactable::info!` for the compile-time check.
 
 ### slog
 
-For checked structured records, pass `Sink::Slog(logger)` to Redactable's
-macros. In a native `slog::info!` call, `.slog_redacted_json()` preserves the
-fields selected by the producer. This example writes them through a JSON drain.
+For checked structured records, select your logger once with
+`set_sink(Sink::Slog(logger))?`. In a native `slog::info!` call,
+`.slog_redacted_json()` preserves the fields selected by the producer.
+This example writes them through a JSON drain.
 
 ```toml
 [dependencies]
@@ -1202,8 +1213,9 @@ declared public: raw JSON for `NotSensitive`, or raw `Display` text for
 
 ### tracing
 
-With `Sink::Tracing`, checked plain fields carry compact JSON text on stable
-tracing. For an existing native `tracing::info!` call that needs redacted
+Route checked calls to tracing with `set_sink(Sink::Tracing)?`.
+Checked plain fields carry compact JSON text on stable tracing.
+For an existing native `tracing::info!` call that needs redacted
 `Debug` text, enable the `tracing` feature and use `.tracing_redacted_debug()`.
 
 ```toml
@@ -1319,8 +1331,8 @@ The display path also works for `SensitiveDisplay`, `SensitiveDual`,
 
 ## Logging safety
 
-Redactable's macros check the fields supplied in the call. Inherited slog
-logger context, enclosing tracing span fields, and attributes added by a
+Redactable's macros check the fields and message arguments supplied in the call.
+Inherited slog logger context, enclosing tracing span fields, and attributes added by a
 subscriber follow the application's disclosure policy. Native logging bridges
 can forward an event to another backend. For example, tracing's `log-always`
 feature also emits a `log` record when a tracing subscriber is active.
@@ -1518,7 +1530,7 @@ individual traits and logging outputs.
 
 | Output | Use |
 |---|---|
-| Checked fields with log, slog, or tracing | `redactable::info!(sink, user = &user; "signed in")` |
+| Checked fields with log, slog, or tracing | `redactable::info!(user; "signed in")` |
 | Native log, structured JSON | `.log_redacted_json()` or a saved `&RedactedValue` |
 | slog, structured JSON | `.slog_redacted_json()` |
 | slog, the type's chosen text representation | `.slog_redacted()` |

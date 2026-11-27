@@ -4,10 +4,13 @@
 
 ### Added
 
-- `redactable::error!`, `warn!`, `info!`, `debug!`, and `trace!` require
-  `ToRedacted` for every field, including display and debug text. Select
-  `logging::Sink::Log`, `Sink::Slog(logger)`, or `Sink::Tracing` in the
-  application. The existing format-specific bypasses allow explicit disclosure.
+- `redactable::error!`, `warn!`, `info!`, `debug!`, and `trace!` accept
+  messages and structured fields, such as `info!(user; "signed in")` and
+  `info!("signed in as {}", user)`. Each field and format argument requires
+  `ToRedacted`. The existing format-specific bypasses allow explicit disclosure.
+- Checked calls use the application's installed `log` logger when the `log`
+  feature is enabled. Select a slog logger or tracing once with
+  `logging::set_sink`, or supply `sink:` for one event.
 - Checked structured fields retain nested JSON with a Serde-aware `log` backend
   or slog drain. Stable tracing emits compact JSON text. A tracing subscriber
   with Valuable support can receive nested values.

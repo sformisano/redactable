@@ -5,7 +5,7 @@ metadata:
   skillcatalog/display_name: "Redactable Logging Boundaries"
   skillcatalog/author: "Salvatore Formisano"
   skillcatalog/created_at: "2026-04-29T15:18:46Z"
-  skillcatalog/updated_at: "2026-11-26T23:33:56Z"
+  skillcatalog/updated_at: "2026-11-27T07:53:15Z"
 ---
 # Redactable Logging Boundaries
 
@@ -15,9 +15,10 @@ that writer, including error reports and ad hoc diagnostics.
 
 ## Make the boundary explicit
 
-Use Redactable's checked level macros when every field supplied at a log call
-must have a declared policy. Choose `logging::Sink` in the application. Put
-variable data in named fields and keep the event message a fixed literal.
+Use Redactable's checked level macros to require a declared policy for fields
+and message arguments. A plain field selects the producer's JSON. An explicit format
+argument inserts the producer's declared text. Applications can use their
+installed `log` logger or select slog or tracing once with `logging::set_sink`.
 For a custom output pipeline, accept `ToRedacted` at the boundary and pass the
 resulting `RedactedValue` to the writer. Review public declarations and bypasses
 against the intended audience.

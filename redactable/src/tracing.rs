@@ -1,7 +1,8 @@
 //! Adapters for emitting redacted values through `tracing`.
 //!
-//! Use [`crate::logging::Sink::Tracing`] with [`crate::info!`] or another
-//! checked level macro to require [`ToRedacted`] for every field. Plain fields
+//! Choose [`crate::logging::Sink::Tracing`] with [`crate::logging::set_sink`]
+//! once at startup. [`crate::info!`] and the other checked level macros
+//! require [`ToRedacted`] for every field and message argument. Plain fields
 //! carry compact JSON text on stable tracing. With `tracing-valuable`,
 //! `--cfg tracing_unstable`, and a compatible subscriber, they carry nested values.
 //!
