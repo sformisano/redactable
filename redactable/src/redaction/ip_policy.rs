@@ -23,7 +23,7 @@ use crate::{
     message = "`{Self}` is not a supported map key for this IP-address policy",
     note = "IP-address policy map keys must be known-safe non-text scalars; put typed IP data in values wrapped as `SensitiveValue<T, IpAddress>`"
 )]
-trait IpMapKeySafe: key_sealed::Sealed {}
+trait IpMapKeySafe: key_sealed::Sealed + crate::PublicMapKey {}
 
 mod key_sealed {
     pub(super) trait Sealed {}

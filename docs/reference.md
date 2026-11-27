@@ -379,6 +379,8 @@ A `HashMap<K, V>` or `BTreeMap<K, V>` traversed by `Sensitive` or
 `SensitiveDual` requires `K: redactable::PublicMapKey`. This applies to nested
 maps and to map fields annotated with `#[sensitive(Secret)]` or a text policy.
 Structural redaction keeps the keys as supplied and processes each value.
+Both `apply_policy::<Secret, _>(map)` and `apply_policy_ref::<Secret, _>(&map)`
+return an owned map and require the same public key declaration.
 
 String and integer keys qualify directly. For a public custom key you own,
 derive `NotSensitive`. A manual `impl PublicMapKey for MyKey {}` declares
@@ -672,10 +674,10 @@ cannot be policy-annotated because redaction may need to produce zero.
 
 Supported containers are walked automatically. Policy annotations recurse
 through options, sequences, arrays, results, maps, and sets. Structural derives
-and consuming text or secret policy application require public map keys and
-apply policies to values. Low-level `redactable::redact(map)` retains its
-mapper bounds and preserves keys. The borrowed formatting path keeps its
-existing bounds. Each rendered map key uses its compact or alternate `Debug`
+and both policy helpers require public map keys and apply policies to values.
+Low-level `redactable::redact(map)` retains its mapper bounds and preserves
+keys. Display-only templates keep their existing formatting bounds.
+Each rendered map key uses its compact or alternate `Debug`
 implementation once. See [map-key output](#map-key-output) for the optional
 JSON key mask.
 

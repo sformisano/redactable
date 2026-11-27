@@ -20,7 +20,7 @@ fn consuming_direct_method(value: HashMap<redactable::BypassRedaction<IpAddr>, S
     let _ = PolicyApplicable::apply_policy::<IpAddress, _>(value, &PolicyMapper);
 }
 
-fn reference_direct_method(value: &IpMap) {
+fn reference_direct_method(value: &HashMap<redactable::BypassRedaction<IpAddr>, String>) {
     let _ = PolicyApplicableRef::apply_policy_ref::<IpAddress, _>(value, &PolicyMapper);
 }
 

@@ -2,9 +2,10 @@
 //!
 //! Owned [`PolicyApplicable`] implementations consume and rebuild the map,
 //! applying the policy to the values and retaining their [`PublicMapKey`] keys.
-//! Ordinary borrowed [`PolicyApplicableRef`] implementations rebuild
-//! maps and clone their keys. Rebuilding a `HashMap` also clones its `BuildHasher`,
-//! inheriting that implementation's behavior, including panics.
+//! Borrowed [`PolicyApplicableRef`] implementations rebuild maps by cloning
+//! keys with the same [`PublicMapKey`] requirement. Rebuilding a `HashMap`
+//! also clones its `BuildHasher`, inheriting that implementation's behavior,
+//! including panics.
 //! Generated text/secret formatting instead produces [`PolicyMapOutput`],
 //! rendering source keys by reference without cloning keys or hashers.
 //! IP-map formatting uses its separate key-cloning projection.
@@ -108,7 +109,7 @@ where
 
 impl<K, V, S> PolicyApplicableRef for HashMap<K, V, S>
 where
-    K: Clone + Hash + Eq,
+    K: PublicMapKey + Clone + Hash + Eq,
     V: PolicyApplicableRef,
     S: BuildHasher + Clone,
 {
@@ -163,7 +164,7 @@ where
 
 impl<K, V> PolicyApplicableRef for BTreeMap<K, V>
 where
-    K: Clone + Ord,
+    K: PublicMapKey + Clone + Ord,
     V: PolicyApplicableRef,
 {
     type Output = BTreeMap<K, V::Output>;

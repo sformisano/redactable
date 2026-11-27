@@ -10,8 +10,8 @@ including aliases and JSON values reached through container traversal. In
 type's generated `Debug` could reveal their original contents.
 
 Structurally traversed `BTreeMap` and `HashMap` fields now require
-`redactable::PublicMapKey` for their keys. The bound also applies when a
-consuming text or secret policy acts on map values. Previously such a policy
+`redactable::PublicMapKey` for their keys. Both `apply_policy` and
+`apply_policy_ref` require public keys when they return a map. Previously a policy
 could leave a raw or sensitive custom key visible without a key declaration.
 
 ### Migration from 0.16

@@ -134,9 +134,19 @@ struct SelectedSummary {
     omitted_key: Option<OrderedMap>,
 }
 
+fn map_policy_helpers(
+    private_hash: std::collections::HashMap<Credential, String>,
+    private_tree: OrderedMap,
+) {
+    let _borrowed_hash = redactable::apply_policy_ref::<Secret, _>(&private_hash);
+    let _owned_hash = redactable::apply_policy::<Secret, _>(private_hash);
+    let _borrowed_tree = redactable::apply_policy_ref::<Secret, _>(&private_tree);
+    let _owned_tree = redactable::apply_policy::<Secret, _>(private_tree);
+}
+
 fn main() {}
 "#;
-    // A unique field or variant name identifies the source of each diagnostic.
+    // Each name identifies one diagnostic at its declaration or policy call.
     const UNDECLARED: [&str; 8] = [
         "structural_field",
         "TupleVariant",
@@ -157,12 +167,16 @@ fn main() {}
         "recursive_json",
     ];
 
-    const KEY_FIELDS: [&str; 5] = [
+    const KEY_SITES: [&str; 9] = [
         "raw_key",
         "private_map_key",
         "nested_key",
         "ordered_key",
         "omitted_key",
+        "_borrowed_hash",
+        "_owned_hash",
+        "_borrowed_tree",
+        "_owned_tree",
     ];
 
     let owner = tempfile::Builder::new()
@@ -222,7 +236,7 @@ fn main() {}
     let fixes: &[(&[&str], &[&str])] = &[
         (&JSON_FIELDS, &["#[sensitive(Secret)]", "#[not_sensitive]"]),
         (
-            &KEY_FIELDS,
+            &KEY_SITES,
             &[
                 "PublicMapKey",
                 "NotSensitive",
@@ -251,7 +265,7 @@ fn main() {}
     }
     assert_eq!(
         errors.len(),
-        UNDECLARED.len() + JSON_FIELDS.len() + KEY_FIELDS.len(),
+        UNDECLARED.len() + JSON_FIELDS.len() + KEY_SITES.len(),
         "unexpected error-level diagnostics:\n{}",
         errors.join("\n")
     );

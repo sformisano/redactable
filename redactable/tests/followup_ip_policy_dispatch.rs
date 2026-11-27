@@ -252,11 +252,11 @@ fn generic_text_policy_with_explicit_public_ip_keys() {
     assert_eq!(direct[&public_key], "*****************ue");
     assert!(direct.contains_key(&public_key));
 
-    let direct_source = BTreeMap::from([(key, CANARY.to_owned())]);
+    let direct_source = BTreeMap::from([(public_key.clone(), CANARY.to_owned())]);
     let direct_ref =
         PolicyApplicableRef::apply_policy_ref::<CustomIpAddress, _>(&direct_source, &PolicyMapper);
-    assert_eq!(direct_ref[&key], "*****************ue");
-    assert!(direct_ref.contains_key(&key));
+    assert_eq!(direct_ref[&public_key], "*****************ue");
+    assert!(direct_ref.contains_key(&public_key));
 }
 
 #[cfg(feature = "slog")]
