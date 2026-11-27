@@ -32,15 +32,17 @@ check current source and tests for technical claims.
 
 ## Examples
 
-Run the README's consumer doctests after changing runnable examples:
+Run the documentation examples and their consumer tests after changing a
+runnable example.
 
 ```sh
-RUSTFLAGS="--cfg tracing_unstable" cargo test --locked --doc --manifest-path cargo-fixtures/readme-examples/Cargo.toml
+RUSTFLAGS="--cfg tracing_unstable" cargo test --locked --manifest-path cargo-fixtures/readme-examples/Cargo.toml
 RUSTFLAGS="--cfg tracing_unstable" cargo test --locked --doc --workspace --all-features
 ```
 
-The consumer fixture enables `tracing-valuable`; its capture subscriber checks
-actual tracing output, including the upstream interface enabled by `tracing_unstable`.
+The consumer fixture runs the README examples and checks the JSON produced by
+`flexi_logger`. The `integration_tracing` tests capture actual subscriber fields
+on stable tracing and with `tracing_unstable`.
 Keep imports, dependencies, and expected output accurate. Complete runnable
 examples with setup and assertions. Use `compile_fail` for intentional rejection,
 `text` for syntax fragments, and `no_run` only when execution requires external

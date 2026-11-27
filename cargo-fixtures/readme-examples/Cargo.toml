@@ -15,6 +15,8 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 slog = "2.8"
 slog-json = { version = "2.6", features = ["nested-values"] }
-tempfile = "3"
 tracing = "0.1"
 valuable = { version = "0.1", features = ["derive"] }
+
+[dev-dependencies]
+tempfile = "3"

@@ -325,23 +325,19 @@ own fields, the choice depends on whether you own the type:
   ```
 
 - **Foreign types:** if the whole field is public, use `#[not_sensitive]`.
-  For example, with a timeout type from another crate:
+  This configuration publishes its allowed timeout range.
 
   ```rust
   use redactable::{Redactable, Sensitive};
-  # mod external_crate {
-  #     #[derive(Clone, Debug, serde::Serialize)]
-  #     pub struct Timeout(pub u64);
-  # }
-  use external_crate::Timeout;
+  use std::ops::RangeInclusive;
 
   #[derive(Clone, Sensitive, serde::Serialize)]
   struct Config {
       #[not_sensitive]
-      timeout: Timeout,  // skips RedactableWithMapper entirely
+      timeout_seconds: RangeInclusive<u64>,
   }
-  let config = Config { timeout: Timeout(30) };
-  assert_eq!(config.redact().timeout.0, 30);
+  let config = Config { timeout_seconds: 1..=30 };
+  assert_eq!(config.redact().timeout_seconds, 1..=30);
   ```
 
   `#[not_sensitive]` is the declaration for a non-sensitive foreign field. When the foreign value is sensitive, [Wrapper types for foreign types](#foreign-types) shows the `SensitiveValue<T, P>` route.
@@ -615,30 +611,22 @@ For raw leaves, choose a policy or `#[not_sensitive]`. For other types:
   ```
 
 - **Foreign types:** if the field is public, use `#[not_sensitive]` to render
-  its ordinary `Display`. For example, with a context type from another crate:
+  its ordinary `Display`. This error includes the standard I/O error kind.
 
   ```rust
   use redactable::{RedactableWithFormatter, SensitiveDisplay};
-  # mod external_crate {
-  #     pub struct ErrorContext;
-  #     impl std::fmt::Display for ErrorContext {
-  #         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-  #             f.write_str("upstream timed out")
-  #         }
-  #     }
-  # }
-  use external_crate::ErrorContext;
+  use std::io::ErrorKind;
 
   #[derive(SensitiveDisplay)]
   enum AppError {
-      #[error("context: {ctx}")]
-      WithContext {
+      #[error("upstream: {kind}")]
+      Upstream {
           #[not_sensitive]
-          ctx: ErrorContext,  // renders via Display, skips RedactableWithFormatter
+          kind: ErrorKind,
       },
   }
-  let error = AppError::WithContext { ctx: ErrorContext };
-  assert_eq!(error.redacted_display().to_string(), "context: upstream timed out");
+  let error = AppError::Upstream { kind: ErrorKind::TimedOut };
+  assert_eq!(error.redacted_display().to_string(), "upstream: timed out");
   ```
 
   `#[not_sensitive]` is the declaration for a non-sensitive foreign field. See [Wrapper types for foreign types](#foreign-types) for the sensitive case.
@@ -1100,29 +1088,33 @@ struct User {
     access_token: String,
 }
 
-# let dir = tempfile::tempdir()?;
-# let path = dir.path().join("auth.log");
-let logger = Logger::try_with_str("info")?
-    .format(json_format)
-#   .log_to_file(flexi_logger::FileSpec::try_from(&path)?)
-    .start()?;
-let sink = Sink::Log;
-let user = User { roles: vec!["reader".into()], access_token: "example-token".into() };
-let channel = String::from("web");
-info!(sink, user = &user, channel:% = BypassDisplayRedaction(&channel); "signed in");
-# logger.flush();
-# let line = std::fs::read_to_string(path)?;
-# let record: serde_json::Value = serde_json::from_str(&line)?;
-# assert_eq!(record["text"], "signed in");
-# assert_eq!(record["kv"]["user"], serde_json::json!({"roles": ["reader"], "access_token": "[REDACTED]"}));
-# assert_eq!(record["kv"]["channel"], "web");
-# assert!(!line.contains("example-token"));
-# Ok::<(), Box<dyn std::error::Error>>(())
+fn main() -> Result<(), flexi_logger::FlexiLoggerError> {
+    let _logger = Logger::try_with_str("info")?.format(json_format).start()?;
+    let sink = Sink::Log;
+    let user = User {
+        roles: vec!["reader".into()],
+        access_token: "example-token".into(),
+    };
+    info!(sink, user = &user, channel:% = BypassDisplayRedaction("web"); "signed in");
+    Ok(())
+}
 ```
 
-The backend writes `kv.user` as `{"roles":["reader"],"access_token":"[REDACTED]"}`
-and `kv.channel` as the string `"web"`. To use the upstream `log::info!` macro
-directly, add `log = "0.4"` to your dependencies, import `redactable::LogRedactedExt`, and write
+The program writes a JSON record to stderr. Alongside its timestamp and source
+location, the record contains these fields.
+
+```json
+{
+  "text": "signed in",
+  "kv": {
+    "channel": "web",
+    "user": {"access_token": "[REDACTED]", "roles": ["reader"]}
+  }
+}
+```
+
+To use the upstream `log::info!` macro directly, add `log = "0.4"` to your
+dependencies, import `redactable::LogRedactedExt`, and write
 `log::info!(user = user.log_redacted_json(); "signed in")`. For a saved value,
 use `log::info!(user = &snapshot; "signed in")`. These native macros accept
 ordinary raw fields too. Use `redactable::info!` for the compile-time check.
@@ -1224,7 +1216,6 @@ tracing = "0.1"
 With your application's tracing subscriber configured:
 
 ```rust
-# use redactable_readme_examples::capture_tracing;
 use redactable::{Email, Secret, Sensitive};
 use redactable::tracing::TracingRedactedDebugExt;
 
@@ -1245,11 +1236,7 @@ let event = AuthEvent {
 };
 
 // Redacts a clone before the value reaches the tracing subscriber.
-# let fields = capture_tracing(|| {
 tracing::info!(event = event.tracing_redacted_debug());
-# });
-# assert_eq!(fields["event"], "AuthEvent { api_key: \"[REDACTED]\", user_email: \"[REDACTED]\", action: \"login\" }");
-# assert!(!fields["event"].contains("sk-secret-key-12345"));
 assert_eq!(event.api_key, "sk-secret-key-12345");
 // Production output: AuthEvent { api_key: "[REDACTED]", user_email: "[REDACTED]", action: "login" }
 ```
@@ -1274,7 +1261,6 @@ valuable = { version = "0.1", features = ["derive"] }
 Build this example with `RUSTFLAGS="--cfg tracing_unstable"`:
 
 ```rust
-# use redactable_readme_examples::capture_tracing;
 use redactable::{Email, Secret, Sensitive};
 use redactable::tracing::TracingValuableExt;
 
@@ -1295,13 +1281,7 @@ let event = AuthEvent {
 };
 
 let redacted = event.tracing_redacted_valuable();
-# let fields = capture_tracing(|| {
 tracing::info!(event = tracing::field::valuable(&redacted));
-# });
-# assert_eq!(serde_json::from_str::<serde_json::Value>(&fields["event"]).unwrap(), serde_json::json!({
-#     "api_key": "[REDACTED]", "user_email": "al***@example.com", "action": "login"
-# }));
-# assert!(!fields["event"].contains("sk-secret-key-12345"));
 assert_eq!(event.api_key, "sk-secret-key-12345");
 // Logged: {api_key: "[REDACTED]", user_email: "al***@example.com", action: "login"}
 ```
@@ -1320,24 +1300,17 @@ output. Checked fields visit a `RedactedValue` snapshot.
 **For flat display values** (without `valuable`):
 
 ```rust
-# use redactable_readme_examples::capture_tracing;
 use redactable::{Email, Secret, SensitiveValue};
 use redactable::tracing::TracingRedactedExt;
 
 let api_key: SensitiveValue<String, Secret> = SensitiveValue::from(String::from("sk-secret-key-12345"));
 let user_email: SensitiveValue<String, Email> = SensitiveValue::from(String::from("alice@example.com"));
 
-# let fields = capture_tracing(|| {
 tracing::info!(
     api_key = api_key.tracing_redacted(),
     user_email = user_email.tracing_redacted(),
     action = "login"
 );
-# });
-# assert_eq!(fields["api_key"], "[REDACTED]");
-# assert_eq!(fields["user_email"], "al***@example.com");
-# assert_eq!(fields["action"], "login");
-# assert!(!format!("{fields:?}").contains("sk-secret-key-12345"));
 // Logged: api_key="[REDACTED]" user_email="al***@example.com" action="login"
 ```
 
@@ -1360,13 +1333,12 @@ created and give sinks the resulting `RedactedValue`.
 For existing native helpers, `SlogRedacted` and `TracingRedacted` mark types
 with a declared backend policy. The five derives and `SensitiveValue` implement
 the corresponding marker. A helper must also use the selected output when it
-emits the field. For example, a native slog helper can require both the marker
-and `slog::Value`.
+emits the field. A native slog helper can pass any `SlogRedacted` field to slog.
 
 ```rust
 use redactable::{slog::SlogRedacted, Secret, SensitiveValue};
 
-fn record_auth<T: SlogRedacted + slog::Value>(logger: &slog::Logger, subject: &T) {
+fn record_auth<T: SlogRedacted>(logger: &slog::Logger, subject: &T) {
     slog::info!(logger, "auth"; "subject" => subject);
 }
 
@@ -1380,7 +1352,7 @@ An undeclared string fails this native marker bound.
 ```compile_fail
 use redactable::slog::SlogRedacted;
 
-fn require_subject<T: SlogRedacted + slog::Value>(_: &T) {}
+fn require_subject<T: SlogRedacted>(_: &T) {}
 require_subject(&String::from("example-token"));
 ```
 
@@ -1507,12 +1479,10 @@ Use `RedactedList` to log a slice with a limit on how many items are included.
 
 `RedactedList::new(&items, limit)` takes items implementing `ToRedacted` and a
 `NonZeroUsize` limit. Its JSON has the shape `{"items": [...], "omitted": count}`.
-Each included item uses its `json()` representation, including `{"message": text}`
-for text-only values.
-
-The list calls `to_redacted()` once for each included item, in order, and skips
-omitted items. The omitted count remains visible. The limit controls item count;
-it does not bound bytes, depth, allocations, or policy cost.
+The list takes each included item's declared JSON once, in order, and skips
+omitted items. Text-only values appear as `{"message": text}`. The omitted count
+remains visible. The limit controls item count. Bytes, depth, allocations, and
+policy cost depend on the included items.
 
 ## Choosing what to use
 
@@ -1565,6 +1535,8 @@ when you need its redacted fields.
 
 The [detailed reference](docs/reference.md) covers supported types, ownership and
 borrowing, advanced derive options, and testing helpers.
+On docs.rs, the [latest published reference](https://docs.rs/crate/redactable/latest/source/docs/reference.md)
+is available in the crate's Source tab.
 For upgrades, start with the [upgrade notes](docs/reference.md#upgrading).
 
 ### Built-in policies

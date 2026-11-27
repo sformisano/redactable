@@ -32,11 +32,22 @@
 //! and `serde_json`.
 //!
 //! The free `redact()` function uses the lower-level mapper and can leave raw
-//! leaves unchanged. It is not a logging boundary. Enable `log`, `slog`, or
-//! `tracing` to emit checked events through a backend your application configures.
-//! You choose what each field may disclose.
+//! leaves unchanged.
 //!
 //! The five derive macros live in `redactable-derive` and are re-exported here.
+//!
+//! # Checked logging
+//!
+//! Enable the `log`, `slog`, or `tracing` feature and choose a `logging::Sink`
+//! in your application. In `redactable::info!(sink, user = &user; "signed in")`,
+//! the compiler requires `user` to implement `ToRedacted`. Display and debug
+//! fields have the same requirement. To publish an ordinary string explicitly,
+//! write `channel:% = BypassDisplayRedaction(&channel)`.
+//!
+//! A logger with Serde support for structured fields can serialize a saved
+//! `&RedactedValue` directly. See the
+//! [logging examples](https://github.com/sformisano/redactable/blob/main/README.md#integrations)
+//! for backend setup and output.
 
 // <https://doc.rust-lang.org/rustc/lints/listing/allowed-by-default.html>
 #![warn(

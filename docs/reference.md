@@ -331,8 +331,10 @@ Use `RedactedList` for a [bounded slice of producers](#bounded-list-output).
 ### Producer composition
 
 Structural `Redactable` traversal applies field policies and returns a value of
-the same type. Producer delegation calls an existing `ToRedacted` implementation
-and returns its owned `RedactedValue` unchanged. Neither trait implies the other.
+the same type. The forwarding implementations below reuse the inner producer's
+declared text and JSON. `to_redacted()` returns an owned value, while
+`to_redacted_cow()` can borrow a stored one. A type can implement either trait
+independently.
 
 | Producer | Required bounds | Output |
 |---|---|---|
@@ -394,8 +396,9 @@ value keeps its template text and carries the masked JSON separately.
 
 Cargo unifies this feature across users of the same resolved runtime package.
 Once enabled, every `Sensitive` or `SensitiveDual` producer from that package
-uses key masking. Producing and reusing a `RedactedValue` still clones and
-redacts only at construction; reading its text or JSON does not repeat that work.
+uses key masking. These producers clone and redact the source when they build
+the snapshot. Serializing the stored snapshot by reference borrows its JSON.
+Calling `.json()` returns an owned copy.
 
 ### When adapters run
 
@@ -496,10 +499,10 @@ subsequent projection again.
 ## Bounded list output
 
 `RedactedList` borrows a slice of `ToRedacted` producers and requires an explicit
-nonzero item limit. It produces `{"items": [...], "omitted": count}`. Included
-producers run exactly once each in slice order; omitted producers do not run.
-Each item uses its JSON representation, including the `{"message": text}`
-fallback for text-only producers.
+nonzero item limit. It produces `{"items": [...], "omitted": count}`. The list
+requests each included item's output once in slice order and skips the rest.
+It moves newly produced JSON into the result and copies an existing snapshot's
+JSON once for the owned list. A text-only item contributes `{"message": text}`.
 
 ```rust
 use std::num::NonZeroUsize;
@@ -568,18 +571,14 @@ any `Debug` output your callers rely on when replacing the wrapper.
 ## Migrating a local compatibility wrapper
 
 If a local wrapper exists only to combine ownership, raw Serde, common traits,
-and an explicit output format, replace it with the matching upstream type:
-
-For example, when `public_handler_result` is an application value already reviewed as public:
+and an explicit output format, replace it with the matching upstream type.
+For example, `NotSensitiveHandlerOutput<T>` can become `BypassDebugRedaction<T>`
+when the handler result's complete debug representation is public.
 
 ```rust
-# let public_handler_result = String::from("ready to review");
-// Before:
-// struct NotSensitiveHandlerOutput<T>(T);
-
-// After, when the complete Debug representation is genuinely safe to log:
 use redactable::{BypassDebugRedaction, ToRedacted};
 
+let public_handler_result = String::from("ready to review");
 let output = BypassDebugRedaction(public_handler_result);
 assert_eq!(output.to_redacted().text(), "\"ready to review\"");
 let raw_result = output.into_inner();
