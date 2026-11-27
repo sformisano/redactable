@@ -1,11 +1,15 @@
-use std::collections::{BTreeMap, HashMap};
+use std::{
+    cell::Cell,
+    collections::{BTreeMap, HashMap},
+    num::NonZeroUsize,
+};
 
 use serde::{Serialize, Serializer, ser::Error};
 use serde_json::json;
 
 use crate::{
     BypassDebugRedaction, BypassDisplayRedaction, BypassJsonRedaction, NotSensitive, Redactable,
-    Secret, Sensitive, SensitiveDisplay, SensitiveDual, ToRedacted,
+    RedactedList, RedactedValue, Secret, Sensitive, SensitiveDisplay, SensitiveDual, ToRedacted,
 };
 
 const SECRET_KEY: &str = "PRIVATE-ACCOUNT-4901";
@@ -23,18 +27,34 @@ fn checked_text_borrows_the_declared_string_from_a_snapshot() {
     );
 }
 
+struct Once(Cell<Option<RedactedValue>>);
+
+impl ToRedacted for Once {
+    fn to_redacted(&self) -> RedactedValue {
+        self.0.take().expect("the adapter runs the producer once")
+    }
+}
+
+#[test]
+fn list_reuses_the_owned_json_of_included_items() {
+    // A string clone discards spare capacity even if the allocator recycles its address.
+    let mut text = String::with_capacity(256);
+    text.push_str("approved");
+    let allocation = (text.as_ptr(), text.capacity());
+    let snapshot = RedactedValue::from_json(serde_json::Value::String(text));
+    let items = [Once(Cell::new(Some(snapshot)))];
+
+    let list = RedactedList::new(&items, NonZeroUsize::MIN).to_redacted();
+    let serde_json::Value::String(item) = &list.structured().unwrap()["items"][0] else {
+        panic!("expected a JSON string");
+    };
+    assert_eq!((item.as_ptr(), item.capacity()), allocation);
+}
+
 #[cfg(feature = "slog")]
 #[test]
 fn owned_slog_json_reuses_the_produced_json() {
-    use crate::{RedactedValue, SlogRedactedExt};
-    use std::cell::Cell;
-
-    struct Once(Cell<Option<RedactedValue>>);
-    impl ToRedacted for Once {
-        fn to_redacted(&self) -> RedactedValue {
-            self.0.take().expect("the adapter runs the producer once")
-        }
-    }
+    use crate::SlogRedactedExt;
 
     let text = String::from("approved JSON");
     let address = text.as_ptr();

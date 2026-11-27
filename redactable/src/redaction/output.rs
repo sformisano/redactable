@@ -119,11 +119,14 @@ impl RedactedValue {
         (Self::MESSAGE_KEY, self.text.as_deref().unwrap_or_default())
     }
 
-    #[cfg(feature = "slog")]
-    pub(crate) fn into_json(self) -> JsonValue {
-        self.json.unwrap_or_else(|| {
-            JsonValue::from_iter([(Self::MESSAGE_KEY, self.text.unwrap_or_default())])
-        })
+    /// Returns owned JSON, moving a fresh result or copying the selected JSON of a borrowed value.
+    pub(crate) fn json_from<T: ToRedacted + ?Sized>(producer: &T) -> JsonValue {
+        match producer.to_redacted_cow() {
+            Cow::Borrowed(value) => value.json(),
+            Cow::Owned(value) => value.json.unwrap_or_else(|| {
+                JsonValue::from_iter([(Self::MESSAGE_KEY, value.text.unwrap_or_default())])
+            }),
+        }
     }
 
     pub(crate) fn from_text(text: String) -> Self {

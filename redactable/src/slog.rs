@@ -32,10 +32,7 @@
 //! It does not configure `slog`, define redaction policy, or attempt to validate
 //! that a `Redactable` implementation performs correct redaction.
 
-use std::{
-    borrow::Cow,
-    fmt::{Debug, Display},
-};
+use std::fmt::{Debug, Display};
 
 #[cfg(feature = "tracing")]
 use crate::tracing::TracingRedacted;
@@ -237,7 +234,7 @@ impl_slog_redacted!(@ [T] BypassJsonRedaction<'_, T> where T: Serialize + ?Sized
 pub trait SlogRedactedExt: ToRedacted {
     /// Wraps `&self` for slog logging of its redacted text.
     ///
-    /// A JSON-carrying value is emitted as compact JSON text, as with
+    /// A JSON-only producer emits compact JSON text, as with
     /// tracing's display adapter.
     ///
     /// This borrowed adapter requires a sized producer. The owned JSON adapter
@@ -265,11 +262,7 @@ pub trait SlogRedactedExt: ToRedacted {
     /// string `"[REDACTED]"`.
     #[must_use]
     fn slog_redacted_json(&self) -> RedactedValue {
-        let json = match self.to_redacted_cow() {
-            Cow::Owned(value) => value.into_json(),
-            Cow::Borrowed(value) => value.json(),
-        };
-        RedactedValue::from_json(json)
+        RedactedValue::from_json(RedactedValue::json_from(self))
     }
 }
 

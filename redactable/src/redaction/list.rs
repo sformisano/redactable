@@ -2,17 +2,16 @@
 
 use std::num::NonZeroUsize;
 
-use serde_json::json;
+use serde_json::Value;
 
 use super::output::{RedactedValue, ToRedacted};
 
 /// Logs at most an explicit number of slice items as JSON.
 ///
-/// The output is `{"items":[...],"omitted":count}`. Each included producer runs
-/// exactly once in slice order. Every item is read as JSON, so a text-only
-/// producer contributes `{"message": "…"}`, including for empty text; a JSON
-/// producer contributes its JSON value. Omitted producers never run. The
-/// omitted count is deliberately visible.
+/// The output is `{"items":[...],"omitted":count}`. The list requests each
+/// included item's JSON once in slice order and skips the remaining items.
+/// A text-only producer contributes `{"message": "…"}`, including for empty
+/// text. A producer with stored JSON contributes that value.
 ///
 /// The limit bounds item-producer calls only. It does not bound total bytes,
 /// nesting depth, allocations, or the work performed by an included policy.
@@ -45,13 +44,13 @@ impl<'a, T: ToRedacted> RedactedList<'a, T> {
 impl<T: ToRedacted> ToRedacted for RedactedList<'_, T> {
     fn to_redacted(&self) -> RedactedValue {
         let included = self.items.len().min(self.limit.get());
-        let items: Vec<_> = self.items[..included]
+        let items: Value = self.items[..included]
             .iter()
-            .map(|item| item.to_redacted().json())
+            .map(RedactedValue::json_from)
             .collect();
-        RedactedValue::from_json(json!({
-            "items": items,
-            "omitted": self.items.len() - included,
-        }))
+        RedactedValue::from_json(Value::from_iter([
+            ("items", items),
+            ("omitted", (self.items.len() - included).into()),
+        ]))
     }
 }

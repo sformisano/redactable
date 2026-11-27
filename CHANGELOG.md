@@ -12,7 +12,9 @@
   or slog drain. Stable tracing emits compact JSON text. A tracing subscriber
   with Valuable support can receive nested values.
 - `ToRedacted::to_redacted_cow()` lets a sink borrow an existing
-  `RedactedValue` or produce an owned one from a domain type.
+  `RedactedValue` or produce an owned one from a domain type. `RedactedList`
+  moves freshly produced items into its JSON array and copies each saved
+  item's JSON once for the owned list.
 - The opt-in `log` feature adds `.log_redacted_json()` for `ToRedacted`
   producers. Backends that serialize structured fields can record nested JSON
   objects and arrays.
