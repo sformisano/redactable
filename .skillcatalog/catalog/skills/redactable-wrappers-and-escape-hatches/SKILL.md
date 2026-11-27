@@ -5,11 +5,11 @@ metadata:
   skillcatalog/display_name: "Redactable Wrappers And Escape Hatches"
   skillcatalog/author: "Salvatore Formisano"
   skillcatalog/created_at: "2026-04-29T15:18:46Z"
-  skillcatalog/updated_at: "2026-11-26T23:33:56Z"
+  skillcatalog/updated_at: "2026-11-27T23:07:00Z"
 ---
 # Redactable Wrappers And Escape Hatches
 
-For Redactable 0.16, choose a wrapper to express a disclosure decision, not to
+For Redactable 0.17, choose a wrapper to express a disclosure decision, not to
 hide a trait error. A bypass is an explicit public-data assertion.
 
 ## Keep a policy with a leaf when needed

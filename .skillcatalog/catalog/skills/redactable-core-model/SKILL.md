@@ -5,12 +5,12 @@ metadata:
   skillcatalog/display_name: "Redactable Core Model"
   skillcatalog/author: "Salvatore Formisano"
   skillcatalog/created_at: "2026-04-29T15:18:46Z"
-  skillcatalog/updated_at: "2026-11-26T23:33:56Z"
+  skillcatalog/updated_at: "2026-11-27T23:07:00Z"
 ---
 # Redactable Core Model
 
 Use Redactable when typed Rust values need an explicit disclosure policy for
-logs, diagnostics, or other selected output. This guidance targets 0.16; check
+logs, diagnostics, or other selected output. This guidance targets 0.17; check
 the consumer's locked version before applying version-specific contracts.
 
 ## Decide what is being protected
@@ -44,7 +44,8 @@ Consider a policy-bearing leaf wrapper when the value travels independently and
 accidental direct formatting is likely. Neither choice redacts raw serialization.
 
 The compiler checks declarations on structural fields and referenced template
-fields, with documented exceptions for opaque values. It cannot determine
+fields. Structural JSON payloads require an explicit field decision, including
+when an alias or container holds the JSON value. The compiler cannot determine
 whether a public declaration reveals too much or a mask removes needed context.
 Omitted fields in a display-only type are outside that
 formatting path; review other uses of those fields without assuming they require

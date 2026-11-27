@@ -23,7 +23,7 @@ struct PhantomData<T: Redactable> {
     value: T,
 }
 
-#[derive(Clone, Debug, Eq, Hash, PartialEq, serde::Serialize)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq, serde::Serialize, redactable::NotSensitive)]
 struct Key(u8);
 
 type Hasher = BuildHasherDefault<DefaultHasher>;

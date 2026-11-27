@@ -100,8 +100,8 @@ fn owned_slog_json_reuses_the_produced_json() {
     assert_eq!(projected.text(), r#""approved JSON""#);
 }
 
-#[derive(Clone, PartialEq, Eq, Hash, Serialize, Sensitive)]
-struct AccountKey(#[sensitive(Secret)] String);
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, NotSensitive)]
+struct AccountKey(String);
 
 #[derive(Clone, Serialize, Sensitive)]
 struct Entry {

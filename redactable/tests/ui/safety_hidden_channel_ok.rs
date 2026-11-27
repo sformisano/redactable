@@ -1,18 +1,21 @@
-//! The one declared type a consumer can still hand the channel is redacted.
-//!
-//! `serde_json::Value` has crate-declared redaction behavior (full redaction as
-//! an opaque leaf), so it satisfies the helpers' bounds. The channel therefore
-//! answers with the placeholder rather than the caller's payload, which is the
-//! property the bounds exist to keep.
+//! The derive channel builds redacted outputs for declared producers.
 
-use redactable::__private::{generated_redacted_display, generated_redacted_json};
+use redactable::{
+    __private::{generated_redacted_display, generated_redacted_json},
+    Secret, Sensitive,
+};
+
+#[derive(Clone, serde::Serialize, Sensitive)]
+struct Protected {
+    #[sensitive(Secret)]
+    payload: serde_json::Value,
+}
 
 fn main() {
-    let arbitrary = serde_json::json!({"raw_consumer_payload": "not-redacted-by-anything"});
-
+    let payload = serde_json::json!({"raw_consumer_payload": "not-redacted-by-anything"});
+    assert_eq!(generated_redacted_display(&payload).text(), "[REDACTED]");
     assert_eq!(
-        generated_redacted_json(&arbitrary).json(),
-        serde_json::json!("[REDACTED]")
+        generated_redacted_json(&Protected { payload }).json(),
+        serde_json::json!({"payload":"[REDACTED]"})
     );
-    assert_eq!(generated_redacted_display(&arbitrary).text(), "[REDACTED]");
 }

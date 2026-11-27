@@ -211,6 +211,7 @@ mod json_value {
         map: BTreeMap<String, String>,
         #[sensitive(Secret)]
         set: BTreeSet<String>,
+        #[sensitive(Secret)]
         opaque: Value,
     }
 

@@ -5,11 +5,11 @@ metadata:
   skillcatalog/display_name: "Redactable Review Checklist"
   skillcatalog/author: "Salvatore Formisano"
   skillcatalog/created_at: "2026-04-29T15:18:46Z"
-  skillcatalog/updated_at: "2026-11-26T23:33:56Z"
+  skillcatalog/updated_at: "2026-11-27T23:30:11Z"
 ---
 # Redactable Review Checklist
 
-For Redactable 0.16, review the path to observable output, not just the presence
+For Redactable 0.17, review the path to observable output, not just the presence
 of annotations. Confirm the consumer's locked version first.
 
 ## Review questions
@@ -30,7 +30,8 @@ of annotations. Confirm the consumer's locked version first.
 3. **Does the containing type apply that decision?** An outer public declaration
    can bypass nested sensitive fields. Check the entire output representation,
    including custom formatters, serializers, and policy implementations.
-   Typed keys and filters traverse their own policies. Operational identities,
+   A traversed map retains each public key. Check its declaration separately
+   from the value policy. Operational identities,
    cursor positions, and provenance retain useful context without concrete
    credentials. Erased values need a domain-aware projection or an explicit
    omission reason, while available identity and source metadata remain useful.
@@ -38,8 +39,8 @@ of annotations. Confirm the consumer's locked version first.
    destructor restrictions, clone/borrow costs, and actual logger output. For a
    checked event, verify field selectors and bypasses. Trace inherited logger
    context, subscriber-added fields, and native bridges to their own sources.
-   Review an unannotated JSON field's direct `Debug` separately from structural
-   redaction.
+   Verify the explicit policy on structural JSON fields, including aliases
+   and nested containers. Check direct `Debug` as well as structured output.
 5. **What changed outside compiler coverage?** For a newly added field omitted
    from a display template, review its other outputs. Intentional omission is a
    valid display-only design. Require structural redaction only when that path

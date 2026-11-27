@@ -1,5 +1,36 @@
 # Changelog
 
+## 0.17.0 - 2026-11-28
+
+### Breaking changes
+
+`Sensitive` and `SensitiveDual` reject unannotated `serde_json::Value` fields,
+including aliases and JSON values reached through container traversal. In
+0.16, structural redaction masked those values, but a standalone `Sensitive`
+type's generated `Debug` could reveal their original contents.
+
+Structurally traversed `BTreeMap` and `HashMap` fields now require
+`redactable::PublicMapKey` for their keys. Both `apply_policy` and
+`apply_policy_ref` require public keys when they return a map. Previously a policy
+could leave a raw or sensitive custom key visible without a key declaration.
+
+### Migration from 0.16
+
+- Ordinary string and integer keys already qualify. For a public custom key,
+  derive `NotSensitive` on the key type and retain the map's existing value
+  policy. Use an explicit public key wrapper for a reviewed foreign key,
+  or project confidential keys into fields with their own policies. For
+  generic keys, add `K: redactable::PublicMapKey`.
+- Add `#[sensitive(Secret)]` to mask each JSON value, or `#[not_sensitive]`
+  to keep the complete field. A typed diagnostic view can expose selected
+  fields from a mixed payload.
+- A bare JSON value no longer implements `Redactable`. Replace
+  `value.redact()` with `redactable::redact(value)` if you need the previous
+  whole-value mask. Use an explicitly annotated containing type where an API
+  requires `Redactable`.
+- Display-only `SensitiveDisplay` templates retain the redacted formatter for
+  JSON. `SensitiveDual` also checks fields omitted from its template.
+
 ## 0.16.1 - 2026-11-27
 
 ### Fixed

@@ -200,8 +200,9 @@ where
 
 /// Applies a redaction policy using its kind-aware field dispatch.
 ///
-/// Typed IP values therefore follow the same bare-field and fail-closed
-/// container rules as derive-generated policy fields.
+/// Policies preserve map keys and require them to implement [`crate::PublicMapKey`].
+/// The built-in IP policy also enforces its key restrictions and the same
+/// typed IP field rules as derive-generated code.
 pub fn apply_policy<P, V>(value: V) -> V
 where
     P: RedactionPolicy,
@@ -213,11 +214,10 @@ where
 
 /// Applies a redaction policy by reference using kind-aware field dispatch.
 ///
-/// This helper borrows its input and returns the policy field's normal reference
-/// output. Individual projections can clone, including map keys and hashers.
-/// It does not use the formatting-only borrow-conflict channel that generated
-/// `SensitiveDisplay` implementations take through
-/// [`PolicyFormat`] for recursive text and secret policies.
+/// This helper borrows its input. For maps it returns a new map with cloned
+/// [`crate::PublicMapKey`] keys and redacted values. Hash maps also clone the hasher.
+/// Generated `SensitiveDisplay` templates use [`PolicyFormat`] for recursive
+/// text and secret policies and render the source keys by reference.
 ///
 /// # Panics
 ///

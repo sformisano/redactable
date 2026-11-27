@@ -5,8 +5,8 @@ error[E0277]: `String` has no declared redaction behavior
   |          ^^^^^^ this value needs a redaction declaration
   |
   = help: the trait `Redactable` is not implemented for `String`
-  = note: for a local container, derive `Sensitive` and select field policies or explicit `#[not_sensitive]` declarations
-  = note: for a raw value, use `SensitiveValue<T, P>` or deliberately declare it public with `BypassRedaction<T>`
+  = note: derive `Sensitive` on a local container, or choose `#[sensitive(Secret)]` to mask a supported field or `#[not_sensitive]` to expose it
+  = note: use `SensitiveValue<T, P>` when `T: SensitiveWithPolicy<P>` (for example, `String`), or declare a whole value public with `BypassRedaction<T>`
   = help: the following other types implement trait `Redactable`:
             (T0, T1)
             (T0, T1, T2)
@@ -58,8 +58,8 @@ error[E0277]: `String` has no declared redaction behavior
   |           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ this value needs a redaction declaration
   |
   = help: the trait `Redactable` is not implemented for `String`
-  = note: for a local container, derive `Sensitive` and select field policies or explicit `#[not_sensitive]` declarations
-  = note: for a raw value, use `SensitiveValue<T, P>` or deliberately declare it public with `BypassRedaction<T>`
+  = note: derive `Sensitive` on a local container, or choose `#[sensitive(Secret)]` to mask a supported field or `#[not_sensitive]` to expose it
+  = note: use `SensitiveValue<T, P>` when `T: SensitiveWithPolicy<P>` (for example, `String`), or declare a whole value public with `BypassRedaction<T>`
   = help: the following other types implement trait `Redactable`:
             (T0, T1)
             (T0, T1, T2)

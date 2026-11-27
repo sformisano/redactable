@@ -5,7 +5,7 @@ use std::{cell::RefCell, collections::BTreeMap};
 
 use redactable::{Redactable, Secret, Sensitive, ToRedacted};
 
-#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd, serde::Serialize)]
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd, serde::Serialize, redactable::NotSensitive)]
 struct CustomKey(String);
 
 #[derive(Clone, Sensitive, serde::Serialize)]

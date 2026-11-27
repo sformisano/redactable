@@ -13,7 +13,9 @@ use std::{
 
 #[cfg(feature = "ip-address")]
 use redactable::IpAddress as BuiltinIpAddress;
-use redactable::{Redactable, RedactableWithFormatter, Secret, Sensitive, SensitiveDisplay};
+use redactable::{
+    BypassRedaction, Redactable, RedactableWithFormatter, Secret, Sensitive, SensitiveDisplay,
+};
 use serde::Serialize;
 
 const CANARY: &str = "phase02-refcell-canary-3d91";
@@ -200,7 +202,7 @@ use custom::IpAddress;
 #[derive(Clone, Sensitive, Serialize)]
 struct CustomPolicyMap {
     #[sensitive(IpAddress)]
-    values: HashMap<IpAddr, String>,
+    values: HashMap<BypassRedaction<IpAddr>, String>,
 }
 
 #[derive(SensitiveDisplay)]
@@ -219,10 +221,11 @@ struct CustomSecretPolicy {
 #[test]
 fn custom_same_tail_policy_paths_preserve_map_keys() {
     let key: IpAddr = "192.0.2.7".parse().expect("valid test IP");
-    let values = HashMap::from([(key, "sensitive-value".to_owned())]);
+    let public_key = BypassRedaction(key);
+    let values = HashMap::from([(public_key.clone(), "sensitive-value".to_owned())]);
     let custom = CustomPolicyMap { values }.redact();
-    assert!(custom.values.contains_key(&key));
-    assert_eq!(custom.values[&key], "*************ue");
+    assert!(custom.values.contains_key(&public_key));
+    assert_eq!(custom.values[&public_key], "*************ue");
 
     let display = CustomPolicyMapDisplay {
         values: HashMap::from([(key, "sensitive-value".to_owned())]),

@@ -18,6 +18,7 @@ mod escape_hatches;
 mod ip_policy;
 mod json;
 mod list;
+mod map_key;
 mod output;
 mod policy_formatting;
 pub mod redact;
@@ -35,6 +36,7 @@ pub use escape_hatches::{
     BypassRedactionMarker,
 };
 pub use list::RedactedList;
+pub use map_key::PublicMapKey;
 // Re-export the sink value and its producer trait
 pub use output::{
     RedactedValue, ToRedacted, generated_declared_json, generated_redacted_display,

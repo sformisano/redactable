@@ -1,10 +1,11 @@
 //! Map implementations: `HashMap` and `BTreeMap`.
 //!
 //! Owned [`PolicyApplicable`] implementations consume and rebuild the map,
-//! applying the policy to the values (keys pass through redaction
-//! unchanged). Ordinary borrowed [`PolicyApplicableRef`] implementations rebuild
-//! maps and clone their keys. Rebuilding a `HashMap` also clones its `BuildHasher`,
-//! inheriting that implementation's behavior, including panics.
+//! applying the policy to the values and retaining their [`PublicMapKey`] keys.
+//! Borrowed [`PolicyApplicableRef`] implementations rebuild maps by cloning
+//! keys with the same [`PublicMapKey`] requirement. Rebuilding a `HashMap`
+//! also clones its `BuildHasher`, inheriting that implementation's behavior,
+//! including panics.
 //! Generated text/secret formatting instead produces [`PolicyMapOutput`],
 //! rendering source keys by reference without cloning keys or hashers.
 //! IP-map formatting uses its separate key-cloning projection.
@@ -16,7 +17,7 @@ use std::{
 };
 
 use crate::{
-    RedactableWithFormatter,
+    PublicMapKey, RedactableWithFormatter,
     policy::{RecursivePolicyKind, RedactionPolicy},
 };
 
@@ -69,7 +70,7 @@ impl<V: RedactableWithFormatter> RedactableWithFormatter for PolicyMapOutput<V> 
 // Maps: apply policy to values only (keys unchanged)
 impl<K, V, S> PolicyApplicable for HashMap<K, V, S>
 where
-    K: Hash + Eq,
+    K: PublicMapKey + Hash + Eq,
     V: PolicyApplicable,
     S: BuildHasher + Clone,
 {
@@ -91,7 +92,7 @@ where
 
 impl<K, V> PolicyApplicable for BTreeMap<K, V>
 where
-    K: Ord,
+    K: PublicMapKey + Ord,
     V: PolicyApplicable,
 {
     fn apply_policy<P, M>(self, mapper: &M) -> Self
@@ -108,7 +109,7 @@ where
 
 impl<K, V, S> PolicyApplicableRef for HashMap<K, V, S>
 where
-    K: Clone + Hash + Eq,
+    K: PublicMapKey + Clone + Hash + Eq,
     V: PolicyApplicableRef,
     S: BuildHasher + Clone,
 {
@@ -163,7 +164,7 @@ where
 
 impl<K, V> PolicyApplicableRef for BTreeMap<K, V>
 where
-    K: Clone + Ord,
+    K: PublicMapKey + Clone + Ord,
     V: PolicyApplicableRef,
 {
     type Output = BTreeMap<K, V::Output>;

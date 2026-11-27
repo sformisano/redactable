@@ -114,6 +114,8 @@ pub(crate) fn expand_not_sensitive(input: DeriveInput) -> Result<TokenStream> {
         impl #impl_generics #crate_root::Redactable for #ident #ty_generics #where_clause {}
 
         impl #impl_generics #crate_root::__private::DeclaredNotSensitive for #ident #ty_generics #where_clause {}
+
+        impl #impl_generics #crate_root::PublicMapKey for #ident #ty_generics #where_clause {}
     };
 
     // The author declared the whole type public, so the producer serializes the

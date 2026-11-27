@@ -33,7 +33,7 @@ README.md	docs/reference.md#custom-policy-formatting	2
 README.md	docs/reference.md#generated-debug-and-ordinary-display	1
 README.md	docs/reference.md#generic-declarations	1
 README.md	docs/reference.md#manual-formatters	2
-README.md	docs/reference.md#map-key-output	1
+README.md	docs/reference.md#map-key-output	2
 README.md	docs/reference.md#output-and-adapter-contracts	1
 README.md	docs/reference.md#precedence-and-edge-cases	1
 README.md	docs/reference.md#producer-composition	1
@@ -50,7 +50,7 @@ docs/reference.md	#generated-debug-and-ordinary-display	1
 docs/reference.md	#generic-declarations	2
 docs/reference.md	#low-level-traversal	1
 docs/reference.md	#manual-formatters	1
-docs/reference.md	#map-key-output	1
+docs/reference.md	#map-key-output	2
 docs/reference.md	#migrating-a-local-compatibility-wrapper	1
 docs/reference.md	#output-and-adapter-contracts	1
 docs/reference.md	#precedence-and-edge-cases	1

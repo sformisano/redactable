@@ -5,11 +5,11 @@ metadata:
   skillcatalog/display_name: "Redactable Logging Boundaries"
   skillcatalog/author: "Salvatore Formisano"
   skillcatalog/created_at: "2026-04-29T15:18:46Z"
-  skillcatalog/updated_at: "2026-11-27T07:53:15Z"
+  skillcatalog/updated_at: "2026-11-27T23:30:11Z"
 ---
 # Redactable Logging Boundaries
 
-For Redactable 0.16, trace the value from its source to the actual output writer.
+For Redactable 0.17, trace the value from its source to the actual output writer.
 Apply a redacted operation or reviewed adapter before sensitive data reaches
 that writer, including error reports and ad hoc diagnostics.
 
@@ -24,8 +24,9 @@ resulting `RedactedValue` to the writer. Review public declarations and bypasses
 against the intended audience.
 Retain the operation's useful identity, query, transition and outcome context.
 A projection that replaces an entire request or result with a mask can satisfy
-the trait while preventing diagnosis. Generic envelopes delegate typed keys,
-filters and results to their own policies instead of discarding them.
+the trait while preventing diagnosis. Generic envelopes can delegate query
+filters, operation identifiers and results to their own field policies. A map
+key is retained as a whole and its type must be declared public.
 
 Do not serialize or interpolate sensitive data into a string before conversion.
 Neither a bypass wrapper nor the low-level free `redact(value)` function repairs
@@ -56,11 +57,9 @@ of each destination that needs the same disclosure and field shape.
   typed `Valuable` adapter.
 - `Sensitive` masks annotated fields in generated `Debug` and delegates other
   fields to their own `Debug`. `SensitiveDisplay` and `SensitiveDual` render
-  policy-shaped templates. An unannotated opaque JSON field can therefore be
-  visible through `Sensitive`'s direct `Debug` even though structural traversal
-  replaces the whole payload with a mask. Use a typed diagnostic view to retain
-  useful metadata and apply concrete field protection; do not make raw JSON
-  public to recover lost context.
+  policy-shaped templates. For an opaque JSON payload, check the structural
+  field's explicit decision. Use a typed diagnostic view to retain selected
+  metadata from a payload that also contains credentials.
 
 ## Bound cost and failure behavior
 

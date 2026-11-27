@@ -4,6 +4,12 @@
 //! by field. Credentials use `Secret`; partial policies such as `Token` and
 //! `Email` retain fragments that need their own diagnostic purpose.
 //! Public fields use `#[not_sensitive]`; nested types retain their own policies.
+//! For a `serde_json::Value` field in `Sensitive` or `SensitiveDual`, choose
+//! `#[sensitive(Secret)]` to mask the payload or `#[not_sensitive]` to keep it.
+//! This also applies to type aliases and JSON values inside traversed containers.
+//! Structurally traversed maps require public keys. String and integer keys
+//! qualify directly. Derive `NotSensitive` on a public custom key to keep the
+//! key and apply the field's redaction policy to map values.
 //!
 //! Use `Redactable::redact()` to transform a value whose type declares redaction
 //! behavior. Use `ToRedacted` to produce owned text or JSON for logging.
@@ -134,7 +140,7 @@ pub use redaction::BypassTextRedaction;
 pub use redaction::{
     BypassDebugRedaction, BypassDisplayRedaction, BypassJsonRedaction, BypassRedaction,
     BypassRedactionExt, BypassRedactionMarker, PolicyDebug, PolicyDisplay, PolicyFormat,
-    PolicyFormattingOutput, Redactable, RedactableMapper, RedactableWithFormatter,
+    PolicyFormattingOutput, PublicMapKey, Redactable, RedactableMapper, RedactableWithFormatter,
     RedactedFormatterRef, RedactedList, RedactedValue, ScalarRedaction, SensitiveValue,
     SensitiveWithPolicy, ToRedacted,
 };

@@ -22,6 +22,7 @@ struct Leaf {
 
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, serde::Serialize)]
 struct Key(u8);
+impl redactable::PublicMapKey for Key {}
 
 type Hasher = BuildHasherDefault<DefaultHasher>;
 

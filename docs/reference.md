@@ -44,6 +44,7 @@ The sensitive derives also generate the integrations enabled by `slog` and
 - `RedactableWithMapper`: no-op passthrough (the type has no sensitive data)
 - `Redactable`: the derive is an explicit declaration, so the type may be
   redacted and used inside sensitive containers
+- `PublicMapKey`: the type declares that its complete key representation may be retained
 - `ToRedacted`: emits the raw value as JSON, which is what the declaration
   claims is public (requires `Serialize` on the type)
 - `slog::Value` and `SlogRedacted`: serializes the explicitly non-sensitive
@@ -68,30 +69,38 @@ The sensitive derives also generate the integrations enabled by `slog` and
 policy. Other fields use their own `Debug`, including fields whose types declare
 redaction. This does not run structural traversal first.
 
-For example, an unannotated `serde_json::Value` prints its original contents in
-that `Debug` output, although `.redact()` replaces the same field completely:
+A `Sensitive` field that holds `serde_json::Value` directly, through an alias,
+or inside a traversed container requires an explicit declaration. Here
+structural redaction masks each JSON value in the vector. Generated
+`Debug` masks the annotated field as a whole.
 
 ```rust
-use redactable::{Redactable, Sensitive};
+use redactable::{Redactable, Secret, Sensitive};
+use serde_json::{Value, json};
+
+type Payload = Value;
 
 #[derive(Clone, serde::Serialize, Sensitive)]
 struct Record {
-    payload: serde_json::Value,
+    #[sensitive(Secret)]
+    payloads: Option<Vec<Payload>>,
+    #[not_sensitive]
+    status: Payload,
 }
 
-let record = Record { payload: serde_json::json!({"secret": "example-secret"}) };
-assert!(format!("{record:?}").contains("example-secret"));
-assert_eq!(record.redact().payload, serde_json::json!("[REDACTED]"));
+let record = Record {
+    payloads: Some(vec![json!({"token": "example-secret"}), Value::Null]),
+    status: json!({"code": 200}),
+};
+assert!(!format!("{record:?}").contains("example-secret"));
+let redacted = record.redact();
+assert_eq!(redacted.payloads, Some(vec![json!("[REDACTED]"); 2]));
+assert_eq!(redacted.status, json!({"code": 200}));
 ```
 
-Annotating that field `#[sensitive(Secret)]` also replaces its generated `Debug`
-output with the fixed placeholder. `#[not_sensitive]` instead skips structural
-redaction and uses the field's own `Debug`.
-
-For useful fields from an opaque payload, construct the README's
+To publish selected fields from an opaque payload, build a
 [typed diagnostic view](../README.md#json-payloads-need-an-output-view).
-Keep the default whole-value traversal mask as a fallback when no such view
-exists. Making the raw JSON public exposes every current and future field.
+A public declaration exposes the JSON values of future fields as well.
 
 `SensitiveDisplay` and `SensitiveDual` generate `Debug` from their redacted
 template. That output includes any fragments retained by the policies and any
@@ -181,6 +190,7 @@ Common declaration bounds are:
 | Field use | Declaration bound |
 |---|---|
 | Unannotated structural `value: T` | `T: Redactable` |
+| Key `K` in a structurally traversed map | `K: PublicMapKey`, in addition to the map's usual bounds |
 | Unannotated referenced template field | Complete field type implements `DeclaredFormatting` |
 | `#[sensitive(P)]` with `{value}` | Complete field type implements `PolicyDisplay<P>` |
 | `#[sensitive(P)]` with `{value:?}` | Complete field type implements `PolicyDebug<P>` |
@@ -198,7 +208,8 @@ consuming policy operation, expressed by `__private::PolicyField<P>`.
 Formatting bounds alone do not supply that operation.
 
 Requirements apply to complete field types. `std::marker::PhantomData<T>` does
-not impose redaction on `T`. Map keys remain exempt from value traversal.
+not impose redaction on `T`. Maps keep their keys and check their key type
+separately from the values.
 The [recursion override](#advanced-derive-options) suppresses inferred formatting
 bounds; actual field operations still need to compile under the original declaration.
 
@@ -364,11 +375,33 @@ limit, or a dedicated log-view type to choose a representation.
 
 ### Map-key output
 
-By default, map traversal redacts values and retains keys. Enable the optional
-`mask-map-keys` feature when producer JSON must hide map keys. This feature
-implies `redaction`. It affects the JSON produced by `Sensitive` and
-`SensitiveDual`, including JSON reached through logging adapters. A JSON-only
-producer's `text()` also uses the masked JSON.
+A `HashMap<K, V>` or `BTreeMap<K, V>` traversed by `Sensitive` or
+`SensitiveDual` requires `K: redactable::PublicMapKey`. This applies to nested
+maps and to map fields annotated with `#[sensitive(Secret)]` or a text policy.
+Structural redaction keeps the keys as supplied and processes each value.
+Both `apply_policy::<Secret, _>(map)` and `apply_policy_ref::<Secret, _>(&map)`
+return an owned map and require the same public key declaration.
+
+String and integer keys qualify directly. For a public custom key you own,
+derive `NotSensitive`. A manual `impl PublicMapKey for MyKey {}` declares
+only its use as a public key. For a reviewed public foreign key, use
+`BypassRedaction<K>` as the key type. An unwrapped `serde_json::Value`, an
+undeclared custom key, or a key deriving only `Sensitive` or
+`NotSensitiveDisplay` fails the bound. Declaring the whole map field
+`#[not_sensitive]` skips traversal and publishes its values too. Use that
+declaration only for a wholly public map.
+
+For private keys, a sequence of typed entries lets you apply a field policy
+to the key and keep useful information about its value. For string keys
+such as a customer's email address, the type alone cannot establish whether
+the contents are public. Display-only `SensitiveDisplay` templates still use
+their existing formatting bounds and can print keys through ordinary `Debug`.
+
+Enable `mask-map-keys` to replace map keys with positional names when a
+`Sensitive` or `SensitiveDual` producer serializes JSON. The feature also
+affects compact text derived from that JSON. The structural key bound applies
+with either feature setting. With masking disabled, each retained key must
+also serialize as a valid JSON object key for JSON output to succeed.
 
 Masking follows the typed serializer's Serde calls, before JSON loses the
 distinction between a map key and a struct field name. Each map receives positional keys
@@ -640,10 +673,13 @@ redaction policy or custom projection for those values.
 cannot be policy-annotated because redaction may need to produce zero.
 
 Supported containers are walked automatically. Policy annotations recurse
-through options, sequences, arrays, results, maps, and sets. Traversal does not
-redact map keys. Each rendered map key uses its compact or alternate `Debug`
-implementation once. The optional [map-key output](#map-key-output) feature
-masks keys separately when sensitive producers serialize their JSON.
+through options, sequences, arrays, results, maps, and sets. Structural derives
+and both policy helpers require public map keys and apply policies to values.
+Low-level `redactable::redact(map)` retains its mapper bounds and preserves
+keys. Display-only templates keep their existing formatting bounds.
+Each rendered map key uses its compact or alternate `Debug`
+implementation once. See [map-key output](#map-key-output) for the optional
+JSON key mask.
 
 Traversal support and field-policy support are separate. Tuples, `Mutex`, and
 `RwLock` can traverse declared contents but do not accept a direct recursive
@@ -682,9 +718,13 @@ key types. Formatting clones allowed keys, and `HashMap` requires a cloneable
 hasher. IPv4 output keeps the last octet; IPv6 output keeps the last 16-bit
 segment. IPv4-mapped IPv6 uses the IPv4 rule. `SocketAddr` preserves its port.
 
-Under the `redaction` feature, `serde_json::Value` is an opaque traversal leaf.
-It redacts to `Value::String("[REDACTED]")` during `.redact()` and adapters that
-invoke it, even when unannotated. Generated `Debug` remains annotation-driven.
+`serde_json::Value` is an opaque leaf for explicit structural policies.
+`#[sensitive(Secret)]` replaces each traversed JSON value with the JSON string
+`"[REDACTED]"`, including a JSON object, array, or null. The policy does not
+inspect the keys or fields inside that JSON value. An absent Rust `Option`
+stays `None`. For a display-only `SensitiveDisplay` template, an unannotated
+JSON value still has a declared formatter that emits `[REDACTED]`.
+
 `redaction` is a default feature and pulls in `serde` and `serde_json`.
 The `json` feature remains a compatibility alias for `redaction`; use
 `redaction` in new manifests, while existing `json` selections continue to
@@ -761,6 +801,24 @@ Valid paths beneath absent options, empty collections, or scalar parents can rem
 Include populated samples to exercise those paths.
 
 ## Upgrading
+
+For the 0.17 upgrade, declare a policy on each previously unannotated JSON
+payload in `Sensitive` or `SensitiveDual`. This includes a JSON value hidden
+by a type alias or nested in traversed containers, and a structural field
+omitted from a dual template. Choose `#[sensitive(Secret)]` to keep the
+previous whole-value mask in structured output, or `#[not_sensitive]` when
+the complete field may be disclosed.
+
+For a custom map key, derive `NotSensitive` on the key type when the full key
+is public. Retain the value's existing redaction policy. A generic key needs
+`K: redactable::PublicMapKey` in addition to its existing map bounds.
+See [map-key output](#map-key-output) for foreign and confidential keys.
+
+A bare `serde_json::Value` no longer satisfies `T: Redactable`, so direct
+`value.redact()` and structural adapters with this bound need migration.
+Use `redactable::redact(value)` to keep the old opaque mask in low-level
+traversal. For a logging adapter, put the value in a type with an explicit
+field policy. `SensitiveDisplay` uses the separate formatting contract.
 
 When enabling a logging integration, qualify level macros (`redactable::info!`,
 `::log::info!`, `::slog::info!`, or `::tracing::info!`) or import them by name.

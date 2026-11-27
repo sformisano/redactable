@@ -382,7 +382,7 @@ fn map_keys_are_not_redacted_by_default() {
 }
 
 #[test]
-fn map_keys_are_never_redacted() {
+fn low_level_traversal_preserves_keys_while_redacting_values() {
     #[derive(Clone, Hash, Eq, PartialEq, Sensitive, serde::Serialize)]
     struct SensitiveKey {
         #[sensitive(Secret)]
@@ -400,7 +400,7 @@ fn map_keys_are_never_redacted() {
         },
     );
 
-    let redacted = map.redact();
+    let redacted = machine_redact(map);
     assert!(redacted.contains_key(&key));
     assert_eq!(redacted[&key].value, "[REDACTED]");
 }

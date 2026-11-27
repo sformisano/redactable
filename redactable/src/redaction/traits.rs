@@ -16,7 +16,7 @@ use std::{
     sync::{Arc, Mutex, RwLock},
 };
 
-use super::redact::RedactableMapper;
+use super::{map_key::PublicMapKey, redact::RedactableMapper};
 use crate::policy::{RedactionPolicy, TextRedactionPolicy};
 
 // =============================================================================
@@ -102,11 +102,10 @@ pub trait RedactableWithMapper: Sized {
 
 /// Public entrypoint for redaction on types with declared redaction behavior.
 ///
-/// `Redactable` is implemented by the `Sensitive`, `SensitiveDual`, `NotSensitive`, and
-/// `NotSensitiveDisplay` derives, by `SensitiveValue` / `BypassRedaction`,
-/// by `serde_json::Value`, and by std containers of such types. It provides the
-/// `redact()` method and is the structural half every generated `ToRedacted`
-/// producer builds on.
+/// The `Sensitive`, `SensitiveDual`, `NotSensitive`, and `NotSensitiveDisplay`
+/// derives implement this trait. `SensitiveValue`, `BypassRedaction`, and
+/// supported containers of declared values also implement it. Structural
+/// producers use it to redact the value before serialization.
 ///
 /// Passthrough leaves like `String` and scalars deliberately do **not**
 /// implement it: they provide low-level mapper behavior, but default fields
@@ -115,8 +114,13 @@ pub trait RedactableWithMapper: Sized {
 /// so calling `redact()` on them - or certifying them as redacted output -
 /// must not compile.
 ///
-/// Containers preserve that boundary: forwarding applies only when their
-/// contents are also certified.
+/// When a structural field would traverse a [`serde_json::Value`], declare
+/// the field explicitly. Use `#[sensitive(Secret)]` to mask a supported
+/// field or `#[not_sensitive]` to expose it. Low-level traversal with
+/// `redactable::redact(value)` still masks the opaque value.
+///
+/// Containers require this trait for the values they traverse. Maps keep
+/// their keys unchanged and require [`PublicMapKey`] for the key type.
 ///
 /// ```compile_fail
 /// use redactable::Redactable;
@@ -136,8 +140,8 @@ pub trait RedactableWithMapper: Sized {
 #[diagnostic::on_unimplemented(
     message = "`{Self}` has no declared redaction behavior",
     label = "this value needs a redaction declaration",
-    note = "for a local container, derive `Sensitive` and select field policies or explicit `#[not_sensitive]` declarations",
-    note = "for a raw value, use `SensitiveValue<T, P>` or deliberately declare it public with `BypassRedaction<T>`"
+    note = "derive `Sensitive` on a local container, or choose `#[sensitive(Secret)]` to mask a supported field or `#[not_sensitive]` to expose it",
+    note = "use `SensitiveValue<T, P>` when `T: SensitiveWithPolicy<P>` (for example, `String`), or declare a whole value public with `BypassRedaction<T>`"
 )]
 pub trait Redactable: RedactableWithMapper {
     /// Redacts the value using policy-bound redaction.
@@ -149,8 +153,8 @@ pub trait Redactable: RedactableWithMapper {
     }
 }
 
-// Containers forward the certification exactly like redaction traversal walks
-// them. Map keys are exempt, mirroring values-only map redaction. The bounds
+// Containers forward the certification through the values they traverse.
+// Maps separately require a public declaration for their keys. The other bounds
 // mirror the matching `RedactableWithMapper` container impls so the supertrait
 // is always satisfied.
 
@@ -183,13 +187,13 @@ impl<T: Redactable> Redactable for RwLock<T> {}
 
 impl<K, V, S> Redactable for HashMap<K, V, S>
 where
-    K: Hash + Eq,
+    K: PublicMapKey + Hash + Eq,
     V: Redactable,
     S: BuildHasher + Clone,
 {
 }
 
-impl<K: Ord, V: Redactable> Redactable for BTreeMap<K, V> {}
+impl<K: PublicMapKey + Ord, V: Redactable> Redactable for BTreeMap<K, V> {}
 
 impl<T, S> Redactable for HashSet<T, S>
 where

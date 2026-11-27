@@ -84,9 +84,69 @@ struct GenericDisplayOwner<T: DeclaredFormatting> {
     generic_template_raw: String,
 }
 
+type PayloadAlias = serde_json::Value;
+type NestedPayloads = Option<Vec<Box<PayloadAlias>>>;
+
+#[derive(Clone, serde::Serialize, Sensitive)]
+struct DynamicFields {
+    direct_json: serde_json::Value,
+    aliased_json: PayloadAlias,
+    nested_json: NestedPayloads,
+}
+
+#[derive(Clone, serde::Serialize, SensitiveDual)]
+enum DynamicEvent {
+    #[error("tuple")]
+    TupleJson(PayloadAlias),
+    #[error("named")]
+    Named { named_json: std::collections::BTreeMap<String, PayloadAlias> },
+}
+
+#[derive(Clone, serde::Serialize, Sensitive)]
+struct RecursiveOverride {
+    #[redactable(recursive)]
+    recursive_json: Option<PayloadAlias>,
+}
+
+#[derive(Clone, Hash, PartialEq, Eq, PartialOrd, Ord, serde::Serialize, Sensitive)]
+struct Credential(#[sensitive(Secret)] String);
+
+#[derive(Clone, serde::Serialize, Sensitive)]
+struct Count(#[not_sensitive] u16);
+
+type DynamicMap = std::collections::HashMap<PayloadAlias, Count>;
+type OrderedMap = std::collections::BTreeMap<Credential, String>;
+
+#[derive(Clone, serde::Serialize, Sensitive)]
+struct UnapprovedKeys {
+    raw_key: std::collections::HashMap<serde_json::Value, Count>,
+    #[sensitive(Secret)]
+    private_map_key: std::collections::HashMap<PayloadAlias, String>,
+    #[redactable(recursive)]
+    nested_key: Option<Vec<DynamicMap>>,
+    ordered_key: std::collections::BTreeMap<Credential, Count>,
+}
+
+#[derive(Clone, serde::Serialize, SensitiveDual)]
+#[error("summary")]
+struct SelectedSummary {
+    #[sensitive(Secret)]
+    omitted_key: Option<OrderedMap>,
+}
+
+fn map_policy_helpers(
+    private_hash: std::collections::HashMap<Credential, String>,
+    private_tree: OrderedMap,
+) {
+    let _borrowed_hash = redactable::apply_policy_ref::<Secret, _>(&private_hash);
+    let _owned_hash = redactable::apply_policy::<Secret, _>(private_hash);
+    let _borrowed_tree = redactable::apply_policy_ref::<Secret, _>(&private_tree);
+    let _owned_tree = redactable::apply_policy::<Secret, _>(private_tree);
+}
+
 fn main() {}
 "#;
-    // Each name belongs to one owner, so an error that contains it reports that owner.
+    // Each name identifies one diagnostic at its declaration or policy call.
     const UNDECLARED: [&str; 8] = [
         "structural_field",
         "TupleVariant",
@@ -98,6 +158,27 @@ fn main() {}
         "generic_template_raw",
     ];
 
+    const JSON_FIELDS: [&str; 6] = [
+        "direct_json",
+        "aliased_json",
+        "nested_json",
+        "TupleJson",
+        "named_json",
+        "recursive_json",
+    ];
+
+    const KEY_SITES: [&str; 9] = [
+        "raw_key",
+        "private_map_key",
+        "nested_key",
+        "ordered_key",
+        "omitted_key",
+        "_borrowed_hash",
+        "_owned_hash",
+        "_borrowed_tree",
+        "_owned_tree",
+    ];
+
     let owner = tempfile::Builder::new()
         .prefix("rd-declaration-")
         .tempdir()
@@ -105,6 +186,7 @@ fn main() {}
     let directory = owner.path();
     fs::create_dir(directory.join("src")).unwrap();
     let features = [
+        ("mask-map-keys", cfg!(feature = "mask-map-keys")),
         ("slog", cfg!(feature = "slog")),
         ("tracing", cfg!(feature = "tracing")),
         ("tracing-valuable", cfg!(feature = "tracing-valuable")),
@@ -117,7 +199,7 @@ fn main() {}
     fs::write(
         directory.join("Cargo.toml"),
         format!(
-            "[package]\nname='declaration-diagnostics'\nversion='0.0.0'\nedition='2024'\npublish=false\n[workspace]\n[dependencies]\nserde={{version='1',features=['derive']}}\nredactable={{path='{}',features=[{features}]}}\n",
+            "[package]\nname='declaration-diagnostics'\nversion='0.0.0'\nedition='2024'\npublish=false\n[workspace]\n[dependencies]\nserde={{version='1',features=['derive']}}\nserde_json='1'\nredactable={{path='{}',features=[{features}]}}\n",
             env!("CARGO_MANIFEST_DIR")
         ),
     )
@@ -151,9 +233,39 @@ fn main() {}
             errors.join("\n")
         );
     }
+    let fixes: &[(&[&str], &[&str])] = &[
+        (&JSON_FIELDS, &["#[sensitive(Secret)]", "#[not_sensitive]"]),
+        (
+            &KEY_SITES,
+            &[
+                "PublicMapKey",
+                "NotSensitive",
+                "BypassRedaction",
+                "only if its keys and values are public",
+            ],
+        ),
+    ];
+    for &(fields, choices) in fixes {
+        for &field in fields {
+            let mut diagnostics = errors.iter().filter(|error| error.contains(field));
+            let diagnostic = diagnostics
+                .next()
+                .unwrap_or_else(|| panic!("missing diagnostic for `{field}`"));
+            assert!(
+                diagnostics.next().is_none(),
+                "duplicate diagnostic for `{field}`"
+            );
+            for &choice in choices {
+                assert!(
+                    diagnostic.contains(choice),
+                    "missing `{choice}` for `{field}`: {diagnostic}"
+                );
+            }
+        }
+    }
     assert_eq!(
         errors.len(),
-        UNDECLARED.len(),
+        UNDECLARED.len() + JSON_FIELDS.len() + KEY_SITES.len(),
         "unexpected error-level diagnostics:\n{}",
         errors.join("\n")
     );
