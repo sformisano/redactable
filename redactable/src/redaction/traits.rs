@@ -141,7 +141,7 @@ pub trait RedactableWithMapper: Sized {
     message = "`{Self}` has no declared redaction behavior",
     label = "this value needs a redaction declaration",
     note = "derive `Sensitive` on a local container, or choose `#[sensitive(Secret)]` to mask a supported field or `#[not_sensitive]` to expose it",
-    note = "for a raw value, use `SensitiveValue<T, P>` or deliberately declare it public with `BypassRedaction<T>`"
+    note = "use `SensitiveValue<T, P>` when `T: SensitiveWithPolicy<P>` (for example, `String`), or declare a whole value public with `BypassRedaction<T>`"
 )]
 pub trait Redactable: RedactableWithMapper {
     /// Redacts the value using policy-bound redaction.
