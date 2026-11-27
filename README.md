@@ -1111,8 +1111,10 @@ fn main() -> Result<(), flexi_logger::FlexiLoggerError> {
 }
 ```
 
-The program writes a JSON record to stderr. Alongside its timestamp and source
-location, the record contains these fields.
+The application's formatter chooses the JSON keys. It could write the event
+message under `message` and put the `user` object under `attributes`.
+The `flexi_logger` example writes the following fields to stderr. It uses
+`text` for the message and `kv` (key-value pairs) for the named fields.
 
 ```json
 {
@@ -1185,8 +1187,9 @@ slog::info!(logger, "review requested"; "event" => event.slog_redacted_json());
 assert_eq!(event.access_token, "example-access-token");
 ```
 
-The nested `event` object retains `request_id`, `title`, and `attempts` while
-`access_token` is `"[REDACTED]"`.
+The default `slog-json` drain writes `"msg": "review requested"` and the nested
+`event` object side by side. The object retains `request_id`, `title`, and
+`attempts` while `access_token` is `"[REDACTED]"`.
 
 Direct borrowed native output is a coarse fallback: passing `"event" => &event`
 for a `Sensitive` or `SensitiveDual` value emits only `"[REDACTED]"`.
