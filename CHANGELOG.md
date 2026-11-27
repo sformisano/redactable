@@ -21,9 +21,10 @@ could leave a raw or sensitive custom key visible without a key declaration.
   policy. Use an explicit public key wrapper for a reviewed foreign key,
   or project confidential keys into fields with their own policies. For
   generic keys, add `K: redactable::PublicMapKey`.
-- Add `#[sensitive(Secret)]` to mask each JSON value, or `#[not_sensitive]`
-  to keep the complete field. A typed diagnostic view can expose selected
-  fields from a mixed payload.
+- Add `#[sensitive(Secret)]` to a JSON field or a container that supports
+  this policy, such as `Vec<Value>`. For a tuple of private JSON values,
+  derive `Sensitive` on a tuple struct and annotate its fields individually.
+  Use `#[not_sensitive]` when the entire field is public.
 - A bare JSON value no longer implements `Redactable`. Replace
   `value.redact()` with `redactable::redact(value)` if you need the previous
   whole-value mask. Use an explicitly annotated containing type where an API

@@ -104,7 +104,9 @@ use sensitive::{Expansion, expand};
 ///   with the supplied mapper. Raw leaves need an explicit declaration.
 ///   A `serde_json::Value`, including through aliases and traversed
 ///   containers, needs an explicit field decision. Choose `#[sensitive(Secret)]`
-///   to mask the JSON or `#[not_sensitive]` to keep the field public.
+///   to mask JSON in supported field types such as `Option<Vec<Value>>`. For a
+///   tuple containing private JSON, derive `Sensitive` on a tuple struct and
+///   annotate each private field. Choose `#[not_sensitive]` only when the complete field is public.
 ///
 /// - `#[sensitive(Secret)]`: For scalar types (i32, bool, char, etc.), redacts to default values
 ///   (0, false, '*'). For string-like types, applies full redaction to `"[REDACTED]"`.
@@ -115,8 +117,9 @@ use sensitive::{Expansion, expand};
 ///
 /// - `#[not_sensitive]`: Explicit passthrough - the field is not transformed at all. Use this
 ///   for foreign types that don't implement `RedactableWithMapper`. This is the right
-///   declaration for a foreign field in a struct you own; `BypassRedaction<T>` is only
-///   for satisfying a `Redactable` bound on a value you cannot annotate.
+///   declaration for a wholly public foreign field in a struct you own. For a
+///   public foreign key in a map whose values need redaction, wrap just the key
+///   in `BypassRedaction<K>` and keep the map's value policy.
 ///
 /// Structurally traversed `BTreeMap` and `HashMap` fields also require
 /// `redactable::PublicMapKey` for their keys. Derive `NotSensitive` on a public

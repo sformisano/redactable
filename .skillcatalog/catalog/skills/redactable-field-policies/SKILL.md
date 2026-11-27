@@ -97,9 +97,11 @@ cardinality is itself acceptable. Scalar replacement can also create ordinary
 values such as zero; do not feed that projection back into business decisions.
 
 A `serde_json::Value` field in `Sensitive` or `SensitiveDual` needs an explicit
-decision, including when an alias or container holds the JSON. Choose
-`#[sensitive(Secret)]` to mask each JSON value or `#[not_sensitive]` when
-its full contents are public. A typed projection can retain selected fields.
+decision, including when an alias or container holds the JSON. Use
+`#[sensitive(Secret)]` on a JSON field or a container that supports the
+policy. For a tuple, derive `Sensitive` on a tuple struct and annotate its
+fields individually. Use `#[not_sensitive]` when the full field is public.
+A typed projection can retain selected fields.
 Check the decision against future payloads as well as today's sample.
 
 Verify representative useful and protected values together. Assert useful values
