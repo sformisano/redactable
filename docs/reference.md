@@ -384,11 +384,18 @@ order depend on the JSON map implementation. For example, the default sorted
 map orders `[REDACTED-KEY-10]` before `[REDACTED-KEY-1]`. Hash-map
 iteration order can also change between runs.
 
-A `serde_json::value::RawValue` (available with `serde_json/raw_value`) embeds
-a JSON fragment. The masker parses it into a `serde_json::Value` and replaces
-the keys in each resulting object, including objects inside arrays. Duplicate
-keys, reserved representations, and numeric precision follow Serde JSON's
-parsing rules.
+When Serde emits a `serde_json::value::RawValue` as raw JSON, the masker
+parses it into a `serde_json::Value` and replaces the keys in each resulting
+object, including objects inside arrays. `RawValue` requires
+`serde_json/raw_value`. Duplicate keys, reserved representations, and numeric
+precision follow Serde JSON's parsing rules.
+
+Applying `#[serde(flatten)]` directly to a `RawValue` field emits the fragment
+as a string in a map entry. Key masking preserves string contents, including
+private keys inside JSON-looking text. To mask those keys, keep the fragment in
+a named field without `flatten`, or parse it into a JSON object before flattening
+it. Flattening an ordinary struct that contains a named `RawValue` field
+preserves the raw fragment as JSON, so the masker still reaches its object keys.
 
 Every map key inside that sensitive producer is masked, including maps in
 `#[not_sensitive]` fields or `BypassRedaction` fields. These field declarations

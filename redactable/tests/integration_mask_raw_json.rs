@@ -80,13 +80,13 @@ fn malformed_raw_fragments_fall_back_for_the_whole_report() {
     use serde::ser::SerializeStruct;
 
     #[derive(Clone, Debug)]
-    struct Malformed(Option<&'static str>);
+    struct Malformed(&'static [&'static str]);
 
     impl Serialize for Malformed {
         fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
             const RAW: &str = "$serde_json::private::RawValue";
-            let mut raw = serializer.serialize_struct(RAW, 1)?;
-            if let Some(text) = self.0 {
+            let mut raw = serializer.serialize_struct(RAW, self.0.len())?;
+            for text in self.0 {
                 raw.serialize_field(RAW, text)?;
             }
             raw.end()
@@ -101,7 +101,11 @@ fn malformed_raw_fragments_fall_back_for_the_whole_report() {
         raw: Malformed,
     }
 
-    for raw in [Malformed(Some("[invalid")), Malformed(None)] {
+    for raw in [
+        Malformed(&["[invalid"]),
+        Malformed(&[]),
+        Malformed(&["1", "2"]),
+    ] {
         assert_eq!(Input { id: 12, raw }.to_redacted().json(), "[REDACTED]");
     }
 }
