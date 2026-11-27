@@ -141,9 +141,6 @@ checksum = "a4945fa9cdfd7571192cf559c186d45ab36c8034482a2d217a19bdc566f190cc"
 dependencies = [
  "chrono",
  "log",
- "serde",
- "serde_derive",
- "serde_json",
  "thiserror",
 ]
 
@@ -364,6 +361,7 @@ version = "0.0.0"
 dependencies = [
  "displaydoc",
  "flexi_logger",
+ "log",
  "redactable",
  "serde",
  "serde_json",

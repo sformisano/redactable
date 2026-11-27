@@ -1078,19 +1078,25 @@ call with `info!(sink: &request_sink, job; "job accepted")`.
 ### log
 
 The opt-in `log` feature enables `log/kv_serde` and uses the logger your
-application installs. This example uses `flexi_logger` because its JSON
-formatter writes structured fields as objects and arrays.
+application installs. This application configures `flexi_logger` to write
+the message under `msg` and all named fields under `data`.
 
 ```toml
 [dependencies]
 redactable = { version = "0.16", features = ["log"] }
-flexi_logger = { version = "0.31", default-features = false, features = ["json", "kv"] }
+flexi_logger = { version = "0.31", default-features = false, features = ["kv"] }
+log = { version = "0.4", features = ["kv_serde"] }
 serde = { version = "1", features = ["derive"] }
+serde_json = "1"
 ```
 
 ```rust
-use flexi_logger::{Logger, json_format};
-use redactable::{info, Secret, Sensitive};
+use std::{collections::BTreeMap, io};
+
+use flexi_logger::{DeferredNow, Logger};
+use log::{Record, kv};
+use redactable::{Secret, Sensitive, info};
+use serde::{Serializer, ser::SerializeMap};
 
 #[derive(Clone, Sensitive, serde::Serialize)]
 struct User {
@@ -1100,33 +1106,62 @@ struct User {
     access_token: String,
 }
 
-fn main() -> Result<(), flexi_logger::FlexiLoggerError> {
-    let _logger = Logger::try_with_str("info")?.format(json_format).start()?;
+fn sign_in() {
     let user = User {
         roles: vec!["reader".into()],
         access_token: "example-token".into(),
     };
     info!(user; "signed in");
+}
+
+fn main() -> Result<(), flexi_logger::FlexiLoggerError> {
+    let _logger = Logger::try_with_str("info")?.format(json_log).start()?;
+    sign_in();
+    Ok(())
+}
+
+#[derive(Default)]
+struct Fields<'a>(BTreeMap<kv::Key<'a>, kv::Value<'a>>);
+
+impl<'a> kv::VisitSource<'a> for Fields<'a> {
+    fn visit_pair(&mut self, key: kv::Key<'a>, value: kv::Value<'a>) -> Result<(), kv::Error> {
+        self.0.insert(key, value);
+        Ok(())
+    }
+}
+
+fn json_log(out: &mut dyn io::Write, now: &mut DeferredNow, record: &Record<'_>) -> io::Result<()> {
+    let mut fields = Fields::default();
+    record
+        .key_values()
+        .visit(&mut fields)
+        .map_err(io::Error::other)?;
+    let mut serializer = serde_json::Serializer::new(out);
+    let mut event = serializer.serialize_map(None)?;
+    event.serialize_entry("timestamp", &now.format_rfc3339())?;
+    event.serialize_entry("level", record.level().as_str())?;
+    event.serialize_entry("target", record.target())?;
+    event.serialize_entry("msg", record.args())?;
+    event.serialize_entry("data", &fields.0)?;
+    event.end()?;
     Ok(())
 }
 ```
 
-The application's formatter chooses the JSON keys. It could write the event
-message under `message` and put the `user` object under `attributes`.
-The `flexi_logger` example writes the following fields to stderr. It uses
-`text` for the message and `kv` (key-value pairs) for the named fields.
+The JSON record on stderr includes a timestamp, level and target alongside
+these fields.
 
 ```json
 {
-  "text": "signed in",
-  "kv": {
+  "msg": "signed in",
+  "data": {
     "user": {"access_token": "[REDACTED]", "roles": ["reader"]}
   }
 }
 ```
 
-To use the upstream `log::info!` macro directly, add `log = "0.4"` to your
-dependencies, import `redactable::LogRedactedExt`, and write
+To use the upstream `log::info!` macro directly, import
+`redactable::LogRedactedExt` and write
 `log::info!(user = user.log_redacted_json(); "signed in")`. For a saved value,
 use `log::info!(user = &snapshot; "signed in")`. These native macros accept
 ordinary raw fields too. Use `redactable::info!` for the compile-time check.

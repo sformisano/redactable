@@ -17,6 +17,11 @@ slog-json = { version = "2.6", features = ["nested-values"] }
 tracing = "0.1"
 valuable = { version = "0.1", features = ["derive"] }
 
+[[example]]
+name = "flexi_logger_json"
+test = true
+
 [dev-dependencies]
-flexi_logger = { version = "0.31", default-features = false, features = ["json", "kv"] }
+flexi_logger = { version = "0.31", default-features = false, features = ["kv"] }
+log = { version = "0.4", features = ["kv_serde"] }
 tempfile = "3"
