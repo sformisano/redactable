@@ -1,0 +1,31 @@
+error: there is no argument named `secret`
+ --> tests/ui/log_unchecked_messages_rejected.rs:3:5
+  |
+3 |     redactable::info!("signed in {secret}");
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  |
+  = note: did you intend to capture a variable `secret` from the surrounding scope?
+  = note: to avoid ambiguity, `format_args!` cannot capture variables when the format string is expanded from a macro
+  = note: this error originates in the macro `::core::concat` which comes from the expansion of the macro `redactable::info` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error: there is no argument named `secret`
+ --> tests/ui/log_unchecked_messages_rejected.rs:4:5
+  |
+4 |     redactable::warn!(data = (); "signed in as {who} with {secret}", who = ());
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  |
+  = note: did you intend to capture a variable `secret` from the surrounding scope?
+  = note: to avoid ambiguity, `format_args!` cannot capture variables when the format string is expanded from a macro
+  = note: this error originates in the macro `::core::concat` which comes from the expansion of the macro `redactable::warn` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error: no rules expected `secret`
+ --> tests/ui/log_unchecked_messages_rejected.rs:5:35
+  |
+5 |     redactable::error!(data = (); secret);
+  |                                   ^^^^^^ no rules expected this token in macro call
+  |
+note: while trying to match meta-variable `$fmt:literal`
+ --> src/logging.rs
+  |
+  |     (@parse ($level:ident, $route:expr) $($key:ident $(:$mode:tt)? $(= $value:expr)?),+ $(,)?; $fmt:literal $($args:tt)*) => {{
+  |                                                                                                ^^^^^^^^^^^^

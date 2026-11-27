@@ -8,7 +8,7 @@ rust-version = "1.97"
 publish = false
 
 [dependencies]
-redactable = { path = "../../redactable", features = ["slog", "tracing-valuable"] }
+redactable = { path = "../../redactable", features = ["log", "slog", "tracing-valuable"] }
 displaydoc = "0.2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
@@ -16,3 +16,12 @@ slog = "2.8"
 slog-json = { version = "2.6", features = ["nested-values"] }
 tracing = "0.1"
 valuable = { version = "0.1", features = ["derive"] }
+
+[[example]]
+name = "flexi_logger_json"
+test = true
+
+[dev-dependencies]
+flexi_logger = { version = "0.31", default-features = false, features = ["kv"] }
+log = { version = "0.4", features = ["kv_serde"] }
+tempfile = "3"

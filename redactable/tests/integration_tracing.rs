@@ -23,7 +23,7 @@ use tracing::{
     subscriber::with_default,
 };
 #[cfg(all(feature = "tracing-valuable", tracing_unstable))]
-use valuable::{NamedValues, Valuable as _, Value as ValuableValue, Visit as ValuableVisit};
+use valuable::Value as ValuableValue;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct RecordedField {
@@ -36,12 +36,13 @@ enum RecordedValue {
     Debug(String),
     Str(String),
     #[cfg(all(feature = "tracing-valuable", tracing_unstable))]
-    Valuable(Vec<(String, String)>),
+    Valuable(serde_json::Value),
 }
 
 #[derive(Clone, Default)]
 struct CapturingSubscriber {
     fields: Arc<Mutex<Vec<RecordedField>>>,
+    level: Option<tracing::Level>,
 }
 
 impl CapturingSubscriber {
@@ -80,15 +81,14 @@ impl Visit for CapturingVisitor<'_> {
 
     #[cfg(all(feature = "tracing-valuable", tracing_unstable))]
     fn record_value(&mut self, field: &Field, value: ValuableValue<'_>) {
-        let mut capture = ValuableCapture::default();
-        value.visit(&mut capture);
-        self.push(field, RecordedValue::Valuable(capture.fields));
+        let json = serde_json::to_value(valuable_serde::Serializable::new(value)).unwrap();
+        self.push(field, RecordedValue::Valuable(json));
     }
 }
 
 impl Subscriber for CapturingSubscriber {
-    fn enabled(&self, _metadata: &Metadata<'_>) -> bool {
-        true
+    fn enabled(&self, metadata: &Metadata<'_>) -> bool {
+        self.level.is_none_or(|level| level == *metadata.level())
     }
 
     fn new_span(&self, span: &Attributes<'_>) -> Id {
@@ -120,35 +120,6 @@ impl Subscriber for CapturingSubscriber {
     fn exit(&self, _span: &Id) {}
 }
 
-#[cfg(all(feature = "tracing-valuable", tracing_unstable))]
-#[derive(Default)]
-struct ValuableCapture {
-    fields: Vec<(String, String)>,
-}
-
-#[cfg(all(feature = "tracing-valuable", tracing_unstable))]
-impl ValuableVisit for ValuableCapture {
-    fn visit_value(&mut self, value: ValuableValue<'_>) {
-        if let Some(value) = value.as_structable() {
-            value.visit(self);
-        }
-    }
-
-    fn visit_named_fields(&mut self, named_values: &NamedValues<'_>) {
-        for (field, value) in named_values.iter() {
-            self.fields
-                .push((field.name().to_owned(), valuable_value_to_string(*value)));
-        }
-    }
-}
-
-#[cfg(all(feature = "tracing-valuable", tracing_unstable))]
-fn valuable_value_to_string(value: ValuableValue<'_>) -> String {
-    value
-        .as_str()
-        .map_or_else(|| format!("{value:?}"), ToOwned::to_owned)
-}
-
 fn capture_fields(record: impl FnOnce()) -> Vec<RecordedField> {
     let subscriber = CapturingSubscriber::default();
     let handle = subscriber.clone();
@@ -168,6 +139,130 @@ fn debug_text<'a>(field: &'a RecordedField, name: &str) -> &'a str {
         panic!("{name} field should be recorded through Debug");
     };
     output
+}
+
+#[test]
+fn checked_tracing_fields_follow_the_selected_shape_and_level() {
+    use std::cell::Cell;
+
+    use redactable::{
+        Sensitive,
+        logging::{Sink, set_sink},
+    };
+    use serde_json::json;
+
+    #[derive(Clone, Sensitive, serde::Serialize)]
+    struct Batch {
+        users: Vec<Option<FixtureUser>>,
+        #[not_sensitive]
+        attempts: u64,
+        #[not_sensitive]
+        accepted: bool,
+    }
+
+    // A method in the caller's scope must not replace Redactable's field recorder.
+    trait CallerRecord {
+        fn record(self) -> &'static str;
+    }
+    impl<T> CallerRecord for T {
+        fn record(self) -> &'static str {
+            "checked-tracing-private-token-8647"
+        }
+    }
+    let secret = ().record();
+    let batch = Batch {
+        users: vec![
+            Some(FixtureUser {
+                name: "Alice".into(),
+                api_key: secret.into(),
+            }),
+            None,
+        ],
+        attempts: 2,
+        accepted: true,
+    };
+    let saved = batch.to_redacted();
+    let text = SensitiveValue::<_, Secret>::from(secret.to_owned());
+    let dual = GenericDualFixture {
+        label: "audit",
+        secret: secret.into(),
+    };
+    let subscriber = CapturingSubscriber {
+        level: Some(tracing::Level::INFO),
+        ..Default::default()
+    };
+    let calls = Cell::new(0);
+    let select = || {
+        calls.set(calls.get() + 1);
+        &saved
+    };
+    set_sink(Sink::Tracing).unwrap();
+    with_default(subscriber.clone(), || {
+        redactable::info!(
+            batch = select(), text, absent = None::<()>, dual,
+            displayed:% = dual, debugged:? = dual;
+            "checked {{event}} for {who}", who = &dual
+        );
+        redactable::debug!(disabled = select(); "filtered {}", select());
+    });
+
+    let fields = subscriber.captured_fields();
+    assert_eq!(calls.get(), 1);
+    assert_eq!(fields.len(), 7);
+    for (name, selected_json) in [
+        (
+            "batch",
+            json!({
+                "users": [{"name": "Alice", "api_key": "[REDACTED]"}, null], "attempts": 2, "accepted": true
+            }),
+        ),
+        ("text", json!({"message": "[REDACTED]"})),
+        ("absent", json!(null)),
+        ("dual", json!({"label": "audit", "secret": "[REDACTED]"})),
+    ] {
+        #[cfg(all(feature = "tracing-valuable", tracing_unstable))]
+        let expected = RecordedValue::Valuable(selected_json);
+        #[cfg(not(all(feature = "tracing-valuable", tracing_unstable)))]
+        let expected = RecordedValue::Str(selected_json.to_string());
+        assert_eq!(field_named(&fields, name).value, expected, "{name}");
+    }
+    for name in ["displayed", "debugged"] {
+        assert_eq!(
+            field_named(&fields, name).value,
+            RecordedValue::Str("audit: [REDACTED]".into())
+        );
+    }
+    let message = &field_named(&fields, "message").value;
+    assert!(
+        matches!(message, RecordedValue::Str(s) | RecordedValue::Debug(s) if s == "checked {event} for audit: [REDACTED]"),
+        "unexpected tracing message {message:?}"
+    );
+    assert!(!format!("{fields:?}").contains(secret));
+}
+
+#[cfg(all(feature = "tracing-valuable", tracing_unstable))]
+#[test]
+fn checked_tracing_preserves_digits_beyond_valuables_numeric_range() {
+    use redactable::{BypassJsonRedaction, logging::Sink};
+    use serde_json::Value;
+
+    let precise = "0.12345678901234567890123456789";
+    let numbers: Value = serde_json::from_str(&format!("[0.5,1.00,{precise}]")).unwrap();
+    let expected = if serde_json::Number::from_f64(1.0).as_ref() == numbers[1].as_number() {
+        // Default serde_json has already read these decimals as machine floats.
+        numbers.clone()
+    } else {
+        // With arbitrary_precision the stored decimal spelling is significant.
+        serde_json::json!([0.5, "1.00", precise])
+    };
+    let saved = BypassJsonRedaction(&numbers).to_redacted();
+    let fields = capture_fields(|| {
+        redactable::info!(sink: &Sink::Tracing, numbers = &saved; "numbers");
+    });
+    assert_eq!(
+        field_named(&fields, "numbers").value,
+        RecordedValue::Valuable(expected)
+    );
 }
 
 #[test]
@@ -417,10 +512,7 @@ fn valuable_structured_output_records_redacted_fields() {
 
     assert_eq!(
         values,
-        &vec![
-            ("username".to_owned(), "alice".to_owned()),
-            ("password".to_owned(), "[REDACTED]".to_owned()),
-        ]
+        &serde_json::json!({"username": "alice", "password": "[REDACTED]"})
     );
 }
 
@@ -460,10 +552,7 @@ fn valuable_structured_output_records_redacted_fields_from_consuming_adapter() {
 
     assert_eq!(
         values,
-        &vec![
-            ("username".to_owned(), "alice".to_owned()),
-            ("password".to_owned(), "[REDACTED]".to_owned()),
-        ]
+        &serde_json::json!({"username": "alice", "password": "[REDACTED]"})
     );
     // The canary must not survive anywhere the subscriber can see it.
     assert!(

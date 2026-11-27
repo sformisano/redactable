@@ -3,16 +3,13 @@
 //! Every member is named for the action its author is taking. Constructing one
 //! is the declaration that the complete value it carries is safe to log:
 //!
-//! - [`BypassRedactionMarker`]: no formatting opinion; certifies a value for
-//!   `slog`'s native typed emitter, and the only member that accepts a type
-//!   with neither `Display` nor `Debug`
+//! - [`BypassRedactionMarker`]: certifies a value for `slog`'s native typed emitter
 //! - [`BypassDisplayRedaction`]: log the value's `Display` form as is
 //! - [`BypassDebugRedaction`]: log the value's `Debug` form as is
 //! - [`BypassJsonRedaction`]: log the value's `Serialize` form as is
 //!
-//! Every member is a tuple struct with a public field, so construction is
-//! `BypassDebugRedaction(&value)`. There is no eligibility bound and no reason
-//! argument: the declaration is the construction.
+//! Every member is a tuple struct with a public field. [`BypassRedactionExt`]
+//! also constructs the borrowed Display and JSON wrappers with method syntax.
 //!
 //! `BypassDisplayRedaction` and `BypassDebugRedaction` can own their values.
 //! Their Serde implementations preserve the raw inner wire value and do not
@@ -30,6 +27,46 @@ use std::{
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use super::output::{RedactedValue, ToRedacted, serialize_redacted_json};
+
+/// Borrows a value whose complete Display or JSON output you declare public.
+///
+/// The methods construct the existing bypass wrappers. Formatting or serialization
+/// happens when the wrapper produces its output. The receiver can be unsized.
+/// For example, `str` supports both methods, and serializable slices support
+/// [`bypass_json()`](Self::bypass_json).
+///
+/// ```
+/// use redactable::{BypassRedactionExt, ToRedacted};
+///
+/// let channel: &str = "web";
+/// assert_eq!(channel.bypass_display().to_redacted().text(), "web");
+///
+/// let codes: &[u16] = &[200, 204];
+/// let field = codes.bypass_json();
+/// assert!(std::ptr::eq(field.inner(), codes));
+/// assert_eq!(field.to_redacted().json(), serde_json::json!([200, 204]));
+/// ```
+pub trait BypassRedactionExt {
+    /// Borrows `self` and declares its complete [`Display`] text public.
+    #[must_use]
+    fn bypass_display(&self) -> BypassDisplayRedaction<&Self>
+    where
+        Self: Display,
+    {
+        BypassDisplayRedaction(self)
+    }
+
+    /// Borrows `self` and declares its complete [`Serialize`] representation public as JSON.
+    #[must_use]
+    fn bypass_json(&self) -> BypassJsonRedaction<'_, Self>
+    where
+        Self: Serialize,
+    {
+        BypassJsonRedaction(self)
+    }
+}
+
+impl<T: ?Sized> BypassRedactionExt for T {}
 
 // =============================================================================
 // BypassRedactionMarker - generic wrapper with no formatting preference

@@ -38,12 +38,12 @@ types and logging adapters.
 
 ### Quick examples
 
-These examples use the 0.15 series and require Rust 1.97 or later.
+These examples use the 0.16 series and require Rust 1.97 or later.
 The structured example also uses Serde to make the redacted value serializable:
 
 ```toml
 [dependencies]
-redactable = "0.15"
+redactable = "0.16"
 serde = { version = "1", features = ["derive"] }
 ```
 
@@ -325,23 +325,19 @@ own fields, the choice depends on whether you own the type:
   ```
 
 - **Foreign types:** if the whole field is public, use `#[not_sensitive]`.
-  For example, with a timeout type from another crate:
+  This configuration publishes its allowed timeout range.
 
   ```rust
   use redactable::{Redactable, Sensitive};
-  # mod external_crate {
-  #     #[derive(Clone, Debug, serde::Serialize)]
-  #     pub struct Timeout(pub u64);
-  # }
-  use external_crate::Timeout;
+  use std::ops::RangeInclusive;
 
   #[derive(Clone, Sensitive, serde::Serialize)]
   struct Config {
       #[not_sensitive]
-      timeout: Timeout,  // skips RedactableWithMapper entirely
+      timeout_seconds: RangeInclusive<u64>,
   }
-  let config = Config { timeout: Timeout(30) };
-  assert_eq!(config.redact().timeout.0, 30);
+  let config = Config { timeout_seconds: 1..=30 };
+  assert_eq!(config.redact().timeout_seconds, 1..=30);
   ```
 
   `#[not_sensitive]` is the declaration for a non-sensitive foreign field. When the foreign value is sensitive, [Wrapper types for foreign types](#foreign-types) shows the `SensitiveValue<T, P>` route.
@@ -615,30 +611,22 @@ For raw leaves, choose a policy or `#[not_sensitive]`. For other types:
   ```
 
 - **Foreign types:** if the field is public, use `#[not_sensitive]` to render
-  its ordinary `Display`. For example, with a context type from another crate:
+  its ordinary `Display`. This error includes the standard I/O error kind.
 
   ```rust
   use redactable::{RedactableWithFormatter, SensitiveDisplay};
-  # mod external_crate {
-  #     pub struct ErrorContext;
-  #     impl std::fmt::Display for ErrorContext {
-  #         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-  #             f.write_str("upstream timed out")
-  #         }
-  #     }
-  # }
-  use external_crate::ErrorContext;
+  use std::io::ErrorKind;
 
   #[derive(SensitiveDisplay)]
   enum AppError {
-      #[error("context: {ctx}")]
-      WithContext {
+      #[error("upstream: {kind}")]
+      Upstream {
           #[not_sensitive]
-          ctx: ErrorContext,  // renders via Display, skips RedactableWithFormatter
+          kind: ErrorKind,
       },
   }
-  let error = AppError::WithContext { ctx: ErrorContext };
-  assert_eq!(error.redacted_display().to_string(), "context: upstream timed out");
+  let error = AppError::Upstream { kind: ErrorKind::TimedOut };
+  assert_eq!(error.redacted_display().to_string(), "upstream: timed out");
   ```
 
   `#[not_sensitive]` is the declaration for a non-sensitive foreign field. See [Wrapper types for foreign types](#foreign-types) for the sensitive case.
@@ -752,8 +740,9 @@ assert_eq!(output.json()["email"], "al***@example.com");
 assert_eq!(output.json()["accepted"], true);
 ```
 
-`.redacted_display()` returns the template view. `.slog_redacted()` and
-`.tracing_redacted()` use the template; `.slog_redacted_json()` uses the object.
+In a checked field, `key = &login` uses the object and `key:% = &login` uses
+the template. Native adapters ending in `_redacted_json()` also use the object.
+`.redacted_display()`, `.slog_redacted()`, and `.tracing_redacted()` use the template.
 
 ## NotSensitive and NotSensitiveDisplay
 
@@ -847,7 +836,8 @@ the field's runtime type, so it can carry its policy wherever you pass it.
 `SensitiveValue<T, P>` wraps a value with a policy. It provides redacted `Debug`,
 `.redacted()` for the redacted form, and `.expose()` for deliberate raw access.
 It has no `Display` implementation, so accidental `{}` formatting does not compile.
-It also implements `ToRedacted` and the enabled slog/tracing integrations.
+Its `ToRedacted` implementation lets you pass the wrapper directly to a checked
+logging macro.
 
 The `Bypass*` wrappers make an explicit public-data declaration. They are useful
 for foreign values or APIs that require a redaction trait on the value itself.
@@ -870,8 +860,10 @@ type containing just the fields you intend to log.
 | Foreign value at a `Redactable`-bounded boundary | `BypassRedaction<T>` |
 | Public value using slog's native typed output, even without `Display` or `Debug` | `BypassRedactionMarker<T>` |
 
-Bypass wrappers use tuple construction: `BypassJsonRedaction(&value)` or
-`BypassDisplayRedaction(text)`. `BypassRedaction` and `BypassRedactionMarker`
+Import `redactable::BypassRedactionExt` to borrow a public value with
+`value.bypass_display()` or `value.bypass_json()`. Use the tuple constructor
+`BypassDisplayRedaction(value)` when the wrapper should own the value.
+`BypassRedaction` and `BypassRedactionMarker`
 do not implement `ToRedacted`, because neither chooses a logging format.
 
 `BypassTextRedaction` remains available but is deprecated. Use
@@ -1014,7 +1006,7 @@ Compare with `#[sensitive(P)]` attributes, where the field is a bare type at run
 | **Display (`{}`)** | Shows raw value | ✅ Not implemented (won't compile) |
 | **Debug (`{:?}`)** | Shows raw value | ✅ Shows policy-redacted value |
 | **Serialization** | Shows raw value | Shows raw value |
-| **slog/tracing safety** | ✅ Via container | ✅ Direct |
+| **Input to a checked logging macro** | The containing producer | The wrapper itself |
 
 The attribute affects output generated for the containing type, not direct
 formatting of the field. `Sensitive`'s generated `Debug` uses the generic
@@ -1029,14 +1021,174 @@ Local structured types should derive `Sensitive` instead.
 
 ## Integrations
 
-### slog
+### Checked logging
 
-For structured records, use `.slog_redacted_json()` to keep the fields selected
-by the type's policies. This example writes them through a JSON drain:
+Enable the `log`, `slog`, or `tracing` Cargo feature. Import Redactable's
+`error!`, `warn!`, `info!`, `debug!`, or `trace!` and pass your message and
+data. Every field and message argument must implement
+`ToRedacted`. Types that derive `Sensitive` or `NotSensitive` already do.
+
+```rust
+use redactable::{info, NotSensitive};
+
+#[derive(NotSensitive, serde::Serialize)]
+struct JobId(u64);
+
+let job = JobId(42);
+info!("worker started");
+info!(job; "job accepted");
+info!("completed {}", job);
+```
+
+`info!(job; "job accepted")` is shorthand for `info!(job = job; "job accepted")`.
+A plain field carries the type's JSON, including `{"message": ...}` for
+text-only output. Use `job:%` or `job:?` for its declared text. Field names
+must be unique, and `message` is reserved for the event message.
+
+Message arguments also use the type's declared text. Supply them after the
+format string, as in `info!("completed {id}", id = job)`. A bare string fails
+to compile even when formatted with `{}` or `{:?}`.
+
+```compile_fail
+use redactable::info;
+
+let raw = String::from("example-token");
+info!("received {}", raw);
+```
+
+A saved `&RedactedValue` works directly as a field or message argument.
+To publish an ordinary value deliberately, choose its Display text or its
+JSON representation. Both methods borrow the value.
+
+```rust
+use redactable::{info, BypassRedactionExt};
+
+let region = String::from("eu-west");
+let roles = ["reader", "writer"];
+info!(roles = roles.bypass_json(); "serving {}", region.bypass_display());
+```
+
+Here the selected JSON for `roles` is `["reader", "writer"]`, and the
+message reads `serving eu-west`. Use `BypassDebugRedaction(&value)` for
+explicit Debug output.
+
+The application configures its backend once. The calls above work with all
+three integrations.
+
+| Cargo feature | Application setup | What a plain field records |
+|---|---|---|
+| `log` | Install your usual `log` logger | Nested JSON with a backend that serializes key-value fields |
+| `slog` | Call `set_sink(Sink::Slog(logger))?` | Nested JSON with a drain that supports nested values |
+| `tracing` | Install your subscriber and call `set_sink(Sink::Tracing)?` | Compact JSON in a string field |
+| `tracing-valuable` with `--cfg tracing_unstable` | Same setup as `tracing` | A structured value for a subscriber with Valuable support |
+
+Import `set_sink` and `Sink` from `redactable::logging` when selecting a
+backend explicitly. Calls with no `sink:` use native `log` until then if
+its feature is enabled. With `log` disabled, those calls begin emitting after
+setup. A request with its own slog logger can select the destination for one
+call with `info!(sink: &request_sink, job; "job accepted")`.
+
+### log
+
+The opt-in `log` feature enables `log/kv_serde` and uses the logger your
+application installs. This application configures `flexi_logger` to write
+the message under `msg` and all named fields under `data`.
 
 ```toml
 [dependencies]
-redactable = { version = "0.15", features = ["slog"] }
+redactable = { version = "0.16", features = ["log"] }
+flexi_logger = { version = "0.31", default-features = false, features = ["kv"] }
+log = { version = "0.4", features = ["kv_serde"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+```
+
+```rust
+use std::{collections::BTreeMap, io};
+
+use flexi_logger::{DeferredNow, Logger};
+use log::{Record, kv};
+use redactable::{Secret, Sensitive, info};
+use serde::{Serializer, ser::SerializeMap};
+
+#[derive(Clone, Sensitive, serde::Serialize)]
+struct User {
+    #[not_sensitive]
+    roles: Vec<String>,
+    #[sensitive(Secret)]
+    access_token: String,
+}
+
+fn sign_in() {
+    let user = User {
+        roles: vec!["reader".into()],
+        access_token: "example-token".into(),
+    };
+    info!(user; "signed in");
+}
+
+fn main() -> Result<(), flexi_logger::FlexiLoggerError> {
+    let _logger = Logger::try_with_str("info")?.format(json_log).start()?;
+    sign_in();
+    Ok(())
+}
+
+#[derive(Default)]
+struct Fields<'a>(BTreeMap<kv::Key<'a>, kv::Value<'a>>);
+
+impl<'a> kv::VisitSource<'a> for Fields<'a> {
+    fn visit_pair(&mut self, key: kv::Key<'a>, value: kv::Value<'a>) -> Result<(), kv::Error> {
+        self.0.insert(key, value);
+        Ok(())
+    }
+}
+
+fn json_log(out: &mut dyn io::Write, now: &mut DeferredNow, record: &Record<'_>) -> io::Result<()> {
+    let mut fields = Fields::default();
+    record
+        .key_values()
+        .visit(&mut fields)
+        .map_err(io::Error::other)?;
+    let mut serializer = serde_json::Serializer::new(out);
+    let mut event = serializer.serialize_map(None)?;
+    event.serialize_entry("timestamp", &now.format_rfc3339())?;
+    event.serialize_entry("level", record.level().as_str())?;
+    event.serialize_entry("target", record.target())?;
+    event.serialize_entry("msg", record.args())?;
+    event.serialize_entry("data", &fields.0)?;
+    event.end()?;
+    Ok(())
+}
+```
+
+The JSON record on stderr includes a timestamp, level and target alongside
+these fields.
+
+```json
+{
+  "msg": "signed in",
+  "data": {
+    "user": {"access_token": "[REDACTED]", "roles": ["reader"]}
+  }
+}
+```
+
+To use the upstream `log::info!` macro directly, import
+`redactable::LogRedactedExt` and write
+`log::info!(user = user.log_redacted_json(); "signed in")`. For a saved value,
+use `log::info!(user = &snapshot; "signed in")`. These native macros accept
+ordinary raw fields too. Use `redactable::info!` for the compile-time check.
+
+### slog
+
+For checked structured records, select your logger once with
+`set_sink(Sink::Slog(logger))?`. In a native `slog::info!` call,
+`.slog_redacted_json()` preserves the fields selected by the producer.
+This example writes them through a JSON drain.
+
+```toml
+[dependencies]
+redactable = { version = "0.16", features = ["slog"] }
 serde = { version = "1", features = ["derive"] }
 slog = "2.8"
 slog-json = { version = "2.6", features = ["nested-values"] }
@@ -1083,8 +1235,9 @@ slog::info!(logger, "review requested"; "event" => event.slog_redacted_json());
 assert_eq!(event.access_token, "example-access-token");
 ```
 
-The nested `event` object retains `request_id`, `title`, and `attempts` while
-`access_token` is `"[REDACTED]"`.
+The default `slog-json` drain writes `"msg": "review requested"` and the nested
+`event` object side by side. The object retains `request_id`, `title`, and
+`attempts` while `access_token` is `"[REDACTED]"`.
 
 Direct borrowed native output is a coarse fallback: passing `"event" => &event`
 for a `Sensitive` or `SensitiveDual` value emits only `"[REDACTED]"`.
@@ -1111,12 +1264,14 @@ declared public: raw JSON for `NotSensitive`, or raw `Display` text for
 
 ### tracing
 
-For structural values with any tracing subscriber, use the plain `tracing`
-feature and log the redacted `Debug` form:
+Route checked calls to tracing with `set_sink(Sink::Tracing)?`.
+Checked plain fields carry compact JSON text on stable tracing.
+For an existing native `tracing::info!` call that needs redacted
+`Debug` text, enable the `tracing` feature and use `.tracing_redacted_debug()`.
 
 ```toml
 [dependencies]
-redactable = { version = "0.15", features = ["tracing"] }
+redactable = { version = "0.16", features = ["tracing"] }
 serde = { version = "1", features = ["derive"] }
 tracing = "0.1"
 ```
@@ -1124,7 +1279,6 @@ tracing = "0.1"
 With your application's tracing subscriber configured:
 
 ```rust
-# use redactable_readme_examples::capture_tracing;
 use redactable::{Email, Secret, Sensitive};
 use redactable::tracing::TracingRedactedDebugExt;
 
@@ -1145,11 +1299,7 @@ let event = AuthEvent {
 };
 
 // Redacts a clone before the value reaches the tracing subscriber.
-# let fields = capture_tracing(|| {
 tracing::info!(event = event.tracing_redacted_debug());
-# });
-# assert_eq!(fields["event"], "AuthEvent { api_key: \"[REDACTED]\", user_email: \"[REDACTED]\", action: \"login\" }");
-# assert!(!fields["event"].contains("sk-secret-key-12345"));
 assert_eq!(event.api_key, "sk-secret-key-12345");
 // Production output: AuthEvent { api_key: "[REDACTED]", user_email: "[REDACTED]", action: "login" }
 ```
@@ -1157,13 +1307,15 @@ assert_eq!(event.api_key, "sk-secret-key-12345");
 These policy fields use the full `[REDACTED]` placeholder in generated `Debug`,
 including in tests and with the `testing` feature.
 
-For typed structured logging, use the `valuable` integration. Upstream tracing
-requires `RUSTFLAGS="--cfg tracing_unstable"` for `tracing::field::valuable`,
-and the field expression must pass a reference through that adapter:
+For nested fields, enable `tracing-valuable`, build with
+`RUSTFLAGS="--cfg tracing_unstable"`, and select a subscriber that supports
+Valuable. Checked fields use the producer's JSON, so the application type only
+needs `ToRedacted`. The native adapter below uses the type's own `Valuable`
+implementation and passes the redacted value to `tracing::field::valuable`.
 
 ```toml
 [dependencies]
-redactable = { version = "0.15", features = ["tracing-valuable"] }
+redactable = { version = "0.16", features = ["tracing-valuable"] }
 serde = { version = "1", features = ["derive"] }
 tracing = "0.1"
 valuable = { version = "0.1", features = ["derive"] }
@@ -1172,7 +1324,6 @@ valuable = { version = "0.1", features = ["derive"] }
 Build this example with `RUSTFLAGS="--cfg tracing_unstable"`:
 
 ```rust
-# use redactable_readme_examples::capture_tracing;
 use redactable::{Email, Secret, Sensitive};
 use redactable::tracing::TracingValuableExt;
 
@@ -1193,13 +1344,7 @@ let event = AuthEvent {
 };
 
 let redacted = event.tracing_redacted_valuable();
-# let fields = capture_tracing(|| {
 tracing::info!(event = tracing::field::valuable(&redacted));
-# });
-# assert_eq!(serde_json::from_str::<serde_json::Value>(&fields["event"]).unwrap(), serde_json::json!({
-#     "api_key": "[REDACTED]", "user_email": "al***@example.com", "action": "login"
-# }));
-# assert!(!fields["event"].contains("sk-secret-key-12345"));
 assert_eq!(event.api_key, "sk-secret-key-12345");
 // Logged: {api_key: "[REDACTED]", user_email: "al***@example.com", action: "login"}
 ```
@@ -1210,31 +1355,25 @@ structured data path, but `TracingRedactedValue<T>` is not itself a tracing fiel
 value. `.tracing_redacted_valuable()` redacts first; `tracing::field::valuable`
 adapts the binding for subscribers that support `valuable`.
 
-`Valuable` can expose references to objects inside the redacted value, including
-errors. If those objects allow mutation through a shared reference, newly
-inserted data can appear in later output.
+The native `tracing_redacted_valuable()` adapter can expose references to
+objects inside the redacted value, including errors. If those objects allow
+mutation through a shared reference, newly inserted data can appear in later
+output. Checked fields visit a `RedactedValue` snapshot.
 
 **For flat display values** (without `valuable`):
 
 ```rust
-# use redactable_readme_examples::capture_tracing;
 use redactable::{Email, Secret, SensitiveValue};
 use redactable::tracing::TracingRedactedExt;
 
 let api_key: SensitiveValue<String, Secret> = SensitiveValue::from(String::from("sk-secret-key-12345"));
 let user_email: SensitiveValue<String, Email> = SensitiveValue::from(String::from("alice@example.com"));
 
-# let fields = capture_tracing(|| {
 tracing::info!(
     api_key = api_key.tracing_redacted(),
     user_email = user_email.tracing_redacted(),
     action = "login"
 );
-# });
-# assert_eq!(fields["api_key"], "[REDACTED]");
-# assert_eq!(fields["user_email"], "al***@example.com");
-# assert_eq!(fields["action"], "login");
-# assert!(!format!("{fields:?}").contains("sk-secret-key-12345"));
 // Logged: api_key="[REDACTED]" user_email="al***@example.com" action="login"
 ```
 
@@ -1243,112 +1382,47 @@ The display path also works for `SensitiveDisplay`, `SensitiveDual`,
 
 ## Logging safety
 
-The integrations redact values when you use their adapters. Your own logging
-helpers can require those adapters too, making an accidental raw value a compile error.
+Redactable's macros check the fields and message arguments supplied in the call.
+Inherited slog logger context, enclosing tracing span fields, and attributes added by a
+subscriber follow the application's disclosure policy. Native logging bridges
+can forward an event to another backend. For example, tracing's `log-always`
+feature also emits a `log` record when a tracing subscriber is active.
+
+Frameworks that collect events can require `ToRedacted` when an event is
+created and give sinks the resulting `RedactedValue`.
 
 ### Enforcing redaction at compile time
 
-`SlogRedacted` and `TracingRedacted` mark logging integrations with a declared
-output policy. The five derives and `SensitiveValue`
-implement them when the corresponding feature is enabled.
-
-Requiring a marker is only useful if the helper also uses the correct adapter.
-A helper that checks the bound and then formats a raw field can still leak data.
-A marker also does not promise that native output preserves a record's fields.
-Public declarations and bypasses remain the author's disclosure decision.
-
-`BypassRedactionMarker` explicitly declares its wrapped value public. It implements
-`TracingRedacted`, and also `SlogRedacted` when the wrapped value implements
-`slog::Value`. The raw value itself remains unmarked.
-
-For slog, use `SlogRedacted` with `slog::Value` and pass the value to slog's
-field API:
-
-The helper accepts a selected structured view and a protected leaf:
+For existing native helpers, `SlogRedacted` and `TracingRedacted` mark types
+with a declared backend policy. The five derives and `SensitiveValue` implement
+the corresponding marker. A helper must also use the selected output when it
+emits the field. A native slog helper can pass any `SlogRedacted` field to slog.
 
 ```rust
-use redactable::{Secret, Sensitive, SensitiveValue};
-use redactable::slog::{SlogRedacted, SlogRedactedExt};
+use redactable::{slog::SlogRedacted, Secret, SensitiveValue};
 
-macro_rules! slog_safe {
-    ($logger:expr, $msg:literal; $($key:literal => $value:expr),* $(,)?) => {{
-        fn assert_slog_safe<T: SlogRedacted + slog::Value>(_: &T) {}
-        $(assert_slog_safe(&$value);)*
-        slog::info!($logger, $msg; $($key => &$value),*);
-    }};
+fn record_auth<T: SlogRedacted>(logger: &slog::Logger, subject: &T) {
+    slog::info!(logger, "auth"; "subject" => subject);
 }
 
-#[derive(Clone, Sensitive, serde::Serialize)]
-struct User {
-    #[not_sensitive]
-    user_id: u64,
-    #[sensitive(Secret)]
-    email: String,
-}
-let user = User { user_id: 42, email: "private-contact@example.com".into() };
-let api_token = SensitiveValue::<String, Secret>::from("api-token-canary".to_owned());
+let token = SensitiveValue::<String, Secret>::from(String::from("example-token"));
 let logger = slog::Logger::root(slog::Discard, slog::o!());
-let user_fields = user.slog_redacted_json();
-assert_eq!(user_fields.json()["user_id"], 42);
-assert_eq!(user_fields.json()["email"], "[REDACTED]");
-slog_safe!(logger, "user logged in"; "user" => &user_fields);
-
-// ✅ Works: SensitiveValue implements SlogRedacted
-slog_safe!(logger, "auth"; "token" => &api_token);  // SensitiveValue<String, Secret>
-assert_eq!(user.email, "private-contact@example.com");
+record_auth(&logger, &token);
 ```
 
-Raw strings fail the same marker bound:
+An undeclared string fails this native marker bound.
 
 ```compile_fail
 use redactable::slog::SlogRedacted;
 
-fn assert_slog_safe<T: SlogRedacted + slog::Value>(_: &T) {}
-let raw_email = String::from("private-contact@example.com");
-assert_slog_safe(&raw_email);
+fn require_subject<T: SlogRedacted>(_: &T) {}
+require_subject(&String::from("example-token"));
 ```
 
-For structural tracing fields, require the redacting extension trait and call
-its adapter:
-
-```rust
-# use redactable_readme_examples::capture_tracing;
-use redactable::{Secret, Sensitive};
-use redactable::tracing::TracingRedactedDebugExt;
-
-macro_rules! trace_safe {
-    ($($key:ident = $value:expr),* $(,)?) => {{
-        fn assert_tracing_safe<T: TracingRedactedDebugExt>(_: &T) {}
-        $(assert_tracing_safe(&$value);)*
-        tracing::info!($($key = $value.tracing_redacted_debug()),*);
-    }};
-}
-#[derive(Clone, Sensitive, serde::Serialize)]
-struct Request {
-    #[not_sensitive]
-    request_id: String,
-    #[sensitive(Secret)]
-    token: String,
-}
-let request = Request { request_id: "request-42".into(), token: "request-token-canary".into() };
-# let fields = capture_tracing(|| {
-trace_safe!(request = request);
-# });
-# assert!(fields["request"].contains("request-42"));
-# assert!(fields["request"].contains("[REDACTED]"));
-# assert!(!fields["request"].contains("request-token-canary"));
-assert_eq!(request.token, "request-token-canary");
-```
-
-An undecided raw string cannot satisfy that structural-output bound:
-
-```compile_fail
-use redactable::tracing::TracingRedactedDebugExt;
-
-fn assert_tracing_safe<T: TracingRedactedDebugExt>(_: &T) {}
-let raw_token = String::from("raw-token-canary");
-assert_tracing_safe(&raw_token);
-```
+For a native tracing helper that emits structural `Debug`, require
+`TracingRedactedDebugExt` and call `.tracing_redacted_debug()` on the input.
+`BypassRedactionMarker` declares its wrapped value public for `TracingRedacted`
+and for `SlogRedacted` when it implements `slog::Value`.
 
 ### `ToRedacted` for custom pipelines
 
@@ -1359,6 +1433,8 @@ can read as text or JSON.
 
 - `text()` returns the redacted text, or compact JSON when only JSON is available.
 - `json()` returns the redacted JSON, or `{"message": text}` for a text-only value.
+- Serde serializes `&RedactedValue` in the same shape. Use
+  `serde_json::to_writer(writer, &value)` to write it without cloning the stored JSON.
 - `SensitiveDual` supplies both representations from the same call.
 
 The five derives generate `ToRedacted` for you. The logger chooses its format
@@ -1466,12 +1542,10 @@ Use `RedactedList` to log a slice with a limit on how many items are included.
 
 `RedactedList::new(&items, limit)` takes items implementing `ToRedacted` and a
 `NonZeroUsize` limit. Its JSON has the shape `{"items": [...], "omitted": count}`.
-Each included item uses its `json()` representation, including `{"message": text}`
-for text-only values.
-
-The list calls `to_redacted()` once for each included item, in order, and skips
-omitted items. The omitted count remains visible. The limit controls item count;
-it does not bound bytes, depth, allocations, or policy cost.
+The list takes each included item's declared JSON once, in order, and skips
+omitted items. Text-only values appear as `{"message": text}`. The omitted count
+remains visible. The limit controls item count. Bytes, depth, allocations, and
+policy cost depend on the included items.
 
 ## Choosing what to use
 
@@ -1507,20 +1581,25 @@ individual traits and logging outputs.
 
 | Output | Use |
 |---|---|
+| Checked fields with log, slog, or tracing | `redactable::info!(user; "signed in")` |
+| Native log, structured JSON | `.log_redacted_json()` or a saved `&RedactedValue` |
 | slog, structured JSON | `.slog_redacted_json()` |
 | slog, the type's chosen text representation | `.slog_redacted()` |
 | tracing, the type's chosen text representation | `.tracing_redacted()` |
 | tracing, redacted structural `Debug` | `.tracing_redacted_debug()` |
 | tracing, typed structured data | `.tracing_redacted_valuable()` with the required unstable configuration |
-| Your own logging pipeline | Require `ToRedacted`, then read `.text()` or `.json()` from its result |
+| Your own logging pipeline | Require `ToRedacted` and serialize the resulting `&RedactedValue` or read its `.text()` |
 
-Passing a borrowed `Sensitive` or `SensitiveDual` value directly to slog produces
-`"[REDACTED]"`. Use `.slog_redacted_json()` when you want its redacted fields.
+Passing `&value` directly to native slog for a `Sensitive` or `SensitiveDual`
+source emits `"[REDACTED]"`. Use a checked plain field or `.slog_redacted_json()`
+when you need its redacted fields.
 
 ## Policies and reference
 
 The [detailed reference](docs/reference.md) covers supported types, ownership and
 borrowing, advanced derive options, and testing helpers.
+On docs.rs, the [latest published reference](https://docs.rs/crate/redactable/latest/source/docs/reference.md)
+is available in the crate's Source tab.
 For upgrades, start with the [upgrade notes](docs/reference.md#upgrading).
 
 ### Built-in policies

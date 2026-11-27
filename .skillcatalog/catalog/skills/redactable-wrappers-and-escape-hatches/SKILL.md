@@ -5,11 +5,11 @@ metadata:
   skillcatalog/display_name: "Redactable Wrappers And Escape Hatches"
   skillcatalog/author: "Salvatore Formisano"
   skillcatalog/created_at: "2026-04-29T15:18:46Z"
-  skillcatalog/updated_at: "2026-10-25T00:00:00Z"
+  skillcatalog/updated_at: "2026-11-26T23:33:56Z"
 ---
 # Redactable Wrappers And Escape Hatches
 
-For Redactable 0.15, choose a wrapper to express a disclosure decision, not to
+For Redactable 0.16, choose a wrapper to express a disclosure decision, not to
 hide a trait error. A bypass is an explicit public-data assertion.
 
 ## Keep a policy with a leaf when needed
@@ -51,8 +51,10 @@ Neither form walks nested sensitive fields.
 
 At an output boundary, select a format-specific bypass only after reviewing
 that complete representation. `Debug`, `Display`, and JSON may reveal different
-data. A debug bypass around request metadata, an error context, or an SDK object
-requires inspection of the actual formatter, not trust in its type name.
+data. In checked log fields, both `:%` and `:?` use a producer's selected text.
+Wrapping a value in `BypassDebugRedaction` deliberately selects its own `Debug`
+output. Inspect the actual formatter for request metadata, error context, and
+SDK objects.
 
 For an authored public summary, prefer `BypassDisplayRedaction` in new code.
 It does not inspect or sanitize the string. Check interpolation sources and

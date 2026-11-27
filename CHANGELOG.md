@@ -1,5 +1,39 @@
 # Changelog
 
+## 0.16.0 - 2026-11-27
+
+### Added
+
+- `redactable::error!`, `warn!`, `info!`, `debug!`, and `trace!` accept
+  messages and structured fields, such as `info!(user; "signed in")` and
+  `info!("signed in as {}", user)`. Each field and format argument requires
+  `ToRedacted`.
+- `BypassRedactionExt` adds `.bypass_display()` and `.bypass_json()` to
+  explicitly log a borrowed value through its Display or Serde representation.
+- Checked calls use the application's installed `log` logger when the `log`
+  feature is enabled. Select a slog logger or tracing once with
+  `logging::set_sink`, or supply `sink:` for one event.
+- Checked structured fields retain nested JSON with a Serde-aware `log` backend
+  or slog drain. Stable tracing emits compact JSON text. A tracing subscriber
+  with Valuable support can receive nested values.
+- `ToRedacted::to_redacted_cow()` lets a sink borrow an existing
+  `RedactedValue` or produce an owned one from a domain type. `RedactedList`
+  moves freshly produced items into its JSON array and copies each saved
+  item's JSON once for the owned list.
+- The opt-in `log` feature adds `.log_redacted_json()` for `ToRedacted`
+  producers. Backends that serialize structured fields can record nested JSON
+  objects and arrays.
+- `RedactedValue` implements Serde's `Serialize` with the `redaction` feature
+  and `log::kv::ToValue` with `log`. Both borrow the stored output.
+
+### Compatibility
+
+- With glob imports from both Redactable and a logging crate, qualify a level
+  macro such as `redactable::info!` or import it by name.
+- If you import both `slog::Value` and `serde::Serialize` and call
+  `.serialize(...)` directly on a `RedactedValue`, name the trait explicitly,
+  for example `slog::Value::serialize(&value, record, key, serializer)`.
+
 ## 0.15.2 - 2026-10-24
 
 ### Tests

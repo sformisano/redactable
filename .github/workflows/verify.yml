@@ -108,7 +108,7 @@ jobs:
         run: RUSTFLAGS="--cfg tracing_unstable" cargo test --locked --doc --workspace --all-features
 
       - name: README consumer examples
-        run: RUSTFLAGS="--cfg tracing_unstable" cargo test --locked --doc --manifest-path cargo-fixtures/readme-examples/Cargo.toml
+        run: RUSTFLAGS="--cfg tracing_unstable" cargo test --locked --manifest-path cargo-fixtures/readme-examples/Cargo.toml
 
       - name: Rustdoc warnings
         run: RUSTDOCFLAGS="-D warnings" cargo doc --locked --workspace --all-features --no-deps
@@ -135,7 +135,18 @@ jobs:
         run: cargo test --locked -p redactable --features tracing-valuable --test integration_tracing
 
       - name: Unstable valuable tracing integration
-        run: RUSTFLAGS="--cfg tracing_unstable" cargo test --locked -p redactable --test integration_tracing --features tracing-valuable valuable_structured_output
+        env:
+          RUSTFLAGS: --cfg tracing_unstable
+        run: |
+          cargo test --locked -p redactable --test integration_tracing --features tracing-valuable
+          cargo test --locked -p redactable --test integration_tracing --features tracing-valuable,serde_json/arbitrary_precision \
+            checked_tracing_preserves_digits_beyond_valuables_numeric_range
+
+      - name: Checked logging with tracing's log bridge
+        run: >-
+          cargo test --locked -p redactable --no-default-features
+          --features log,slog,tracing,tracing/log-always --test integration_checked_slog
+          one_callsite_matches_the_native_routing_of_each_sink
 
       - name: Package contents
         run: .github/scripts/verify-package-contents.sh
@@ -153,6 +164,7 @@ jobs:
           - redaction
           - mask-map-keys
           - json
+          - log
           - slog
           - tracing
           - tracing-valuable
@@ -189,6 +201,14 @@ jobs:
           else
             cargo check --locked -p redactable --no-default-features --features "$FEATURE"
           fi
+
+      - name: Checked logging with an isolated backend
+        if: matrix.feature == 'log' || matrix.feature == 'slog' || matrix.feature == 'tracing'
+        env:
+          FEATURE: ${{ matrix.feature }}
+        run: >-
+          cargo test --locked -p redactable --no-default-features --features "$FEATURE"
+          --test integration_checked_log --test integration_checked_slog --test integration_tracing --test ui_log
 
       - name: Strict rustdoc for isolated feature
         env:

@@ -57,7 +57,7 @@ The sensitive derives also generate the integrations enabled by `slog` and
 - `Redactable`: the derive is an explicit declaration, so the type may be
   redacted and used inside sensitive containers
 - `RedactableWithFormatter`: delegates to `Display::fmt` (allows use inside `SensitiveDisplay` containers)
-- `ToRedacted`: emits the `Display` text for `slog_redacted()` and `tracing_redacted()`
+- `ToRedacted`: emits the type's `Display` text as its declared output
 - `slog::Value` and `SlogRedacted`: when `slog` feature is enabled
 - `TracingRedacted`: when `tracing` feature is enabled
 
@@ -314,6 +314,8 @@ Use `RedactedList` for a [bounded slice of producers](#bounded-list-output).
 | Method | Required bounds |
 |---|---|
 | `.to_redacted()` | `ToRedacted` |
+| `.to_redacted_cow()` | `ToRedacted` |
+| `.log_redacted_json()` | `ToRedacted` |
 | `.slog_redacted()` | `ToRedacted + Sized` |
 | `.slog_redacted_json()` | `ToRedacted` |
 | `.tracing_redacted()` | `ToRedacted` |
@@ -322,15 +324,17 @@ Use `RedactedList` for a [bounded slice of producers](#bounded-list-output).
 | `.into_tracing_redacted_debug()` | `Redactable + Debug` |
 | `.into_tracing_redacted_valuable()` | `Redactable + Valuable` |
 
-`.to_redacted()`, `.slog_redacted_json()`, and `.tracing_redacted()` also accept
-unsized producers, including `&dyn ToRedacted`. `.slog_redacted()` retains its
-`Sized` requirement.
+`.to_redacted()`, `.to_redacted_cow()`, `.log_redacted_json()`, `.slog_redacted_json()`, and
+`.tracing_redacted()` also accept unsized producers, including `&dyn ToRedacted`.
+`.slog_redacted()` retains its `Sized` requirement.
 
 ### Producer composition
 
 Structural `Redactable` traversal applies field policies and returns a value of
-the same type. Producer delegation calls an existing `ToRedacted` implementation
-and returns its owned `RedactedValue` unchanged. Neither trait implies the other.
+the same type. The forwarding implementations below reuse the inner producer's
+declared text and JSON. `to_redacted()` returns an owned value, while
+`to_redacted_cow()` can borrow a stored one. A type can implement either trait
+independently.
 
 | Producer | Required bounds | Output |
 |---|---|---|
@@ -392,8 +396,9 @@ value keeps its template text and carries the masked JSON separately.
 
 Cargo unifies this feature across users of the same resolved runtime package.
 Once enabled, every `Sensitive` or `SensitiveDual` producer from that package
-uses key masking. Producing and reusing a `RedactedValue` still clones and
-redacts only at construction; reading its text or JSON does not repeat that work.
+uses key masking. These producers clone and redact the source when they build
+the snapshot. Serializing the stored snapshot by reference borrows its JSON.
+Calling `.json()` returns an owned copy.
 
 ### When adapters run
 
@@ -401,9 +406,51 @@ redacts only at construction; reading its text or JSON does not repeat that work
 The result retains no reference to the source and has no public constructor,
 `From`, or `Deserialize` implementation.
 
-`.slog_redacted_json()` and `.tracing_redacted()` run the producer at the call.
+The checked level macros use the application's installed `log` logger by
+default when the `log` feature is enabled. Call `logging::set_sink` once to
+choose a backend for the process. A second call returns `SetSinkError`.
+An explicit `sink:` selects the destination for one event and is evaluated
+once. With `log` disabled, calls without a `sink:` before registration skip
+their fields and message arguments.
+
+The selected backend's native event macro controls when it evaluates the
+fields and message arguments. Each supplied value uses
+`ToRedacted::to_redacted_cow()`. Its default calls the existing producer.
+A saved `RedactedValue` returns a borrow, including through references,
+`Some`, `Box`, `Rc`, and `Arc`.
+
+A plain field uses the producer's JSON. `log` and synchronous slog serialization
+can borrow stored JSON directly. A slog drain that queues fields can request
+an owned copy. Stable tracing writes compact JSON into a string. With
+`tracing-valuable` and `--cfg tracing_unstable`, tracing visits nested objects
+and arrays. Ordinary JSON numbers stay numeric. With
+`serde_json/arbitrary_precision`, a decimal whose spelling changes on a
+round trip through a finite float (such as `1.00`) is emitted as its original
+text. Both `:%` and `:?` borrow stored text when available. They render compact
+JSON into a string for a JSON-only producer.
+
+In `info!(user; "signed in")`, `user` is shorthand for `user = user`.
+Each field supplied must have a unique name other than `message`.
+Format arguments use the same declared text as a text field. For example,
+`info!(user; "handled {}", job)` records a structured user and formats the
+job's text. `{:?}` quotes and escapes that text using Rust's string
+formatting. Supply named arguments explicitly as `info!("{id}", id = job)`.
+
+Inherited logger context, span fields, subscriber-added attributes, and
+forwarding through bridges such as `tracing/log-always` follow the
+application's configuration.
+
+`.log_redacted_json()`, `.slog_redacted_json()`, and `.tracing_redacted()` run
+the producer at the call.
 `.slog_redacted()` holds a reference and runs it each time slog serializes the record.
 `.redacted_display()` remains a borrowed formatting view.
+
+With `redaction`, Serde serializes a borrowed `RedactedValue` in the same shape
+as `.json()`. It borrows the stored JSON, including null, or writes a single
+`message` field for text-only output. A dual value uses its JSON representation.
+With `log`, the same value implements `log::kv::ToValue`. A backend that
+serializes key-value fields can read the value directly from a record.
+
 For the structured slog route and its nested drain setup, see the
 [runnable logging example](../README.md#slog).
 Direct borrowed native `Sensitive` and `SensitiveDual` output remains a fixed
@@ -411,12 +458,11 @@ whole-value placeholder; it does not preserve fields.
 
 ### Serialization failure
 
-JSON producers and JSON adapters use `serialize_redacted_json` for the final
-serialization step. If Serde returns an error, the entire JSON representation
-becomes the string `"[REDACTED]"`. No partial object or serializer error text is
-included. For a dual producer, its separately rendered template text remains
-available. This conversion does not catch panics in cloning, redaction,
-formatting, or serialization.
+If Serde returns an error while a producer builds its JSON, the entire
+representation becomes the string `"[REDACTED]"`. A dual producer retains its
+separately rendered template text. Serialization of a saved `RedactedValue`
+propagates errors from the destination serializer. Cloning, redaction,
+formatting, and serialization can still panic.
 
 `serialize_redacted_json` performs no redaction itself. Its input must already
 be the desired projection; serializing an original value through it preserves
@@ -436,7 +482,8 @@ The producer determines what work happens inside the adapter:
 
 Structural producers inherit every `Clone` panic. A traversed `RefCell` with a
 live mutable borrow therefore panics when the producer runs.
-This applies through `.slog_redacted()`, `.slog_redacted_json()`, and `.tracing_redacted()`.
+This applies through `.log_redacted_json()`, `.slog_redacted()`,
+`.slog_redacted_json()`, and `.tracing_redacted()`.
 
 Display producers borrow the source. Generated text/secret formatting needs no
 `Clone`; IP-map projections still clone keys and hashers. `SensitiveDisplay`
@@ -466,10 +513,10 @@ subsequent projection again.
 ## Bounded list output
 
 `RedactedList` borrows a slice of `ToRedacted` producers and requires an explicit
-nonzero item limit. It produces `{"items": [...], "omitted": count}`. Included
-producers run exactly once each in slice order; omitted producers do not run.
-Each item uses its JSON representation, including the `{"message": text}`
-fallback for text-only producers.
+nonzero item limit. It produces `{"items": [...], "omitted": count}`. The list
+requests each included item's output once in slice order and skips the rest.
+It moves newly produced JSON into the result and copies an existing snapshot's
+JSON once for the owned list. A text-only item contributes `{"message": text}`.
 
 ```rust
 use std::num::NonZeroUsize;
@@ -523,9 +570,12 @@ the wrapper's policy is authoritative.
   - Declares a value non-sensitive without choosing a logging format
   - Accepted by slog's native typed emitter, which keeps the emitted type instead of flattening it to a string; also accepts a type with neither `Display` nor `Debug`
 
-Every Bypass wrapper is a tuple struct with a public field, so
-`BypassJsonRedaction(&value)` or `BypassDisplayRedaction(text)` is the whole
-construction. `BypassRedaction<T>` and `BypassRedactionMarker<T>` do not
+Import `redactable::BypassRedactionExt` for the borrowed shortcuts.
+`value.bypass_display()` returns `BypassDisplayRedaction(&value)` for a
+`Display` value. `value.bypass_json()` returns `BypassJsonRedaction(&value)`
+for a `Serialize` value. Both expose the chosen representation in full.
+Each wrapper also has a public tuple constructor.
+`BypassRedaction<T>` and `BypassRedactionMarker<T>` do not
 implement `ToRedacted`: they carry raw application data without choosing a
 logging format.
 
@@ -538,18 +588,14 @@ any `Debug` output your callers rely on when replacing the wrapper.
 ## Migrating a local compatibility wrapper
 
 If a local wrapper exists only to combine ownership, raw Serde, common traits,
-and an explicit output format, replace it with the matching upstream type:
-
-For example, when `public_handler_result` is an application value already reviewed as public:
+and an explicit output format, replace it with the matching upstream type.
+For example, `NotSensitiveHandlerOutput<T>` can become `BypassDebugRedaction<T>`
+when the handler result's complete debug representation is public.
 
 ```rust
-# let public_handler_result = String::from("ready to review");
-// Before:
-// struct NotSensitiveHandlerOutput<T>(T);
-
-// After, when the complete Debug representation is genuinely safe to log:
 use redactable::{BypassDebugRedaction, ToRedacted};
 
+let public_handler_result = String::from("ready to review");
 let output = BypassDebugRedaction(public_handler_result);
 assert_eq!(output.to_redacted().text(), "\"ready to review\"");
 let raw_result = output.into_inner();
@@ -693,6 +739,15 @@ Valid paths beneath absent options, empty collections, or scalar parents can rem
 Include populated samples to exercise those paths.
 
 ## Upgrading
+
+When enabling a logging integration, qualify level macros (`redactable::info!`,
+`::log::info!`, `::slog::info!`, or `::tracing::info!`) or import them by name.
+Glob imports from both Redactable and a logging crate can make an unqualified
+`info!` or another level macro ambiguous.
+
+With `redaction`, `RedactedValue` implements `serde::Serialize`. If both
+`serde::Serialize` and `slog::Value` are in scope, qualify calls to
+`serde::Serialize::serialize` or `slog::Value::serialize` on a saved value.
 
 For the 0.15 upgrade, check downstream `ToRedacted` implementations for overlap
 with producer forwarding. [Migration from 0.14](../CHANGELOG.md#migration-from-014)

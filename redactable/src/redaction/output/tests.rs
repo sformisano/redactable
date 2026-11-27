@@ -1,15 +1,71 @@
-use std::collections::{BTreeMap, HashMap};
+use std::{
+    cell::Cell,
+    collections::{BTreeMap, HashMap},
+    num::NonZeroUsize,
+};
 
 use serde::{Serialize, Serializer, ser::Error};
 use serde_json::json;
 
 use crate::{
     BypassDebugRedaction, BypassDisplayRedaction, BypassJsonRedaction, NotSensitive, Redactable,
-    Secret, Sensitive, SensitiveDisplay, SensitiveDual, ToRedacted,
+    RedactedList, RedactedValue, Secret, Sensitive, SensitiveDisplay, SensitiveDual, ToRedacted,
 };
 
 const SECRET_KEY: &str = "PRIVATE-ACCOUNT-4901";
 const SECRET_VALUE: &str = "PRIVATE-TOKEN-1902";
+
+#[cfg(any(feature = "log", feature = "slog", feature = "tracing"))]
+#[test]
+fn checked_text_borrows_the_declared_string_from_a_snapshot() {
+    let text = String::from("approved text");
+    let address = text.as_ptr();
+    let snapshot = super::RedactedValue::from_text_and_json(text, json!({"status": "ready"}));
+    assert_eq!(
+        crate::__redactable_field!(text & snapshot).as_ptr(),
+        address
+    );
+}
+
+struct Once(Cell<Option<RedactedValue>>);
+
+impl ToRedacted for Once {
+    fn to_redacted(&self) -> RedactedValue {
+        self.0.take().expect("the adapter runs the producer once")
+    }
+}
+
+#[test]
+fn list_reuses_the_owned_json_of_included_items() {
+    // A string clone discards spare capacity even if the allocator recycles its address.
+    let mut text = String::with_capacity(256);
+    text.push_str("approved");
+    let allocation = (text.as_ptr(), text.capacity());
+    let snapshot = RedactedValue::from_json(serde_json::Value::String(text));
+    let items = [Once(Cell::new(Some(snapshot)))];
+
+    let list = RedactedList::new(&items, NonZeroUsize::MIN).to_redacted();
+    let serde_json::Value::String(item) = &list.structured().unwrap()["items"][0] else {
+        panic!("expected a JSON string");
+    };
+    assert_eq!((item.as_ptr(), item.capacity()), allocation);
+}
+
+#[cfg(feature = "slog")]
+#[test]
+fn owned_slog_json_reuses_the_produced_json() {
+    use crate::SlogRedactedExt;
+
+    let text = String::from("approved JSON");
+    let address = text.as_ptr();
+    let dual = RedactedValue::from_text_and_json("summary".into(), serde_json::Value::String(text));
+    let projected = Once(Cell::new(Some(dual))).slog_redacted_json();
+    assert_eq!(
+        projected.structured().unwrap().as_str().unwrap().as_ptr(),
+        address
+    );
+    assert_eq!(projected.text(), r#""approved JSON""#);
+}
 
 #[derive(Clone, PartialEq, Eq, Hash, Serialize, Sensitive)]
 struct AccountKey(#[sensitive(Secret)] String);

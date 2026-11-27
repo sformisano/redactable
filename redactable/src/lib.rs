@@ -32,11 +32,24 @@
 //! and `serde_json`.
 //!
 //! The free `redact()` function uses the lower-level mapper and can leave raw
-//! leaves unchanged. It is not a logging boundary. Logging integrations such
-//! as `slog` have their own feature flags. This crate performs no I/O or logging
-//! and does not validate your policy choices.
+//! leaves unchanged.
 //!
 //! The five derive macros live in `redactable-derive` and are re-exported here.
+//!
+//! # Checked logging
+//!
+//! Enable the `log` feature to use your application's installed logger.
+//! Write `redactable::info!(user; "signed in")` for a structured field or
+//! `redactable::info!("signed in as {}", user)` for a message. Both require
+//! `user` to implement `ToRedacted`. Import `BypassRedactionExt` to publish
+//! a value's full Display text with `channel.bypass_display()` or its JSON with
+//! `roles.bypass_json()`. Applications using slog or tracing can choose their
+//! destination once with `logging::set_sink`.
+//!
+//! A logger with Serde support for structured fields can serialize a saved
+//! `&RedactedValue` directly. See the
+//! [logging examples](https://github.com/sformisano/redactable/blob/main/README.md#integrations)
+//! for backend setup and output.
 
 // <https://doc.rust-lang.org/rustc/lints/listing/allowed-by-default.html>
 #![warn(
@@ -89,6 +102,10 @@ extern crate self as redactable;
 #[doc(hidden)]
 #[cfg(feature = "redaction")]
 pub mod __private;
+#[cfg(feature = "log")]
+pub mod log;
+#[cfg(any(feature = "log", feature = "slog", feature = "tracing"))]
+pub mod logging;
 #[cfg(feature = "policy")]
 pub mod policy;
 #[cfg(feature = "redaction")]
@@ -116,9 +133,10 @@ pub use redaction::BypassTextRedaction;
 #[cfg(feature = "redaction")]
 pub use redaction::{
     BypassDebugRedaction, BypassDisplayRedaction, BypassJsonRedaction, BypassRedaction,
-    BypassRedactionMarker, PolicyDebug, PolicyDisplay, PolicyFormat, PolicyFormattingOutput,
-    Redactable, RedactableMapper, RedactableWithFormatter, RedactedFormatterRef, RedactedList,
-    RedactedValue, ScalarRedaction, SensitiveValue, SensitiveWithPolicy, ToRedacted,
+    BypassRedactionExt, BypassRedactionMarker, PolicyDebug, PolicyDisplay, PolicyFormat,
+    PolicyFormattingOutput, Redactable, RedactableMapper, RedactableWithFormatter,
+    RedactedFormatterRef, RedactedList, RedactedValue, ScalarRedaction, SensitiveValue,
+    SensitiveWithPolicy, ToRedacted,
 };
 // Re-exports from redaction module: internal machinery (used by derive-generated code)
 #[doc(hidden)]
@@ -127,5 +145,8 @@ pub use redaction::{
     PolicyApplicable, PolicyApplicableRef, RedactableWithMapper, apply_policy, apply_policy_ref,
     redact,
 };
+
+#[cfg(feature = "log")]
+pub use log::LogRedactedExt;
 #[cfg(feature = "slog")]
 pub use slog::{RedactedDisplayValue, SlogRedactedExt};

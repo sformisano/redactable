@@ -31,7 +31,8 @@ pub use display::{RedactableWithFormatter, RedactedFormatterRef};
 #[allow(deprecated)]
 pub use escape_hatches::BypassTextRedaction;
 pub use escape_hatches::{
-    BypassDebugRedaction, BypassDisplayRedaction, BypassJsonRedaction, BypassRedactionMarker,
+    BypassDebugRedaction, BypassDisplayRedaction, BypassJsonRedaction, BypassRedactionExt,
+    BypassRedactionMarker,
 };
 pub use list::RedactedList;
 // Re-export the sink value and its producer trait

@@ -1,6 +1,12 @@
 //! Adapters for emitting redacted values through `tracing`.
 //!
-//! This module provides three explicit tracing paths:
+//! Choose [`crate::logging::Sink::Tracing`] with [`crate::logging::set_sink`]
+//! once at startup. [`crate::info!`] and the other checked level macros
+//! require [`ToRedacted`] for every field and message argument. Plain fields
+//! carry compact JSON text on stable tracing. With `tracing-valuable`,
+//! `--cfg tracing_unstable`, and a compatible subscriber, they carry nested values.
+//!
+//! Native tracing calls can use the following adapters.
 //!
 //! - **[`TracingRedactedDebugExt`]**: redacts a structural [`Redactable`] value
 //!   before handing its `Debug` form to tracing.
@@ -47,6 +53,12 @@
 //! ```
 
 use std::fmt::{Debug, Display};
+
+mod checked;
+#[doc(hidden)]
+pub use ::tracing::{Level as __Level, event as __event};
+#[doc(hidden)]
+pub use checked::JsonField as __JsonField;
 
 #[cfg(feature = "tracing-valuable")]
 use valuable::{Valuable, Value as ValuableValue, Visit as ValuableVisit};
@@ -156,7 +168,7 @@ pub trait TracingRedactedExt {
 
 impl<T: ToRedacted + ?Sized> TracingRedactedExt for T {
     fn tracing_redacted(&self) -> DisplayValue<String> {
-        display(self.to_redacted().text())
+        display(self.to_redacted_cow().text())
     }
 }
 

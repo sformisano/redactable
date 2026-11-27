@@ -55,6 +55,55 @@ mod json_value {
     }
 
     #[test]
+    fn serde_serializes_borrowed_sink_values_as_the_selected_json() {
+        let array = json!([null, {"approved": true}]);
+        let dual = Decision {
+            owner: "Ada".into(),
+            approved: true,
+        }
+        .to_redacted();
+        for (saved, expected) in [
+            (BypassJsonRedaction(&array).to_redacted(), array),
+            (
+                BypassDisplayRedaction("declined").to_redacted(),
+                json!({"message": "declined"}),
+            ),
+            (().to_redacted(), Value::Null),
+            (dual, json!({"owner": "[REDACTED]", "approved": true})),
+        ] {
+            assert_eq!(serde_json::to_value(&saved).unwrap(), expected);
+        }
+    }
+
+    #[test]
+    fn producer_trait_borrows_the_same_saved_value_through_wrappers() {
+        use std::{borrow::Cow, ptr, rc::Rc, sync::Arc};
+
+        fn assert_borrowed(producer: &dyn ToRedacted, saved: &RedactedValue) {
+            let Cow::Borrowed(borrowed) = producer.to_redacted_cow() else {
+                panic!("expected a borrowed sink value");
+            };
+            assert!(ptr::eq(borrowed, saved));
+        }
+
+        let source = Decision {
+            owner: "Alice".into(),
+            approved: true,
+        };
+        let Cow::Owned(saved) = source.to_redacted_cow() else {
+            panic!("expected a newly produced sink value");
+        };
+        let mut reference = &saved;
+        assert_borrowed(&saved, &saved);
+        assert_borrowed(&&saved, &saved);
+        assert_borrowed(&&mut reference, &saved);
+        assert_borrowed(&Some(&saved), &saved);
+        assert_borrowed(&Box::new(&saved), &saved);
+        assert_borrowed(&Rc::new(&saved), &saved);
+        assert_borrowed(&Arc::new(&saved), &saved);
+    }
+
+    #[test]
     fn generated_json_reaches_sink_and_retains_dual_template_and_raw_transport() {
         let decision = Decision {
             owner: "Ada".into(),

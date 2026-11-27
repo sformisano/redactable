@@ -6,6 +6,21 @@
 //! Use `SlogRedactedExt::slog_redacted_json` for selected structured fields.
 //! Direct borrowed `Sensitive` and `SensitiveDual` output is an opaque placeholder.
 //!
+//! Select your logger once with [`crate::logging::set_sink`] and
+//! [`crate::logging::Sink::Slog`]. Redactable's checked macros select JSON for
+//! plain fields. The `:%` and `:?` selectors use the producer's redacted text.
+//! A nested-value drain can read an existing snapshot by reference or request
+//! an owned copy for asynchronous logging.
+//!
+//! ```compile_fail
+//! redactable::info!(count = 42_u32; "reviewed");
+//! ```
+//!
+//! ```compile_fail
+//! let token = String::from("raw token");
+//! redactable::warn!(token:?; "retrying");
+//! ```
+//!
 //! It is responsible for:
 //! - Applying the operation selected by each adapter or named declaration.
 //! - Avoiding fallible logging APIs: serialization failures are represented as
@@ -50,18 +65,67 @@ pub trait SlogRedacted: SlogValue {}
 
 impl<T: SlogRedacted + ?Sized> SlogRedacted for &T {}
 
+#[doc(hidden)]
+pub use ::slog::{Level as __Level, log as __log};
+
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __redactable_emit_slog {
+    (@level Warn) => { $crate::slog::__Level::Warning };
+    (@level $level:ident) => { $crate::slog::__Level::$level };
+    (@field [] ($value:expr)) => {
+        $crate::slog::__json($crate::__redactable_field!(json $value))
+    };
+    (@field [%] ($value:expr)) => { $crate::__redactable_field!(text $value) };
+    (@field [?] ($value:expr)) => { $crate::__redactable_field!(text $value) };
+    ($level:ident, $destination:expr, [$($key:ident [$($mode:tt)?] ($value:expr)),*], $message:expr) => {{
+        // slog's kv! uses SingleKV::from in the caller's scope.
+        #[allow(unused_imports)]
+        use ::core::convert::From as _;
+        $crate::slog::__log!(
+            $destination, $crate::__redactable_emit_slog!(@level $level), "",
+            "{}", $message;
+            $(::core::stringify!($key) => $crate::__redactable_emit_slog!(@field [$($mode)?] ($value))),*
+        )
+    }};
+}
+
+/// Keep the snapshot borrowed until a drain requests ownership.
+#[derive(Serialize)]
+#[serde(transparent)]
+struct BorrowedJson<'a>(&'a RedactedValue);
+
+impl SlogValue for BorrowedJson<'_> {
+    fn serialize(&self, _: &Record<'_>, key: Key, serializer: &mut dyn Serializer) -> SlogResult {
+        serializer.emit_serde(key, self)
+    }
+}
+
+impl slog::SerdeValue for BorrowedJson<'_> {
+    fn as_serde(&self) -> &dyn erased_serde::Serialize {
+        self.0
+    }
+
+    fn to_sendable(&self) -> Box<dyn slog::SerdeValue + Send + 'static> {
+        Box::new(Serde(self.0.json()))
+    }
+}
+
+#[doc(hidden)]
+pub fn __json(value: &RedactedValue) -> impl SlogValue + '_ {
+    BorrowedJson(value)
+}
+
 fn emit_value(
     value: &RedactedValue,
     record: &Record<'_>,
     key: Key,
     serializer: &mut dyn Serializer,
 ) -> SlogResult {
-    match value.structured() {
-        Some(json) => {
-            let nested = Serde(json.clone());
-            SlogValue::serialize(&nested, record, key, serializer)
-        }
-        None => serializer.emit_str(key, &value.text()),
+    if value.structured().is_some() {
+        SlogValue::serialize(&BorrowedJson(value), record, key, serializer)
+    } else {
+        serializer.emit_str(key, value.message_field().1)
     }
 }
 
@@ -70,7 +134,7 @@ fn emit_value(
 // =============================================================================
 //
 // Most types in this module share the same SlogValue body: delegate to
-// `emit_value(&self.to_redacted(), ...)`. This macro generates both
+// `emit_value(&self.to_redacted_cow(), ...)`. This macro generates both
 // the SlogValue and SlogRedacted impls for those types.
 
 macro_rules! impl_slog_redacted {
@@ -83,7 +147,7 @@ macro_rules! impl_slog_redacted {
                 key: Key,
                 serializer: &mut dyn Serializer,
             ) -> SlogResult {
-                emit_value(&self.to_redacted(), record, key, serializer)
+                emit_value(&self.to_redacted_cow(), record, key, serializer)
             }
         }
 
@@ -98,7 +162,7 @@ macro_rules! impl_slog_redacted {
                 key: Key,
                 serializer: &mut dyn Serializer,
             ) -> SlogResult {
-                emit_value(&self.to_redacted(), record, key, serializer)
+                emit_value(&self.to_redacted_cow(), record, key, serializer)
             }
         }
 
@@ -167,7 +231,7 @@ impl_slog_redacted!(@ [T] BypassJsonRedaction<'_, T> where T: Serialize + ?Sized
 pub trait SlogRedactedExt: ToRedacted {
     /// Wraps `&self` for slog logging of its redacted text.
     ///
-    /// A JSON-carrying value is emitted as compact JSON text, as with
+    /// A JSON-only producer emits compact JSON text, as with
     /// tracing's display adapter.
     ///
     /// This borrowed adapter requires a sized producer. The owned JSON adapter
@@ -195,7 +259,7 @@ pub trait SlogRedactedExt: ToRedacted {
     /// string `"[REDACTED]"`.
     #[must_use]
     fn slog_redacted_json(&self) -> RedactedValue {
-        RedactedValue::from_json(self.to_redacted().json())
+        RedactedValue::from_json(RedactedValue::json_from(self))
     }
 }
 
@@ -260,8 +324,8 @@ where
         key: Key,
         serializer: &mut dyn Serializer,
     ) -> SlogResult {
-        let text = self.0.to_redacted().text();
-        serializer.emit_str(key, &text)
+        let value = self.0.to_redacted_cow();
+        serializer.emit_str(key, &value.text_view())
     }
 }
 

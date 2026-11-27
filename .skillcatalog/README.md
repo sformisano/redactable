@@ -1,7 +1,7 @@
 # Redactable skill catalog
 
 The editable catalog lives in [catalog](catalog/). Its guidance targets
-Redactable 0.15. Skills guide decisions; the
+Redactable 0.16. Skills guide decisions; the
 [README](../README.md) and [reference](../docs/reference.md) own API mechanics.
 The README's [disclosure decision](../README.md#choose-what-diagnostics-retain)
 owns the product baseline for useful context and protected values.
@@ -12,7 +12,7 @@ Sibling mentions no longer declare circular installation dependencies: each
 skill stands alone and links to the product documentation it needs. Skill links
 are absolute repository URLs so they remain usable after installation elsewhere.
 They point at current documentation; use the consumer's locked revision when its
-version differs from the catalog's 0.15 target.
+version differs from the catalog's 0.16 target.
 
 ## Installation
 
@@ -64,7 +64,7 @@ When library behavior changes, inspect the skill that owns the affected decision
 | `redactable-derive-selection` | Structured, text, dual, or public output | [Derive contracts](../docs/reference.md#what-each-derive-generates) |
 | `redactable-field-policies` | What each field may reveal | [Policies](../README.md#policies-and-reference), [supported types](../docs/reference.md#supported-types) |
 | `redactable-wrappers-and-escape-hatches` | Policy ownership, foreign types, bypasses | [Wrapper contracts](../docs/reference.md#wrapper-contracts) |
-| `redactable-logging-boundaries` | Conversion, sink representation, cost | [Adapter contracts](../docs/reference.md#output-and-adapter-contracts) |
+| `redactable-logging-boundaries` | Checked fields, sink representation, cost | [Checked logging](../README.md#checked-logging), [adapter contracts](../docs/reference.md#output-and-adapter-contracts) |
 | `redactable-review-checklist` | Evidence and findings across an existing change | [Testing](../docs/reference.md#testing-redacted-output), [upgrades](../docs/reference.md#upgrading) |
 
 Run these checks from the repository root, with `TMPDIR` set to an existing

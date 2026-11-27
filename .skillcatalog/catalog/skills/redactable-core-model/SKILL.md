@@ -5,12 +5,12 @@ metadata:
   skillcatalog/display_name: "Redactable Core Model"
   skillcatalog/author: "Salvatore Formisano"
   skillcatalog/created_at: "2026-04-29T15:18:46Z"
-  skillcatalog/updated_at: "2026-10-24T00:00:00Z"
+  skillcatalog/updated_at: "2026-11-26T23:33:56Z"
 ---
 # Redactable Core Model
 
 Use Redactable when typed Rust values need an explicit disclosure policy for
-logs, diagnostics, or other selected output. This guidance targets 0.15; check
+logs, diagnostics, or other selected output. This guidance targets 0.16; check
 the consumer's locked version before applying version-specific contracts.
 
 ## Decide what is being protected
@@ -52,8 +52,9 @@ structural redaction.
 
 ## Recognize the limits
 
-Require an explicit redacted operation or reviewed logging adapter on paths that
-may carry sensitive data. A derive elsewhere in the object graph is insufficient.
+Use Redactable's checked logging macros when every field at a log call needs
+a declared policy. For other observation paths, trace the redacted operation
+or reviewed adapter that produces the output.
 The low-level free `redact(value)` function can leave raw leaves unchanged.
 Generated `Debug` also differs by derive and field declaration; do not infer its
 disclosure from the word “redacted.”
