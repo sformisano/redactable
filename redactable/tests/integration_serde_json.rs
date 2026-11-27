@@ -277,6 +277,50 @@ mod maps {
     use serde_json::{Value, json};
 
     #[test]
+    fn custom_and_json_string_map_keys_follow_the_key_masking_feature() {
+        use std::collections::HashMap;
+
+        use redactable::ToRedacted;
+        use serde::Serialize;
+
+        #[derive(Clone, Debug, Eq, Hash, PartialEq, Serialize)]
+        enum Source {
+            Api,
+        }
+
+        #[derive(Clone, Serialize, Sensitive)]
+        struct Entry {
+            #[not_sensitive]
+            count: u32,
+            #[sensitive(Secret)]
+            details: Value,
+        }
+
+        #[derive(Clone, Serialize, Sensitive)]
+        struct Report {
+            sources: HashMap<Source, HashMap<Value, Entry>>,
+        }
+
+        let entry = Entry {
+            count: 7,
+            details: json!({"token": "private-token"}),
+        };
+        let entries = HashMap::from([(json!("customer-42"), entry)]);
+        let report = Report {
+            sources: HashMap::from([(Source::Api, entries)]),
+        };
+        let (source, customer) = if cfg!(feature = "mask-map-keys") {
+            ("[REDACTED-KEY-0]", "[REDACTED-KEY-0]")
+        } else {
+            ("Api", "customer-42")
+        };
+        assert_eq!(
+            report.to_redacted().json(),
+            json!({"sources": {source: {customer: {"count": 7, "details": "[REDACTED]"}}}})
+        );
+    }
+
+    #[test]
     fn redacts_hashmap_values() {
         use std::collections::HashMap;
 

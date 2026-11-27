@@ -378,6 +378,11 @@ implies `redaction`. It affects the JSON produced by `Sensitive` and
 `SensitiveDual`, including JSON reached through logging adapters. A JSON-only
 producer's `text()` also uses the masked JSON.
 
+For example, a map keyed by a customer's email retains the email in producer
+JSON even when `#[sensitive(Secret)]` masks the map's values. Enabling
+`mask-map-keys` replaces that email with a positional key. The same rule
+applies when the key is a `serde_json::Value::String`.
+
 Masking follows the typed serializer's Serde calls, before JSON loses the
 distinction between a map key and a struct field name. Each map receives positional keys
 `[REDACTED-KEY-0]`, `[REDACTED-KEY-1]`, and so on. Nested maps are masked too;
