@@ -137,6 +137,11 @@ jobs:
       - name: Independent build and application backend features
         run: cargo check --manifest-path cargo-fixtures/host-target-backends/Cargo.toml
 
+      - name: Map-key masking with and without raw JSON support
+        run: |
+          cargo test --locked --manifest-path cargo-fixtures/readme-examples/Cargo.toml --test mask_raw_json --features mask-map-keys
+          cargo test --locked --manifest-path cargo-fixtures/readme-examples/Cargo.toml --test mask_raw_json --features raw-json
+
       - name: Panic-abort RefCell fixture
         run: cargo test --locked -p redactable --test followup_refcell_panic_abort --features slog,tracing
 

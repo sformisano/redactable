@@ -8,6 +8,8 @@ rust-version = "1.97"
 publish = false
 
 [features]
+mask-map-keys = ["redactable/mask-map-keys"]
+raw-json = ["mask-map-keys", "serde_json/raw_value"]
 preserve-order = ["serde_json/preserve_order"]
 
 [dependencies]
@@ -19,6 +21,10 @@ slog = "2.8"
 slog-json = { version = "2.6", features = ["nested-values"] }
 tracing = "0.1"
 valuable = { version = "0.1", features = ["derive"] }
+
+[[test]]
+name = "mask_raw_json"
+required-features = ["mask-map-keys"]
 
 [[example]]
 name = "flexi_logger_json"
