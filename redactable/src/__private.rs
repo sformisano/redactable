@@ -41,6 +41,29 @@ pub use serde_json;
 #[cfg(feature = "slog")]
 pub use slog;
 
+// Cargo can share one host proc macro between runtime crates with different
+// features. Resolve these gates through the runtime that each derive uses.
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __redactable_include_impls {
+    ($($implementation:item)*) => { $($implementation)* };
+}
+
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __redactable_omit_impls {
+    ($($implementation:item)*) => {};
+}
+
+#[cfg(feature = "slog")]
+pub use crate::__redactable_include_impls as with_slog;
+#[cfg(feature = "tracing")]
+pub use crate::__redactable_include_impls as with_tracing;
+#[cfg(not(feature = "slog"))]
+pub use crate::__redactable_omit_impls as with_slog;
+#[cfg(not(feature = "tracing"))]
+pub use crate::__redactable_omit_impls as with_tracing;
+
 /// Default mapper used by generated private field operations.
 pub use crate::redaction::{PolicyFormattingMapper, PolicyMapper};
 

@@ -261,8 +261,9 @@ value as secret. `Sensitive`'s generated `Debug` instead delegates an unannotate
 JSON field to its original `Debug`, which can expose the entire payload.
 
 For useful diagnostics, select known fields into a typed view with their own
-policies. Keep the raw payload for business use. This example preserves review
-context and protects a concrete credential:
+policies. Keep the raw payload for business use. Add `serde_json = "1"` to
+`[dependencies]` to run this example. The view keeps the review title and
+request ID while masking the access token.
 
 ```rust
 use redactable::{Secret, Sensitive, ToRedacted};
@@ -1086,7 +1087,9 @@ Import `set_sink` and `Sink` from `redactable::logging` when selecting a
 backend explicitly. Calls with no `sink:` use native `log` until then if
 its feature is enabled. With `log` disabled, those calls begin emitting after
 setup. A request with its own slog logger can select the destination for one
-call with `info!(sink: &request_sink, job; "job accepted")`.
+call with `info!(sink: &request_sink, job; "job accepted")`. A backend filter
+can discard an event after its field and message expressions run. See
+[when adapters run](docs/reference.md#when-adapters-run) for backend details.
 
 ### log
 
@@ -1235,9 +1238,12 @@ slog::info!(logger, "review requested"; "event" => event.slog_redacted_json());
 assert_eq!(event.access_token, "example-access-token");
 ```
 
-The default `slog-json` drain writes `"msg": "review requested"` and the nested
-`event` object side by side. The object retains `request_id`, `title`, and
-`attempts` while `access_token` is `"[REDACTED]"`.
+The default `slog-json` drain writes `msg`, `level`, and `ts` beside the nested
+`event` object. Here `msg` is `"review requested"`. The object retains
+`request_id`, `title`, and `attempts` while `access_token` is `"[REDACTED]"`.
+Keep application fields with those names inside `event`. A top-level field or
+logger context named `msg`, `level`, or `ts` produces a duplicate JSON key,
+and a reader can silently replace the drain's value with the application value.
 
 Direct borrowed native output is a coarse fallback: passing `"event" => &event`
 for a `Sensitive` or `SensitiveDual` value emits only `"[REDACTED]"`.
@@ -1446,8 +1452,9 @@ included.
 
 If map keys can contain private identifiers, enable `mask-map-keys`. It replaces
 map keys in `Sensitive` and `SensitiveDual` producer JSON with positional names
-such as `[REDACTED-KEY-0]`. Names emitted through Serde's struct methods remain;
-flattened fields and tags emitted as map keys are masked too. The feature also
+such as `[REDACTED-KEY-0]`. Typed struct field names remain visible. Flattened
+fields, tags emitted as map keys, and object keys in parsed
+`serde_json::value::RawValue` fragments are masked. The feature also
 protects the compact text produced from JSON-only output. Templates and ordinary
 Serde serialization keep their existing behavior. The
 [map-key output contract](docs/reference.md#map-key-output) explains public
@@ -1473,11 +1480,10 @@ fn capture(value: &impl ToRedacted) -> String {
 }
 
 let result = LoginResult { owner: "alice@example.com".into(), accepted: true };
-assert_eq!(capture(&result), r#"{"accepted":true,"owner":"al***@example.com"}"#);
-assert_eq!(
-    result.to_redacted().json(),
-    serde_json::json!({"accepted": true, "owner": "al***@example.com"})
-);
+let expected = serde_json::json!({"accepted": true, "owner": "al***@example.com"});
+let captured: serde_json::Value = serde_json::from_str(&capture(&result)).unwrap();
+assert_eq!(captured, expected);
+assert_eq!(result.to_redacted().json(), expected);
 
 // A plain string reaches the same sink through an explicit escape.
 let public = BypassDisplayRedaction("public readiness message");

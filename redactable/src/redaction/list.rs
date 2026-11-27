@@ -27,10 +27,18 @@ use super::output::{RedactedValue, ToRedacted};
 ///     "items": [{"message": "public"}], "omitted": 1
 /// }));
 /// ```
-#[derive(Clone, Copy)]
 pub struct RedactedList<'a, T> {
     items: &'a [T],
     limit: NonZeroUsize,
+}
+
+// Copying the view copies its slice reference, regardless of the item type.
+impl<T> Copy for RedactedList<'_, T> {}
+
+impl<T> Clone for RedactedList<'_, T> {
+    fn clone(&self) -> Self {
+        *self
+    }
 }
 
 impl<'a, T: ToRedacted> RedactedList<'a, T> {

@@ -378,8 +378,24 @@ serializer's variant methods remain visible. `#[serde(flatten)]` uses
 `SerializeMap`, so all its object keys are masked, including ordinary fields
 beside the flattened field. An internally tagged newtype containing a map also
 emits its tag as a map key; that key is masked while the variant-name value
-remains. Entry count and serialization order are preserved. Hash-map
-placeholders follow the map's iteration order and are not stable identifiers.
+remains. Each index identifies one entry in the source map's traversal order.
+The resulting JSON object retains the entries. Its iteration and serialized key
+order depend on the JSON map implementation. For example, the default sorted
+map orders `[REDACTED-KEY-10]` before `[REDACTED-KEY-1]`. Hash-map
+iteration order can also change between runs.
+
+When Serde emits a `serde_json::value::RawValue` as raw JSON, the masker
+parses it into a `serde_json::Value` and replaces the keys in each resulting
+object, including objects inside arrays. `RawValue` requires
+`serde_json/raw_value`. Duplicate keys, reserved representations, and numeric
+precision follow Serde JSON's parsing rules.
+
+Applying `#[serde(flatten)]` directly to a `RawValue` field emits the fragment
+as a string in a map entry. Key masking preserves string contents, including
+private keys inside JSON-looking text. To mask those keys, keep the fragment in
+a named field without `flatten`, or parse it into a JSON object before flattening
+it. Flattening an ordinary struct that contains a named `RawValue` field
+preserves the raw fragment as JSON, so the masker still reaches its object keys.
 
 Every map key inside that sensitive producer is masked, including maps in
 `#[not_sensitive]` fields or `BypassRedaction` fields. These field declarations
@@ -413,9 +429,15 @@ An explicit `sink:` selects the destination for one event and is evaluated
 once. With `log` disabled, calls without a `sink:` before registration skip
 their fields and message arguments.
 
-The selected backend's native event macro controls when it evaluates the
-fields and message arguments. Each supplied value uses
-`ToRedacted::to_redacted_cow()`. Its default calls the existing producer.
+The native backend controls when field and message expressions run. The global
+`log` level filter and slog's compile-time level filter can skip them entirely.
+A logger's target filter or a slog drain can discard the record after its
+expressions run. Tracing can skip a disabled callsite, although a configured
+logging bridge can still request the event. Keep side effects outside logging
+expressions when the application depends on them.
+
+Each supplied value uses `ToRedacted::to_redacted_cow()`. Its default calls
+the existing producer.
 A saved `RedactedValue` returns a borrow, including through references,
 `Some`, `Box`, `Rc`, and `Arc`.
 

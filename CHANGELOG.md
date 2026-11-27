@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.16.1 - 2026-11-27
+
+### Fixed
+
+- With `mask-map-keys`, sensitive JSON producers now mask object keys inside
+  `serde_json::value::RawValue`, including objects nested in arrays. Previous
+  versions could write those keys to logs even when the same keys in a typed
+  map were masked.
+- The five derives use the backend features enabled on the corresponding
+  runtime crate. Build dependencies can enable a different logging backend
+  from the application.
+- A borrowed `RedactedList` can be copied and cloned regardless of its item
+  type. The native tracing display adapter reuses freshly produced text.
+- The documentation examples include their required imports and dependencies.
+  The reference clarifies masked key ordering, and the slog example explains
+  how to avoid collisions with the JSON drain's metadata.
+
 ## 0.16.0 - 2026-11-27
 
 ### Added

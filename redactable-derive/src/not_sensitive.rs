@@ -171,8 +171,8 @@ pub(crate) fn expand_not_sensitive(input: DeriveInput) -> Result<TokenStream> {
     let generated = quote! {
         #container_impl
         #to_redacted_impl
-        #slog_impl
-        #tracing_impl
+        #crate_root::__private::with_slog! { #slog_impl }
+        #crate_root::__private::with_tracing! { #tracing_impl }
     };
     Ok(isolate_generated_items(generated, &fresh))
 }
@@ -264,8 +264,8 @@ pub(crate) fn expand_not_sensitive_display(input: DeriveInput) -> Result<TokenSt
     let generated = quote! {
         #container_impl
         #redacted_display_impl
-        #slog_impl
-        #tracing_impl
+        #crate_root::__private::with_slog! { #slog_impl }
+        #crate_root::__private::with_tracing! { #tracing_impl }
     };
     Ok(isolate_generated_items(generated, &fresh))
 }
