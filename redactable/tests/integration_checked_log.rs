@@ -77,6 +77,20 @@ struct Outcome {
 }
 
 #[test]
+fn sink_selection_can_return_early_or_await_in_a_send_future() {
+    fn log_if_configured(sink: Option<&Sink>) -> Option<()> {
+        checked_info!(sink?, "ready");
+        Some(())
+    }
+    assert_eq!(log_if_configured(None), None);
+
+    fn require_send(_: impl Send) {}
+    require_send(async {
+        checked_info!(std::future::ready(Sink::Log).await, "ready");
+    });
+}
+
+#[test]
 fn checked_levels_send_declared_fields_and_preserve_the_call_site() {
     static LOG: Capture = Capture(Mutex::new(Vec::new()));
     ::log::set_logger(&LOG).unwrap();

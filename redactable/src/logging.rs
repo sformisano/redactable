@@ -169,9 +169,10 @@ macro_rules! __redactable_event {
     };
     (@modes [] ($level:ident, $sink:expr, $fields:tt, $message:literal)) => {{
         const _: &::core::primitive::str = $message;
+        let selected_sink = &$sink;
         // A format string expanded by concat! cannot capture caller variables.
         let message = const { ::core::format_args!(::core::concat!($message)) };
-        match $crate::logging::Sink::route(&$sink) {
+        match $crate::logging::Sink::route(selected_sink) {
             $crate::logging::Route::Log => {
                 $crate::logging::__emit_log!($level, (), $fields, message)
             }
