@@ -41,9 +41,10 @@
 //! Enable the `log` feature to use your application's installed logger.
 //! Write `redactable::info!(user; "signed in")` for a structured field or
 //! `redactable::info!("signed in as {}", user)` for a message. Both require
-//! `user` to implement `ToRedacted`. To publish an ordinary string explicitly,
-//! use `BypassDisplayRedaction(&channel)`. Applications using slog or tracing
-//! can choose their destination once with `logging::set_sink`.
+//! `user` to implement `ToRedacted`. Import `BypassRedactionExt` to publish
+//! a value's full Display text with `channel.bypass_display()` or its JSON with
+//! `roles.bypass_json()`. Applications using slog or tracing can choose their
+//! destination once with `logging::set_sink`.
 //!
 //! A logger with Serde support for structured fields can serialize a saved
 //! `&RedactedValue` directly. See the
@@ -132,9 +133,10 @@ pub use redaction::BypassTextRedaction;
 #[cfg(feature = "redaction")]
 pub use redaction::{
     BypassDebugRedaction, BypassDisplayRedaction, BypassJsonRedaction, BypassRedaction,
-    BypassRedactionMarker, PolicyDebug, PolicyDisplay, PolicyFormat, PolicyFormattingOutput,
-    Redactable, RedactableMapper, RedactableWithFormatter, RedactedFormatterRef, RedactedList,
-    RedactedValue, ScalarRedaction, SensitiveValue, SensitiveWithPolicy, ToRedacted,
+    BypassRedactionExt, BypassRedactionMarker, PolicyDebug, PolicyDisplay, PolicyFormat,
+    PolicyFormattingOutput, Redactable, RedactableMapper, RedactableWithFormatter,
+    RedactedFormatterRef, RedactedList, RedactedValue, ScalarRedaction, SensitiveValue,
+    SensitiveWithPolicy, ToRedacted,
 };
 // Re-exports from redaction module: internal machinery (used by derive-generated code)
 #[doc(hidden)]

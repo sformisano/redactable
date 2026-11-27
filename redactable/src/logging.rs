@@ -18,8 +18,9 @@
 //! field selects JSON. Both `key:%` and `key:?` select the declared text.
 //! Message arguments format that text, with standard Rust string formatting.
 //! Supply named arguments explicitly, as in `info!("checked {who}", who = user)`.
-//! Use [`crate::BypassDisplayRedaction`], [`crate::BypassDebugRedaction`], or
-//! [`crate::BypassJsonRedaction`] to publish an ordinary value explicitly.
+//! Import [`crate::BypassRedactionExt`] to publish an ordinary value explicitly
+//! with `.bypass_display()` or `.bypass_json()`. For Debug output, use
+//! [`crate::BypassDebugRedaction`].
 //!
 //! Each field needs a unique name. The name `message` is reserved for the
 //! event text. For a single event with a contextual destination, use

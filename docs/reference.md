@@ -570,9 +570,12 @@ the wrapper's policy is authoritative.
   - Declares a value non-sensitive without choosing a logging format
   - Accepted by slog's native typed emitter, which keeps the emitted type instead of flattening it to a string; also accepts a type with neither `Display` nor `Debug`
 
-Every Bypass wrapper is a tuple struct with a public field, so
-`BypassJsonRedaction(&value)` or `BypassDisplayRedaction(text)` is the whole
-construction. `BypassRedaction<T>` and `BypassRedactionMarker<T>` do not
+Import `redactable::BypassRedactionExt` for the borrowed shortcuts.
+`value.bypass_display()` returns `BypassDisplayRedaction(&value)` for a
+`Display` value. `value.bypass_json()` returns `BypassJsonRedaction(&value)`
+for a `Serialize` value. Both expose the chosen representation in full.
+Each wrapper also has a public tuple constructor.
+`BypassRedaction<T>` and `BypassRedactionMarker<T>` do not
 implement `ToRedacted`: they carry raw application data without choosing a
 logging format.
 

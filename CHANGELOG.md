@@ -7,7 +7,9 @@
 - `redactable::error!`, `warn!`, `info!`, `debug!`, and `trace!` accept
   messages and structured fields, such as `info!(user; "signed in")` and
   `info!("signed in as {}", user)`. Each field and format argument requires
-  `ToRedacted`. The existing format-specific bypasses allow explicit disclosure.
+  `ToRedacted`.
+- `BypassRedactionExt` adds `.bypass_display()` and `.bypass_json()` to
+  explicitly log a borrowed value through its Display or Serde representation.
 - Checked calls use the application's installed `log` logger when the `log`
   feature is enabled. Select a slog logger or tracing once with
   `logging::set_sink`, or supply `sink:` for one event.

@@ -6,7 +6,7 @@ use std::{cell::Cell, fmt, sync::Mutex};
 
 use ::log::{Level, LevelFilter, Log, Metadata, Record};
 use redactable::{
-    BypassDebugRedaction, BypassDisplayRedaction, BypassJsonRedaction, NotSensitive, RedactedValue,
+    BypassDebugRedaction, BypassDisplayRedaction, BypassRedactionExt, NotSensitive, RedactedValue,
     ToRedacted, debug, error, info as checked_info, logging::Sink, trace, warn,
 };
 use redactable_test_fixtures::{FixtureUser, GenericDualFixture};
@@ -104,6 +104,7 @@ fn checked_levels_send_declared_fields_and_preserve_the_call_site() {
         api_key: secret.into(),
     };
     let saved = user.to_redacted();
+    let status = 200_u16;
     let projection = Projection {
         token: secret,
         calls: Cell::new(0),
@@ -125,9 +126,9 @@ fn checked_levels_send_declared_fields_and_preserve_the_call_site() {
         user, outcome = Outcome { accepted: true }, cached = &saved,
         data = select(), selected_display:% = select(), selected_debug:? = select(),
         text = BypassDisplayRedaction("public text"),
-        display:% = BypassDisplayRedaction("public display"),
+        display:% = status.bypass_display(), status = status.bypass_json(),
         debug:? = BypassDebugRedaction("public debug"),
-        roles = BypassJsonRedaction(&["reader", "writer"]);
+        roles = ["reader", "writer"].bypass_json();
         "signed in {{audit}}"
     );
     error!("error");
@@ -148,7 +149,7 @@ fn checked_levels_send_declared_fields_and_preserve_the_call_site() {
             "user": expected_user, "outcome": {"accepted": true}, "cached": expected_user,
             "data": {"label": "selected", "secret": "[REDACTED]"},
             "selected_display": "selected: [REDACTED]", "selected_debug": "selected: [REDACTED]",
-            "text": {"message": "public text"}, "display": "public display",
+            "text": {"message": "public text"}, "display": "200", "status": 200,
             "debug": "\"public debug\"", "roles": ["reader", "writer"]
         })
     );

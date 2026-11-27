@@ -860,8 +860,10 @@ type containing just the fields you intend to log.
 | Foreign value at a `Redactable`-bounded boundary | `BypassRedaction<T>` |
 | Public value using slog's native typed output, even without `Display` or `Debug` | `BypassRedactionMarker<T>` |
 
-Bypass wrappers use tuple construction: `BypassJsonRedaction(&value)` or
-`BypassDisplayRedaction(text)`. `BypassRedaction` and `BypassRedactionMarker`
+Import `redactable::BypassRedactionExt` to borrow a public value with
+`value.bypass_display()` or `value.bypass_json()`. Use the tuple constructor
+`BypassDisplayRedaction(value)` when the wrapper should own the value.
+`BypassRedaction` and `BypassRedactionMarker`
 do not implement `ToRedacted`, because neither chooses a logging format.
 
 `BypassTextRedaction` remains available but is deprecated. Use
@@ -1055,9 +1057,20 @@ info!("received {}", raw);
 ```
 
 A saved `&RedactedValue` works directly as a field or message argument.
-To publish an ordinary value deliberately, use `BypassJsonRedaction(&value)`,
-`BypassDisplayRedaction(&value)`, or `BypassDebugRedaction(&value)` for the
-representation you intend to expose.
+To publish an ordinary value deliberately, choose its Display text or its
+JSON representation. Both methods borrow the value.
+
+```rust
+use redactable::{info, BypassRedactionExt};
+
+let region = String::from("eu-west");
+let roles = ["reader", "writer"];
+info!(roles = roles.bypass_json(); "serving {}", region.bypass_display());
+```
+
+Here the selected JSON for `roles` is `["reader", "writer"]`, and the
+message reads `serving eu-west`. Use `BypassDebugRedaction(&value)` for
+explicit Debug output.
 
 The application configures its backend once. The calls above work with all
 three integrations.
