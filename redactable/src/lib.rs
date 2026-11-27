@@ -4,6 +4,9 @@
 //! by field. Credentials use `Secret`; partial policies such as `Token` and
 //! `Email` retain fragments that need their own diagnostic purpose.
 //! Public fields use `#[not_sensitive]`; nested types retain their own policies.
+//! For a `serde_json::Value` field in `Sensitive` or `SensitiveDual`, choose
+//! `#[sensitive(Secret)]` to mask the payload or `#[not_sensitive]` to keep it.
+//! This also applies to type aliases and JSON values inside traversed containers.
 //!
 //! Use `Redactable::redact()` to transform a value whose type declares redaction
 //! behavior. Use `ToRedacted` to produce owned text or JSON for logging.

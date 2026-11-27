@@ -5,11 +5,11 @@ metadata:
   skillcatalog/display_name: "Redactable Derive Selection"
   skillcatalog/author: "Salvatore Formisano"
   skillcatalog/created_at: "2026-04-29T15:18:46Z"
-  skillcatalog/updated_at: "2026-11-26T23:33:56Z"
+  skillcatalog/updated_at: "2026-11-27T23:07:00Z"
 ---
 # Redactable Derive Selection
 
-For Redactable 0.16, choose from the output the caller needs and the containing
+For Redactable 0.17, choose from the output the caller needs and the containing
 types that must use it. Do not select a derive merely to satisfy a trait error.
 
 ## Choose the smallest sufficient output

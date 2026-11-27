@@ -5,11 +5,11 @@ metadata:
   skillcatalog/display_name: "Redactable Field Policies"
   skillcatalog/author: "Salvatore Formisano"
   skillcatalog/created_at: "2026-04-29T15:18:46Z"
-  skillcatalog/updated_at: "2026-11-26T23:33:56Z"
+  skillcatalog/updated_at: "2026-11-27T23:07:00Z"
 ---
 # Redactable Field Policies
 
-For Redactable 0.16, choose field disclosure from the intended audience and the
+For Redactable 0.17, choose field disclosure from the intended audience and the
 value's meaning. Confirm the consumer's locked version before applying library
 contracts. A policy name does not establish the right disclosure.
 The [product disclosure decision](https://github.com/sformisano/redactable/blob/main/README.md#choose-what-diagnostics-retain)
@@ -94,12 +94,11 @@ if the output needs to preserve cardinality, and decide whether revealing that
 cardinality is itself acceptable. Scalar replacement can also create ordinary
 values such as zero; do not feed that projection back into business decisions.
 
-Dynamic JSON is opaque during structural redaction and becomes a whole-value
-mask under the `redaction` feature. Prefer a typed projection when useful selected
-fields are needed. Declaring arbitrary JSON public exposes future contents as
-well as today's sample. Generated structural `Debug` can print an unannotated
-JSON field raw, so assess that path separately. Keep the coarse structural mask
-when no projection exists; it is not evidence that every original field is secret.
+A `serde_json::Value` field in `Sensitive` or `SensitiveDual` needs an explicit
+decision, including when an alias or container holds the JSON. Choose
+`#[sensitive(Secret)]` to mask each JSON value or `#[not_sensitive]` when
+its full contents are public. A typed projection can retain selected fields.
+Check the decision against future payloads as well as today's sample.
 
 Verify representative useful and protected values together. Assert useful values
 remain visible and protected values are absent from the configured sink output.

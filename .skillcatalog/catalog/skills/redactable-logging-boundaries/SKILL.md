@@ -5,11 +5,11 @@ metadata:
   skillcatalog/display_name: "Redactable Logging Boundaries"
   skillcatalog/author: "Salvatore Formisano"
   skillcatalog/created_at: "2026-04-29T15:18:46Z"
-  skillcatalog/updated_at: "2026-11-27T07:53:15Z"
+  skillcatalog/updated_at: "2026-11-27T23:07:00Z"
 ---
 # Redactable Logging Boundaries
 
-For Redactable 0.16, trace the value from its source to the actual output writer.
+For Redactable 0.17, trace the value from its source to the actual output writer.
 Apply a redacted operation or reviewed adapter before sensitive data reaches
 that writer, including error reports and ad hoc diagnostics.
 
@@ -56,11 +56,9 @@ of each destination that needs the same disclosure and field shape.
   typed `Valuable` adapter.
 - `Sensitive` masks annotated fields in generated `Debug` and delegates other
   fields to their own `Debug`. `SensitiveDisplay` and `SensitiveDual` render
-  policy-shaped templates. An unannotated opaque JSON field can therefore be
-  visible through `Sensitive`'s direct `Debug` even though structural traversal
-  replaces the whole payload with a mask. Use a typed diagnostic view to retain
-  useful metadata and apply concrete field protection; do not make raw JSON
-  public to recover lost context.
+  policy-shaped templates. For an opaque JSON payload, check the structural
+  field's explicit decision. Use a typed diagnostic view to retain selected
+  metadata from a payload that also contains credentials.
 
 ## Bound cost and failure behavior
 

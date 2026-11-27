@@ -4,7 +4,7 @@ error[E0277]: `T` has no declared redaction behavior
 3 | struct Envelope<T>(T);
   |                    ^ this value needs a redaction declaration
   |
-  = note: for a local container, derive `Sensitive` and select field policies or explicit `#[not_sensitive]` declarations
+  = note: derive `Sensitive` on a local container, or choose `#[sensitive(Secret)]` to mask a supported field or `#[not_sensitive]` to expose it
   = note: for a raw value, use `SensitiveValue<T, P>` or deliberately declare it public with `BypassRedaction<T>`
 note: required by a bound in `redactable::__private::require_declared_redaction`
  --> src/__private/declaration.rs

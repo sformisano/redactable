@@ -38,12 +38,12 @@ types and logging adapters.
 
 ### Quick examples
 
-These examples use the 0.16 series and require Rust 1.97 or later.
+These examples use the 0.17 series and require Rust 1.97 or later.
 The structured example also uses Serde to make the redacted value serializable:
 
 ```toml
 [dependencies]
-redactable = "0.16"
+redactable = "0.17"
 serde = { version = "1", features = ["derive"] }
 ```
 
@@ -168,7 +168,7 @@ Each field tells it what to do:
 | `#[not_sensitive]` | Keep the whole field unchanged, including any nested sensitive data |
 | A nested type deriving `Sensitive` | Walk that type's fields and apply its annotations |
 | A supported container such as `Option<T>` or `Vec<T>` | Delegate to its contents, which must also declare redaction behavior |
-| Opaque `serde_json::Value` | Follow the [payload-specific rules](#json-payloads-need-an-output-view) |
+| `serde_json::Value`, including through supported containers | Choose `#[sensitive(Secret)]` to mask each JSON value or `#[not_sensitive]` to keep its contents. See [JSON payloads](#json-payloads-need-an-output-view). |
 | An undecided scalar or string field | Compile error |
 
 For example, `Address` below declares what to do with its fields. `Account`
@@ -209,7 +209,8 @@ That low-level implementation is not a decision about sensitivity. The derive
 also requires `Redactable` on unannotated fields, so a raw `String` still needs a
 policy or `#[not_sensitive]`.
 
-During map traversal, keys remain unchanged; redaction applies to the values.
+Map traversal applies field policies to values and keeps keys. When keys need
+protection in producer JSON, see [map-key masking](docs/reference.md#map-key-output).
 
 Here is what that means for nested values. An explicitly public `Option<String>`
 stays unchanged, while an `Option<Inner>` lets `Inner` redact its own secret:
@@ -254,11 +255,11 @@ assert_eq!(redacted.secret, Some("[REDACTED]".into()));           // policy appl
 
 ### JSON payloads need an output view
 
-With the default `redaction` feature, `serde_json::Value` is an opaque traversal
-leaf. Structural redaction replaces the whole payload with `"[REDACTED]"`.
-This fallback has no field-level knowledge; it does not classify every JSON
-value as secret. `Sensitive`'s generated `Debug` instead delegates an unannotated
-JSON field to its original `Debug`, which can expose the entire payload.
+A field of type `serde_json::Value` needs an explicit declaration in
+`Sensitive` and `SensitiveDual`. This applies to type aliases and to JSON
+values reached by traversal, as in `Option<Vec<serde_json::Value>>`. Choose
+`#[sensitive(Secret)]` to replace each entire JSON value with the JSON string
+`"[REDACTED]"`. Choose `#[not_sensitive]` only when the whole field is public.
 
 For useful diagnostics, select known fields into a typed view with their own
 policies. Keep the raw payload for business use. Add `serde_json = "1"` to
@@ -274,6 +275,7 @@ use serde_json::json;
 struct Event {
     #[not_sensitive]
     request_id: String,
+    #[sensitive(Secret)]
     payload: serde_json::Value,
 }
 
@@ -292,7 +294,7 @@ let event = Event {
     payload: json!({"title": "Improve routing", "access_token": "example-access-token"}),
 };
 assert_eq!(event.to_redacted().json()["payload"], "[REDACTED]");
-assert!(format!("{event:?}").contains("example-access-token"));
+assert!(!format!("{event:?}").contains("example-access-token"));
 
 let view = ReviewDiagnostic {
     request_id: event.request_id.clone(),
@@ -306,9 +308,9 @@ assert!(!format!("{view:?}").contains("example-access-token"));
 assert_eq!(event.payload["access_token"], "example-access-token");
 ```
 
-Send the view through the selected logging adapter. Declaring the raw JSON
-`#[not_sensitive]` would bypass the fallback and expose all current and future
-fields. The [reference](docs/reference.md#generated-debug-and-ordinary-display)
+Send the view through the selected logging adapter. Declaring the raw payload
+`#[not_sensitive]` would publish future fields as well as the current ones. The
+[reference](docs/reference.md#generated-debug-and-ordinary-display)
 describes the separate `Debug` and traversal contracts.
 
 ### What if a field has no redaction declaration?
@@ -426,6 +428,7 @@ flowchart TD
     F["For each field"] --> A{"Annotated with<br/>#[sensitive(Policy)]?"}
     A -- Yes --> T{"Field type?"}
     T -- "String-like<br/>(String, Cow, Option&lt;String&gt;, etc.)" --> B["Apply text redaction policy<br/>e.g. Email becomes al***@example.com"]
+    T -- "JSON payload (serde_json::Value)" --> J["Mask the entire JSON value"]
     T -- "Scalar<br/>(only #[sensitive(Secret)])" --> C["Replace with default<br/>u32 becomes 0, bool becomes false"]
     T -- "Typed IP address<br/>(only #[sensitive(IpAddress)])" --> C2["Apply the IP policy<br/>keeps the last IPv4 octet or IPv6 segment"]
     A -- No --> D{"Annotated with<br/>#[not_sensitive]?"}
@@ -1099,7 +1102,7 @@ the message under `msg` and all named fields under `data`.
 
 ```toml
 [dependencies]
-redactable = { version = "0.16", features = ["log"] }
+redactable = { version = "0.17", features = ["log"] }
 flexi_logger = { version = "0.31", default-features = false, features = ["kv"] }
 log = { version = "0.4", features = ["kv_serde"] }
 serde = { version = "1", features = ["derive"] }
@@ -1191,7 +1194,7 @@ This example writes them through a JSON drain.
 
 ```toml
 [dependencies]
-redactable = { version = "0.16", features = ["slog"] }
+redactable = { version = "0.17", features = ["slog"] }
 serde = { version = "1", features = ["derive"] }
 slog = "2.8"
 slog-json = { version = "2.6", features = ["nested-values"] }
@@ -1277,7 +1280,7 @@ For an existing native `tracing::info!` call that needs redacted
 
 ```toml
 [dependencies]
-redactable = { version = "0.16", features = ["tracing"] }
+redactable = { version = "0.17", features = ["tracing"] }
 serde = { version = "1", features = ["derive"] }
 tracing = "0.1"
 ```
@@ -1321,7 +1324,7 @@ implementation and passes the redacted value to `tracing::field::valuable`.
 
 ```toml
 [dependencies]
-redactable = { version = "0.16", features = ["tracing-valuable"] }
+redactable = { version = "0.17", features = ["tracing-valuable"] }
 serde = { version = "1", features = ["derive"] }
 tracing = "0.1"
 valuable = { version = "0.1", features = ["derive"] }

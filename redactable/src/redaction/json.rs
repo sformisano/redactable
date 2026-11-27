@@ -1,17 +1,14 @@
 //! `serde_json::Value` support for redaction traversal.
 //!
-//! `serde_json::Value` is an opaque leaf with built-in `Redactable` behavior.
-//! Default traversal and supported recursive policy application fully redact it
-//! to `Value::String("[REDACTED]")`. They do not traverse its dynamic structure.
-//! Policy application retains its policy-kind bounds; typed IP dispatch is separate.
-//! Useful dynamic fields need a typed diagnostic projection. Generated structural
-//! `Debug` uses the original field's formatter unless a field policy protects it.
+//! Low-level traversal and supported recursive policies mask the complete JSON
+//! value. Structural derives require an explicit field declaration because
+//! native `Debug` would otherwise print the original payload.
 
 use serde_json::Value;
 
 use super::{
     redact::{PolicyApplicable, PolicyApplicableRef, RedactableMapper},
-    traits::{Redactable, RedactableWithMapper},
+    traits::RedactableWithMapper,
 };
 use crate::policy::{RecursivePolicyKind, RedactionPolicy};
 
@@ -46,7 +43,3 @@ impl RedactableWithMapper for Value {
         Value::String("[REDACTED]".to_string())
     }
 }
-
-// `Value` redaction is declared by the crate itself (full redaction as an
-// opaque leaf), so it is certified for the redacted-output extension traits.
-impl Redactable for Value {}

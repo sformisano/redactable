@@ -84,9 +84,33 @@ struct GenericDisplayOwner<T: DeclaredFormatting> {
     generic_template_raw: String,
 }
 
+type PayloadAlias = serde_json::Value;
+type NestedPayloads = Option<Vec<Box<PayloadAlias>>>;
+
+#[derive(Clone, serde::Serialize, Sensitive)]
+struct DynamicFields {
+    direct_json: serde_json::Value,
+    aliased_json: PayloadAlias,
+    nested_json: NestedPayloads,
+}
+
+#[derive(Clone, serde::Serialize, SensitiveDual)]
+enum DynamicEvent {
+    #[error("tuple")]
+    TupleJson(PayloadAlias),
+    #[error("named")]
+    Named { named_json: std::collections::BTreeMap<String, PayloadAlias> },
+}
+
+#[derive(Clone, serde::Serialize, Sensitive)]
+struct RecursiveOverride {
+    #[redactable(recursive)]
+    recursive_json: Option<PayloadAlias>,
+}
+
 fn main() {}
 "#;
-    // Each name belongs to one owner, so an error that contains it reports that owner.
+    // A unique field or variant name identifies the source of each diagnostic.
     const UNDECLARED: [&str; 8] = [
         "structural_field",
         "TupleVariant",
@@ -96,6 +120,15 @@ fn main() {}
         "dual_field",
         "generic_struct_raw",
         "generic_template_raw",
+    ];
+
+    const JSON_FIELDS: [&str; 6] = [
+        "direct_json",
+        "aliased_json",
+        "nested_json",
+        "TupleJson",
+        "named_json",
+        "recursive_json",
     ];
 
     let owner = tempfile::Builder::new()
@@ -117,7 +150,7 @@ fn main() {}
     fs::write(
         directory.join("Cargo.toml"),
         format!(
-            "[package]\nname='declaration-diagnostics'\nversion='0.0.0'\nedition='2024'\npublish=false\n[workspace]\n[dependencies]\nserde={{version='1',features=['derive']}}\nredactable={{path='{}',features=[{features}]}}\n",
+            "[package]\nname='declaration-diagnostics'\nversion='0.0.0'\nedition='2024'\npublish=false\n[workspace]\n[dependencies]\nserde={{version='1',features=['derive']}}\nserde_json='1'\nredactable={{path='{}',features=[{features}]}}\n",
             env!("CARGO_MANIFEST_DIR")
         ),
     )
@@ -151,9 +184,25 @@ fn main() {}
             errors.join("\n")
         );
     }
+    for field in JSON_FIELDS {
+        let mut diagnostics = errors.iter().filter(|error| error.contains(field));
+        let diagnostic = diagnostics
+            .next()
+            .unwrap_or_else(|| panic!("missing diagnostic for `{field}`"));
+        assert!(
+            diagnostics.next().is_none(),
+            "duplicate diagnostic for `{field}`"
+        );
+        for choice in ["#[sensitive(Secret)]", "#[not_sensitive]"] {
+            assert!(
+                diagnostic.contains(choice),
+                "missing `{choice}` for `{field}`: {diagnostic}"
+            );
+        }
+    }
     assert_eq!(
         errors.len(),
-        UNDECLARED.len(),
+        UNDECLARED.len() + JSON_FIELDS.len(),
         "unexpected error-level diagnostics:\n{}",
         errors.join("\n")
     );

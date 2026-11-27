@@ -9,7 +9,7 @@ help: the trait `Redactable` is not implemented for `PhantomData<T>`
    |
  6 | struct PhantomData<T>(T);
    | ^^^^^^^^^^^^^^^^^^^^^
-   = note: for a local container, derive `Sensitive` and select field policies or explicit `#[not_sensitive]` declarations
+   = note: derive `Sensitive` on a local container, or choose `#[sensitive(Secret)]` to mask a supported field or `#[not_sensitive]` to expose it
    = note: for a raw value, use `SensitiveValue<T, P>` or deliberately declare it public with `BypassRedaction<T>`
    = help: the following other types implement trait `Redactable`:
              (T0, T1)

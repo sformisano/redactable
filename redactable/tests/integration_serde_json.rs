@@ -8,6 +8,14 @@ mod policy_application {
     use serde_json::{Value, json};
 
     #[test]
+    fn low_level_traversal_still_masks_a_bare_value() {
+        assert_eq!(
+            redactable::redact(json!({"token": "private-value"})),
+            json!("[REDACTED]")
+        );
+    }
+
+    #[test]
     fn redacts_with_default_policy() {
         #[derive(Clone, Sensitive, serde::Serialize)]
         struct Payload {
@@ -69,23 +77,35 @@ mod policy_application {
     }
 }
 
-mod unannotated_fields {
-    use redactable::{Redactable, Secret, Sensitive};
+mod field_declarations {
+    use redactable::{Redactable, Secret, Sensitive, ToRedacted};
     use serde_json::{Value, json};
 
     #[test]
-    fn redacts_by_default() {
+    fn explicit_json_declarations_apply_to_debug_and_structured_output() {
+        type Dynamic = Value;
+
         #[derive(Clone, Sensitive, serde::Serialize)]
         struct Payload {
-            data: Value,
+            #[sensitive(Secret)]
+            private: Option<Vec<Dynamic>>,
+            #[not_sensitive]
+            public: Dynamic,
         }
 
         let payload = Payload {
-            data: json!({"potentially_sensitive": "data"}),
+            private: Some(vec![json!({"token": "private-json-29"})]),
+            public: json!(["approved-label", 42]),
         };
-
-        let redacted = payload.redact();
-        assert_eq!(redacted.data, Value::String("[REDACTED]".to_string()));
+        let debug = format!("{payload:?}");
+        assert!(debug.contains("[REDACTED]"));
+        assert!(debug.contains("approved-label"));
+        assert!(!debug.contains("private-json-29"));
+        assert_eq!(
+            payload.to_redacted().json(),
+            json!({"private":["[REDACTED]"],"public":["approved-label",42]})
+        );
+        assert_eq!(payload.private.unwrap()[0]["token"], "private-json-29");
     }
 
     #[test]
@@ -96,6 +116,7 @@ mod unannotated_fields {
             id: u64,
             #[not_sensitive]
             name: String,
+            #[sensitive(Secret)]
             metadata: Value,
             #[sensitive(Secret)]
             password: String,
@@ -151,18 +172,16 @@ mod option_value {
     }
 
     #[test]
-    fn redacts_unannotated() {
+    fn explicitly_public_optional_payload_is_preserved() {
         #[derive(Clone, Sensitive, serde::Serialize)]
         struct Payload {
+            #[not_sensitive]
             data: Option<Value>,
         }
 
-        let payload = Payload {
-            data: Some(json!({"key": "value"})),
-        };
-
-        let redacted = payload.redact();
-        assert_eq!(redacted.data, Some(Value::String("[REDACTED]".to_string())));
+        let data = Some(json!({"approved-count": 12}));
+        let payload = Payload { data: data.clone() };
+        assert_eq!(payload.redact().data, data);
     }
 }
 
@@ -327,6 +346,23 @@ mod redactable_display {
     }
 
     #[test]
+    fn display_only_derive_can_still_format_a_json_field() {
+        use redactable::{SensitiveDisplay, ToRedacted};
+
+        #[derive(SensitiveDisplay)]
+        #[error("details {payload}")]
+        struct Notice {
+            payload: serde_json::Value,
+        }
+
+        let notice = Notice {
+            payload: json!({"token":"private-value"}),
+        };
+        assert_eq!(notice.to_redacted().text(), "details [REDACTED]");
+        assert_eq!(format!("{notice:?}"), "details [REDACTED]");
+    }
+
+    #[test]
     fn works_for_all_value_types() {
         let test_cases = vec![
             json!(null),
@@ -422,6 +458,31 @@ mod nested_structs {
     use serde_json::{Value, json};
 
     #[test]
+    fn unrelated_type_named_value_remains_a_declared_nested_field() {
+        use redactable::ToRedacted;
+        use std::marker::PhantomData;
+
+        #[derive(Clone, serde::Serialize, Sensitive)]
+        struct Value(#[sensitive(Secret)] String);
+
+        #[derive(Clone, serde::Serialize, Sensitive)]
+        struct Envelope {
+            entries: Vec<Option<Value>>,
+            marker: PhantomData<serde_json::Value>,
+        }
+
+        let envelope = Envelope {
+            entries: vec![Some(Value("private-typed-value".into())), None],
+            marker: PhantomData,
+        };
+        assert_eq!(
+            envelope.to_redacted().json(),
+            json!({"entries":["[REDACTED]",null],"marker":null})
+        );
+        assert!(!format!("{envelope:?}").contains("private-typed-value"));
+    }
+
+    #[test]
     fn redacts_in_nested_struct() {
         #[derive(Clone, Sensitive, serde::Serialize)]
         struct Inner {
@@ -468,6 +529,7 @@ mod real_world_scenarios {
             status: u16,
             #[not_sensitive]
             message: String,
+            #[sensitive(Secret)]
             payload: Option<Value>,
             #[not_sensitive]
             request_id: String,

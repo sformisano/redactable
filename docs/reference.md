@@ -68,30 +68,38 @@ The sensitive derives also generate the integrations enabled by `slog` and
 policy. Other fields use their own `Debug`, including fields whose types declare
 redaction. This does not run structural traversal first.
 
-For example, an unannotated `serde_json::Value` prints its original contents in
-that `Debug` output, although `.redact()` replaces the same field completely:
+A `Sensitive` field that holds `serde_json::Value` directly, through an alias,
+or inside a traversed container requires an explicit declaration. Here
+structural redaction masks each JSON value in the vector. Generated
+`Debug` masks the annotated field as a whole.
 
 ```rust
-use redactable::{Redactable, Sensitive};
+use redactable::{Redactable, Secret, Sensitive};
+use serde_json::{Value, json};
+
+type Payload = Value;
 
 #[derive(Clone, serde::Serialize, Sensitive)]
 struct Record {
-    payload: serde_json::Value,
+    #[sensitive(Secret)]
+    payloads: Option<Vec<Payload>>,
+    #[not_sensitive]
+    status: Payload,
 }
 
-let record = Record { payload: serde_json::json!({"secret": "example-secret"}) };
-assert!(format!("{record:?}").contains("example-secret"));
-assert_eq!(record.redact().payload, serde_json::json!("[REDACTED]"));
+let record = Record {
+    payloads: Some(vec![json!({"token": "example-secret"}), Value::Null]),
+    status: json!({"code": 200}),
+};
+assert!(!format!("{record:?}").contains("example-secret"));
+let redacted = record.redact();
+assert_eq!(redacted.payloads, Some(vec![json!("[REDACTED]"); 2]));
+assert_eq!(redacted.status, json!({"code": 200}));
 ```
 
-Annotating that field `#[sensitive(Secret)]` also replaces its generated `Debug`
-output with the fixed placeholder. `#[not_sensitive]` instead skips structural
-redaction and uses the field's own `Debug`.
-
-For useful fields from an opaque payload, construct the README's
+To publish selected fields from an opaque payload, build a
 [typed diagnostic view](../README.md#json-payloads-need-an-output-view).
-Keep the default whole-value traversal mask as a fallback when no such view
-exists. Making the raw JSON public exposes every current and future field.
+A public declaration exposes the JSON values of future fields as well.
 
 `SensitiveDisplay` and `SensitiveDual` generate `Debug` from their redacted
 template. That output includes any fragments retained by the policies and any
@@ -682,9 +690,13 @@ key types. Formatting clones allowed keys, and `HashMap` requires a cloneable
 hasher. IPv4 output keeps the last octet; IPv6 output keeps the last 16-bit
 segment. IPv4-mapped IPv6 uses the IPv4 rule. `SocketAddr` preserves its port.
 
-Under the `redaction` feature, `serde_json::Value` is an opaque traversal leaf.
-It redacts to `Value::String("[REDACTED]")` during `.redact()` and adapters that
-invoke it, even when unannotated. Generated `Debug` remains annotation-driven.
+`serde_json::Value` is an opaque leaf for explicit structural policies.
+`#[sensitive(Secret)]` replaces each traversed JSON value with the JSON string
+`"[REDACTED]"`, including a JSON object, array, or null. The policy does not
+inspect the keys or fields inside that JSON value. An absent Rust `Option`
+stays `None`. For a display-only `SensitiveDisplay` template, an unannotated
+JSON value still has a declared formatter that emits `[REDACTED]`.
+
 `redaction` is a default feature and pulls in `serde` and `serde_json`.
 The `json` feature remains a compatibility alias for `redaction`; use
 `redaction` in new manifests, while existing `json` selections continue to
@@ -761,6 +773,20 @@ Valid paths beneath absent options, empty collections, or scalar parents can rem
 Include populated samples to exercise those paths.
 
 ## Upgrading
+
+For the 0.17 upgrade, declare a policy on each previously unannotated JSON
+payload in `Sensitive` or `SensitiveDual`. This includes a JSON value hidden
+by a type alias or nested in traversed containers, and a structural field
+omitted from a dual template. In maps, this rule applies to values. Keys follow
+the [map-key output contract](#map-key-output). Choose `#[sensitive(Secret)]` to keep the
+previous whole-value mask in structured output, or `#[not_sensitive]` when
+the complete field may be disclosed.
+
+A bare `serde_json::Value` no longer satisfies `T: Redactable`, so direct
+`value.redact()` and structural adapters with this bound need migration.
+Use `redactable::redact(value)` to keep the old opaque mask in low-level
+traversal. For a logging adapter, put the value in a type with an explicit
+field policy. `SensitiveDisplay` uses the separate formatting contract.
 
 When enabling a logging integration, qualify level macros (`redactable::info!`,
 `::log::info!`, `::slog::info!`, or `::tracing::info!`) or import them by name.

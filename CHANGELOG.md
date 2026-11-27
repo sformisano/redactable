@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.17.0 - 2026-11-28
+
+### Breaking change
+
+`Sensitive` and `SensitiveDual` reject unannotated `serde_json::Value` fields,
+including aliases and JSON values reached through container traversal. In
+0.16, structural redaction masked those values, but a standalone `Sensitive`
+type's generated `Debug` could reveal their original contents.
+
+### Migration from 0.16
+
+- Add `#[sensitive(Secret)]` to mask each JSON value, or `#[not_sensitive]`
+  to keep the complete field. A typed diagnostic view can expose selected
+  fields from a mixed payload.
+- A bare JSON value no longer implements `Redactable`. Replace
+  `value.redact()` with `redactable::redact(value)` if you need the previous
+  whole-value mask. Use an explicitly annotated containing type where an API
+  requires `Redactable`.
+- Display-only `SensitiveDisplay` templates retain the redacted formatter for
+  JSON. `SensitiveDual` also checks fields omitted from its template.
+
 ## 0.16.1 - 2026-11-27
 
 ### Fixed

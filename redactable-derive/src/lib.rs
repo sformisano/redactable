@@ -101,7 +101,10 @@ use sensitive::{Expansion, expand};
 /// # Field Attributes
 ///
 /// - **No annotation**: The field requires declared `Redactable` behavior and is traversed
-///   with the supplied mapper. Raw leaves need a policy or an explicit public declaration.
+///   with the supplied mapper. Raw leaves need an explicit declaration.
+///   A `serde_json::Value`, including through aliases and traversed
+///   containers, needs an explicit field decision. Choose `#[sensitive(Secret)]`
+///   to mask the JSON or `#[not_sensitive]` to keep the field public.
 ///
 /// - `#[sensitive(Secret)]`: For scalar types (i32, bool, char, etc.), redacts to default values
 ///   (0, false, '*'). For string-like types, applies full redaction to `"[REDACTED]"`.
@@ -153,7 +156,8 @@ pub fn derive_sensitive_container(input: TokenStream) -> TokenStream {
 ///
 /// Use this instead of combining `Sensitive` and `SensitiveDisplay` with the
 /// legacy `#[sensitive(dual)]` coordination attribute. Every structural field is checked,
-/// including fields omitted from the template. Its single `ToRedacted` impl carries
+/// including fields omitted from the template. JSON fields require the same declaration
+/// as in `Sensitive`. Its single `ToRedacted` impl carries
 /// both representations: the template text and the redacted JSON. It therefore
 /// requires `Clone` and `serde::Serialize` as well as a template.
 #[proc_macro_derive(SensitiveDual, attributes(sensitive, not_sensitive, redactable, error))]
@@ -255,7 +259,9 @@ pub fn derive_not_sensitive_display(input: TokenStream) -> TokenStream {
 /// This generates a redacted string representation by borrowing the source.
 /// The text/secret route needs no `Clone`; IP-map formatting clones keys and the HashMap hasher.
 /// Referenced unannotated fields require declared formatting, such as a nested
-/// `SensitiveDisplay` type. Unreferenced fields and constant templates remain supported.
+/// `SensitiveDisplay` type. A referenced, unannotated `serde_json::Value` uses its
+/// declared formatter, which emits `[REDACTED]`. Unreferenced fields and constant
+/// templates remain supported.
 ///
 /// # Field Annotations
 ///
