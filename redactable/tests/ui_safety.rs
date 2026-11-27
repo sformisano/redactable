@@ -172,6 +172,7 @@ fn main() {}
     let directory = owner.path();
     fs::create_dir(directory.join("src")).unwrap();
     let features = [
+        ("mask-map-keys", cfg!(feature = "mask-map-keys")),
         ("slog", cfg!(feature = "slog")),
         ("tracing", cfg!(feature = "tracing")),
         ("tracing-valuable", cfg!(feature = "tracing-valuable")),
