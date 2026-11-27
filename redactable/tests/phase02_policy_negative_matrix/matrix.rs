@@ -10,11 +10,9 @@ pub(crate) const EXPECTED_NEGATIVE_CELLS: usize = 938;
 pub(crate) const EXPECTED_GRID_FINGERPRINT: u64 = 0x5fc6_befe_c3d9_4865;
 const EXPECTED_POSITIVE_CONTROLS: usize = 8;
 const EXPECTED_POSITIVE_FINGERPRINT: u64 = 0xa393_7d01_0e4c_a5c1;
-// Audited update for the 0.12 escape-family rename: the only change in the
-// canonical positive source is `safe::NotSensitiveValue<String>` becoming
-// `safe::BypassRedaction<String>` on `WrappedNestedIp`. No cell, policy, derive
-// or exercise axis moved.
-const EXPECTED_POSITIVE_SOURCE_FINGERPRINT: u64 = 0x6adb_4b28_dc51_e90f;
+// The four structural custom-policy controls explicitly declare IP keys public.
+// Their display-only counterparts exercise the borrowed formatter with raw IP keys.
+const EXPECTED_POSITIVE_SOURCE_FINGERPRINT: u64 = 0xd508_1d26_1d80_cd2c;
 
 pub(crate) const REQUIRED_POSITIVE_CONTROLS: &[(&str, &str, &str)] = &[
     (
@@ -479,10 +477,10 @@ mod custom {
     }
 }
 #[derive(Clone, Sensitive, serde::Serialize)]
-struct CustomMap { #[sensitive(custom::IpAddress)] #[serde(skip)] value: std::collections::HashMap<std::net::IpAddr, String> }
+struct CustomMap { #[sensitive(custom::IpAddress)] #[serde(skip)] value: std::collections::HashMap<safe::BypassRedaction<std::net::IpAddr>, String> }
 use custom::IpAddress as CustomIpAddress;
 #[derive(Clone, Sensitive, serde::Serialize)]
-struct CustomMapShort { #[sensitive(CustomIpAddress)] #[serde(skip)] value: std::collections::HashMap<std::net::IpAddr, String> }
+struct CustomMapShort { #[sensitive(CustomIpAddress)] #[serde(skip)] value: std::collections::HashMap<safe::BypassRedaction<std::net::IpAddr>, String> }
 #[derive(SensitiveDisplay)]
 #[error("{value:?}")]
 struct CustomMapDisplay { #[sensitive(custom::IpAddress)] value: std::collections::HashMap<std::net::IpAddr, String> }
@@ -490,9 +488,9 @@ struct CustomMapDisplay { #[sensitive(custom::IpAddress)] value: std::collection
 #[error("{value:?}")]
 struct CustomMapShortDisplay { #[sensitive(CustomIpAddress)] value: std::collections::HashMap<std::net::IpAddr, String> }
 #[derive(Clone, Sensitive, serde::Serialize)]
-struct CustomBTreeMap { #[sensitive(custom::IpAddress)] #[serde(skip)] value: std::collections::BTreeMap<std::net::IpAddr, String> }
+struct CustomBTreeMap { #[sensitive(custom::IpAddress)] #[serde(skip)] value: std::collections::BTreeMap<safe::BypassRedaction<std::net::IpAddr>, String> }
 #[derive(Clone, Sensitive, serde::Serialize)]
-struct CustomBTreeMapShort { #[sensitive(CustomIpAddress)] #[serde(skip)] value: std::collections::BTreeMap<std::net::IpAddr, String> }
+struct CustomBTreeMapShort { #[sensitive(CustomIpAddress)] #[serde(skip)] value: std::collections::BTreeMap<safe::BypassRedaction<std::net::IpAddr>, String> }
 #[derive(SensitiveDisplay)]
 #[error("{value:?}")]
 struct CustomBTreeMapDisplay { #[sensitive(custom::IpAddress)] value: std::collections::BTreeMap<std::net::IpAddr, String> }
@@ -508,13 +506,15 @@ fn main() {
 
     const CANARY: &str = "sensitive";
     let hash_key: IpAddr = "192.0.2.7".parse().unwrap();
-    let values = HashMap::from([(hash_key, CANARY.to_owned())]);
+    let public_hash_key = safe::BypassRedaction(hash_key);
+    let values = HashMap::from([(public_hash_key.clone(), CANARY.to_owned())]);
     let custom = CustomMap { value: values.clone() }.redact();
-    assert!(custom.value.contains_key(&hash_key));
-    assert_eq!(custom.value[&hash_key], "*******ve");
-    assert!(!custom.value[&hash_key].contains(CANARY));
-    let custom_short = CustomMapShort { value: values.clone() }.redact();
-    assert_eq!(custom_short.value[&hash_key], "*******ve");
+    assert!(custom.value.contains_key(&public_hash_key));
+    assert_eq!(custom.value[&public_hash_key], "*******ve");
+    assert!(!custom.value[&public_hash_key].contains(CANARY));
+    let custom_short = CustomMapShort { value: values }.redact();
+    assert_eq!(custom_short.value[&public_hash_key], "*******ve");
+    let values = HashMap::from([(hash_key, CANARY.to_owned())]);
     let rendered = CustomMapDisplay { value: values.clone() }.redacted_display().to_string();
     assert_eq!(rendered, "{192.0.2.7: \"*******ve\"}");
     assert!(!rendered.contains(CANARY));
@@ -523,13 +523,15 @@ fn main() {
     assert!(!rendered.contains(CANARY));
 
     let btree_key: IpAddr = "192.0.2.8".parse().unwrap();
-    let btree_values = BTreeMap::from([(btree_key, CANARY.to_owned())]);
+    let public_btree_key = safe::BypassRedaction(btree_key);
+    let btree_values = BTreeMap::from([(public_btree_key.clone(), CANARY.to_owned())]);
     let custom_btree = CustomBTreeMap { value: btree_values.clone() }.redact();
-    assert!(custom_btree.value.contains_key(&btree_key));
-    assert_eq!(custom_btree.value[&btree_key], "*******ve");
-    assert!(!custom_btree.value[&btree_key].contains(CANARY));
-    let custom_btree_short = CustomBTreeMapShort { value: btree_values.clone() }.redact();
-    assert_eq!(custom_btree_short.value[&btree_key], "*******ve");
+    assert!(custom_btree.value.contains_key(&public_btree_key));
+    assert_eq!(custom_btree.value[&public_btree_key], "*******ve");
+    assert!(!custom_btree.value[&public_btree_key].contains(CANARY));
+    let custom_btree_short = CustomBTreeMapShort { value: btree_values }.redact();
+    assert_eq!(custom_btree_short.value[&public_btree_key], "*******ve");
+    let btree_values = BTreeMap::from([(btree_key, CANARY.to_owned())]);
     let rendered = CustomBTreeMapDisplay { value: btree_values.clone() }.redacted_display().to_string();
     assert_eq!(rendered, "{192.0.2.8: \"*******ve\"}");
     assert!(!rendered.contains(CANARY));

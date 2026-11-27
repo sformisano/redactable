@@ -108,6 +108,32 @@ struct RecursiveOverride {
     recursive_json: Option<PayloadAlias>,
 }
 
+#[derive(Clone, Hash, PartialEq, Eq, PartialOrd, Ord, serde::Serialize, Sensitive)]
+struct Credential(#[sensitive(Secret)] String);
+
+#[derive(Clone, serde::Serialize, Sensitive)]
+struct Count(#[not_sensitive] u16);
+
+type DynamicMap = std::collections::HashMap<PayloadAlias, Count>;
+type OrderedMap = std::collections::BTreeMap<Credential, String>;
+
+#[derive(Clone, serde::Serialize, Sensitive)]
+struct UnapprovedKeys {
+    raw_key: std::collections::HashMap<serde_json::Value, Count>,
+    #[sensitive(Secret)]
+    private_map_key: std::collections::HashMap<PayloadAlias, String>,
+    #[redactable(recursive)]
+    nested_key: Option<Vec<DynamicMap>>,
+    ordered_key: std::collections::BTreeMap<Credential, Count>,
+}
+
+#[derive(Clone, serde::Serialize, SensitiveDual)]
+#[error("summary")]
+struct SelectedSummary {
+    #[sensitive(Secret)]
+    omitted_key: Option<OrderedMap>,
+}
+
 fn main() {}
 "#;
     // A unique field or variant name identifies the source of each diagnostic.
@@ -129,6 +155,14 @@ fn main() {}
         "TupleJson",
         "named_json",
         "recursive_json",
+    ];
+
+    const KEY_FIELDS: [&str; 5] = [
+        "raw_key",
+        "private_map_key",
+        "nested_key",
+        "ordered_key",
+        "omitted_key",
     ];
 
     let owner = tempfile::Builder::new()
@@ -184,25 +218,39 @@ fn main() {}
             errors.join("\n")
         );
     }
-    for field in JSON_FIELDS {
-        let mut diagnostics = errors.iter().filter(|error| error.contains(field));
-        let diagnostic = diagnostics
-            .next()
-            .unwrap_or_else(|| panic!("missing diagnostic for `{field}`"));
-        assert!(
-            diagnostics.next().is_none(),
-            "duplicate diagnostic for `{field}`"
-        );
-        for choice in ["#[sensitive(Secret)]", "#[not_sensitive]"] {
+    let fixes: &[(&[&str], &[&str])] = &[
+        (&JSON_FIELDS, &["#[sensitive(Secret)]", "#[not_sensitive]"]),
+        (
+            &KEY_FIELDS,
+            &[
+                "PublicMapKey",
+                "NotSensitive",
+                "BypassRedaction",
+                "only if its keys and values are public",
+            ],
+        ),
+    ];
+    for &(fields, choices) in fixes {
+        for &field in fields {
+            let mut diagnostics = errors.iter().filter(|error| error.contains(field));
+            let diagnostic = diagnostics
+                .next()
+                .unwrap_or_else(|| panic!("missing diagnostic for `{field}`"));
             assert!(
-                diagnostic.contains(choice),
-                "missing `{choice}` for `{field}`: {diagnostic}"
+                diagnostics.next().is_none(),
+                "duplicate diagnostic for `{field}`"
             );
+            for &choice in choices {
+                assert!(
+                    diagnostic.contains(choice),
+                    "missing `{choice}` for `{field}`: {diagnostic}"
+                );
+            }
         }
     }
     assert_eq!(
         errors.len(),
-        UNDECLARED.len() + JSON_FIELDS.len(),
+        UNDECLARED.len() + JSON_FIELDS.len() + KEY_FIELDS.len(),
         "unexpected error-level diagnostics:\n{}",
         errors.join("\n")
     );

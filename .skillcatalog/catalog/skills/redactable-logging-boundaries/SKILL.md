@@ -5,7 +5,7 @@ metadata:
   skillcatalog/display_name: "Redactable Logging Boundaries"
   skillcatalog/author: "Salvatore Formisano"
   skillcatalog/created_at: "2026-04-29T15:18:46Z"
-  skillcatalog/updated_at: "2026-11-27T23:07:00Z"
+  skillcatalog/updated_at: "2026-11-27T23:30:11Z"
 ---
 # Redactable Logging Boundaries
 
@@ -24,8 +24,9 @@ resulting `RedactedValue` to the writer. Review public declarations and bypasses
 against the intended audience.
 Retain the operation's useful identity, query, transition and outcome context.
 A projection that replaces an entire request or result with a mask can satisfy
-the trait while preventing diagnosis. Generic envelopes delegate typed keys,
-filters and results to their own policies instead of discarding them.
+the trait while preventing diagnosis. Generic envelopes can delegate query
+filters, operation identifiers and results to their own field policies. A map
+key is retained as a whole and its type must be declared public.
 
 Do not serialize or interpolate sensitive data into a string before conversion.
 Neither a bypass wrapper nor the low-level free `redact(value)` function repairs

@@ -118,6 +118,10 @@ use sensitive::{Expansion, expand};
 ///   declaration for a foreign field in a struct you own; `BypassRedaction<T>` is only
 ///   for satisfying a `Redactable` bound on a value you cannot annotate.
 ///
+/// Structurally traversed `BTreeMap` and `HashMap` fields also require
+/// `redactable::PublicMapKey` for their keys. Derive `NotSensitive` on a public
+/// custom key. A map's field policy can then protect the values.
+///
 /// Field operations are checked against the original declaration bounds, even
 /// when no generated method is called. For an unannotated generic field `T`,
 /// declare `T: Redactable`; complete container bounds may be declared instead.
@@ -180,6 +184,7 @@ pub fn derive_sensitive_dual(input: TokenStream) -> TokenStream {
 ///
 /// - `RedactableWithMapper`: no-op passthrough (the type has no sensitive data)
 /// - `Redactable`: declares the type public and allows it inside `Sensitive` containers.
+/// - `PublicMapKey`: declares this type public when it is used as a structurally traversed map key.
 /// - `ToRedacted`: always generated; emits the raw `Serialize` output the author
 ///   declared public. This is why `NotSensitive` requires `serde::Serialize`; `Clone`
 ///   is not required, because nothing is redacted.

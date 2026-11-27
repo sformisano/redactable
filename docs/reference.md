@@ -44,6 +44,7 @@ The sensitive derives also generate the integrations enabled by `slog` and
 - `RedactableWithMapper`: no-op passthrough (the type has no sensitive data)
 - `Redactable`: the derive is an explicit declaration, so the type may be
   redacted and used inside sensitive containers
+- `PublicMapKey`: the type declares that its complete key representation may be retained
 - `ToRedacted`: emits the raw value as JSON, which is what the declaration
   claims is public (requires `Serialize` on the type)
 - `slog::Value` and `SlogRedacted`: serializes the explicitly non-sensitive
@@ -189,6 +190,7 @@ Common declaration bounds are:
 | Field use | Declaration bound |
 |---|---|
 | Unannotated structural `value: T` | `T: Redactable` |
+| Key `K` in a structurally traversed map | `K: PublicMapKey`, in addition to the map's usual bounds |
 | Unannotated referenced template field | Complete field type implements `DeclaredFormatting` |
 | `#[sensitive(P)]` with `{value}` | Complete field type implements `PolicyDisplay<P>` |
 | `#[sensitive(P)]` with `{value:?}` | Complete field type implements `PolicyDebug<P>` |
@@ -206,7 +208,8 @@ consuming policy operation, expressed by `__private::PolicyField<P>`.
 Formatting bounds alone do not supply that operation.
 
 Requirements apply to complete field types. `std::marker::PhantomData<T>` does
-not impose redaction on `T`. Map keys remain exempt from value traversal.
+not impose redaction on `T`. Maps keep their keys and check their key type
+separately from the values.
 The [recursion override](#advanced-derive-options) suppresses inferred formatting
 bounds; actual field operations still need to compile under the original declaration.
 
@@ -372,16 +375,31 @@ limit, or a dedicated log-view type to choose a representation.
 
 ### Map-key output
 
-By default, map traversal redacts values and retains keys. Enable the optional
-`mask-map-keys` feature when producer JSON must hide map keys. This feature
-implies `redaction`. It affects the JSON produced by `Sensitive` and
-`SensitiveDual`, including JSON reached through logging adapters. A JSON-only
-producer's `text()` also uses the masked JSON.
+A `HashMap<K, V>` or `BTreeMap<K, V>` traversed by `Sensitive` or
+`SensitiveDual` requires `K: redactable::PublicMapKey`. This applies to nested
+maps and to map fields annotated with `#[sensitive(Secret)]` or a text policy.
+Structural redaction keeps the keys as supplied and processes each value.
 
-For example, a map keyed by a customer's email retains the email in producer
-JSON even when `#[sensitive(Secret)]` masks the map's values. Enabling
-`mask-map-keys` replaces that email with a positional key. The same rule
-applies when the key is a `serde_json::Value::String`.
+String and integer keys qualify directly. For a public custom key you own,
+derive `NotSensitive`. A manual `impl PublicMapKey for MyKey {}` declares
+only its use as a public key. For a reviewed public foreign key, use
+`BypassRedaction<K>` as the key type. An unwrapped `serde_json::Value`, an
+undeclared custom key, or a key deriving only `Sensitive` or
+`NotSensitiveDisplay` fails the bound. Declaring the whole map field
+`#[not_sensitive]` skips traversal and publishes its values too. Use that
+declaration only for a wholly public map.
+
+For private keys, a sequence of typed entries lets you apply a field policy
+to the key and keep useful information about its value. For string keys
+such as a customer's email address, the type alone cannot establish whether
+the contents are public. Display-only `SensitiveDisplay` templates still use
+their existing formatting bounds and can print keys through ordinary `Debug`.
+
+Enable `mask-map-keys` to replace map keys with positional names when a
+`Sensitive` or `SensitiveDual` producer serializes JSON. The feature also
+affects compact text derived from that JSON. The structural key bound applies
+with either feature setting. With masking disabled, each retained key must
+also serialize as a valid JSON object key for JSON output to succeed.
 
 Masking follows the typed serializer's Serde calls, before JSON loses the
 distinction between a map key and a struct field name. Each map receives positional keys
@@ -653,10 +671,13 @@ redaction policy or custom projection for those values.
 cannot be policy-annotated because redaction may need to produce zero.
 
 Supported containers are walked automatically. Policy annotations recurse
-through options, sequences, arrays, results, maps, and sets. Traversal does not
-redact map keys. Each rendered map key uses its compact or alternate `Debug`
-implementation once. The optional [map-key output](#map-key-output) feature
-masks keys separately when sensitive producers serialize their JSON.
+through options, sequences, arrays, results, maps, and sets. Structural derives
+and consuming text or secret policy application require public map keys and
+apply policies to values. Low-level `redactable::redact(map)` retains its
+mapper bounds and preserves keys. The borrowed formatting path keeps its
+existing bounds. Each rendered map key uses its compact or alternate `Debug`
+implementation once. See [map-key output](#map-key-output) for the optional
+JSON key mask.
 
 Traversal support and field-policy support are separate. Tuples, `Mutex`, and
 `RwLock` can traverse declared contents but do not accept a direct recursive
@@ -782,10 +803,14 @@ Include populated samples to exercise those paths.
 For the 0.17 upgrade, declare a policy on each previously unannotated JSON
 payload in `Sensitive` or `SensitiveDual`. This includes a JSON value hidden
 by a type alias or nested in traversed containers, and a structural field
-omitted from a dual template. In maps, this rule applies to values. Keys follow
-the [map-key output contract](#map-key-output). Choose `#[sensitive(Secret)]` to keep the
+omitted from a dual template. Choose `#[sensitive(Secret)]` to keep the
 previous whole-value mask in structured output, or `#[not_sensitive]` when
 the complete field may be disclosed.
+
+For a custom map key, derive `NotSensitive` on the key type when the full key
+is public. Retain the value's existing redaction policy. A generic key needs
+`K: redactable::PublicMapKey` in addition to its existing map bounds.
+See [map-key output](#map-key-output) for foreign and confidential keys.
 
 A bare `serde_json::Value` no longer satisfies `T: Redactable`, so direct
 `value.redact()` and structural adapters with this bound need migration.

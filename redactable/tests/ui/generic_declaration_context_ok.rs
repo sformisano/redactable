@@ -20,7 +20,7 @@ struct SelfBound<T> where Self: Payload, <Self as Payload>::Value: Redactable {
 }
 impl<T> Payload for SelfBound<T> { type Value = SensitiveValue<String, Secret>; }
 #[derive(Sensitive)]
-struct Exempt<K, V: Redactable> where BTreeMap<K,V>: Redactable {
+struct Keyed<K: Ord + redactable::PublicMapKey, V: Redactable> {
     values: BTreeMap<K,V>,
     marker: PhantomData<K>,
     #[not_sensitive]

@@ -209,9 +209,6 @@ That low-level implementation is not a decision about sensitivity. The derive
 also requires `Redactable` on unannotated fields, so a raw `String` still needs a
 policy or `#[not_sensitive]`.
 
-Map traversal applies field policies to values and keeps keys. When keys need
-protection in producer JSON, see [map-key masking](docs/reference.md#map-key-output).
-
 Here is what that means for nested values. An explicitly public `Option<String>`
 stays unchanged, while an `Option<Inner>` lets `Inner` redact its own secret:
 
@@ -252,6 +249,40 @@ assert_eq!(redacted.maybe_string, Some("visible".into()));        // unchanged
 assert_eq!(redacted.maybe_inner.unwrap().secret, "[REDACTED]");   // walked and redacted
 assert_eq!(redacted.secret, Some("[REDACTED]".into()));           // policy applied
 ```
+
+### Map keys and values
+
+`Sensitive` and `SensitiveDual` keep the keys of a traversed `HashMap` or
+`BTreeMap`. The key type must implement `PublicMapKey`, even when a field
+policy masks the values. Ordinary string and integer keys already qualify.
+For a custom key whose entire representation is public, derive `NotSensitive`
+on the key type. This keeps the policy on the values independent.
+
+```rust
+use std::collections::BTreeMap;
+use redactable::{NotSensitive, Redactable, Secret, Sensitive};
+
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd, NotSensitive, serde::Serialize)]
+enum Service { Search }
+
+#[derive(Clone, Sensitive, serde::Serialize)]
+struct Credentials {
+    #[sensitive(Secret)]
+    tokens: BTreeMap<Service, String>,
+}
+
+let credentials = Credentials {
+    tokens: BTreeMap::from([(Service::Search, String::from("example-search-token"))]),
+};
+assert_eq!(credentials.redact().tokens[&Service::Search], "[REDACTED]");
+```
+
+A raw `serde_json::Value` key, an undeclared custom key, or a key derived only
+as `Sensitive` needs a different representation. For confidential keys, move
+the key into a field of a typed diagnostic entry so its own policy can run.
+Use `BypassRedaction<K>` for a foreign key whose complete output is public.
+The [map-key reference](docs/reference.md#map-key-output) covers wrappers,
+generic bounds, and optional masking of JSON object keys.
 
 ### JSON payloads need an output view
 
@@ -1453,7 +1484,8 @@ A `Sensitive` type always produces JSON. On serialization failure, the JSON is
 the fixed string `"[REDACTED]"`; serializer errors and input data are never
 included.
 
-If map keys can contain private identifiers, enable `mask-map-keys`. It replaces
+If admitted map keys can contain private identifiers, `mask-map-keys` can hide
+those identifiers in producer JSON. It replaces
 map keys in `Sensitive` and `SensitiveDual` producer JSON with positional names
 such as `[REDACTED-KEY-0]`. Typed struct field names remain visible. Flattened
 fields, tags emitted as map keys, and object keys in parsed

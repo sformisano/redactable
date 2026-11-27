@@ -16,7 +16,7 @@ use std::{
     sync::{Arc, Mutex, RwLock},
 };
 
-use super::redact::RedactableMapper;
+use super::{map_key::PublicMapKey, redact::RedactableMapper};
 use crate::policy::{RedactionPolicy, TextRedactionPolicy};
 
 // =============================================================================
@@ -119,8 +119,8 @@ pub trait RedactableWithMapper: Sized {
 /// field or `#[not_sensitive]` to expose it. Low-level traversal with
 /// `redactable::redact(value)` still masks the opaque value.
 ///
-/// Containers require this trait for the values they traverse. Map keys pass
-/// through structural redaction.
+/// Containers require this trait for the values they traverse. Maps keep
+/// their keys unchanged and require [`PublicMapKey`] for the key type.
 ///
 /// ```compile_fail
 /// use redactable::Redactable;
@@ -153,8 +153,8 @@ pub trait Redactable: RedactableWithMapper {
     }
 }
 
-// Containers forward the certification exactly like redaction traversal walks
-// them. Map keys are exempt, mirroring values-only map redaction. The bounds
+// Containers forward the certification through the values they traverse.
+// Maps separately require a public declaration for their keys. The other bounds
 // mirror the matching `RedactableWithMapper` container impls so the supertrait
 // is always satisfied.
 
@@ -187,13 +187,13 @@ impl<T: Redactable> Redactable for RwLock<T> {}
 
 impl<K, V, S> Redactable for HashMap<K, V, S>
 where
-    K: Hash + Eq,
+    K: PublicMapKey + Hash + Eq,
     V: Redactable,
     S: BuildHasher + Clone,
 {
 }
 
-impl<K: Ord, V: Redactable> Redactable for BTreeMap<K, V> {}
+impl<K: PublicMapKey + Ord, V: Redactable> Redactable for BTreeMap<K, V> {}
 
 impl<T, S> Redactable for HashSet<T, S>
 where

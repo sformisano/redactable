@@ -277,13 +277,13 @@ mod maps {
     use serde_json::{Value, json};
 
     #[test]
-    fn custom_and_json_string_map_keys_follow_the_key_masking_feature() {
-        use std::collections::HashMap;
+    fn public_map_keys_follow_the_key_masking_feature() {
+        use std::collections::{BTreeMap, HashMap};
 
-        use redactable::ToRedacted;
+        use redactable::{BypassRedaction, NotSensitive, ToRedacted};
         use serde::Serialize;
 
-        #[derive(Clone, Debug, Eq, Hash, PartialEq, Serialize)]
+        #[derive(Clone, Debug, Eq, Hash, PartialEq, Serialize, NotSensitive)]
         enum Source {
             Api,
         }
@@ -298,25 +298,33 @@ mod maps {
 
         #[derive(Clone, Serialize, Sensitive)]
         struct Report {
-            sources: HashMap<Source, HashMap<Value, Entry>>,
+            by_source: HashMap<Source, HashMap<BypassRedaction<Value>, Entry>>,
+            by_region: BTreeMap<String, BTreeMap<u16, Entry>>,
         }
 
         let entry = Entry {
             count: 7,
             details: json!({"token": "private-token"}),
         };
-        let entries = HashMap::from([(json!("customer-42"), entry)]);
+        let customers = HashMap::from([(BypassRedaction(json!("customer-42")), entry.clone())]);
         let report = Report {
-            sources: HashMap::from([(Source::Api, entries)]),
+            by_source: HashMap::from([(Source::Api, customers)]),
+            by_region: BTreeMap::from([("west".into(), BTreeMap::from([(23, entry)]))]),
         };
-        let (source, customer) = if cfg!(feature = "mask-map-keys") {
-            ("[REDACTED-KEY-0]", "[REDACTED-KEY-0]")
-        } else {
-            ("Api", "customer-42")
+        let output_key = |key| {
+            if cfg!(feature = "mask-map-keys") {
+                "[REDACTED-KEY-0]"
+            } else {
+                key
+            }
         };
+        let visible_entry = json!({"count": 7, "details": "[REDACTED]"});
         assert_eq!(
             report.to_redacted().json(),
-            json!({"sources": {source: {customer: {"count": 7, "details": "[REDACTED]"}}}})
+            json!({
+                "by_source": {output_key("Api"): {output_key("customer-42"): visible_entry}},
+                "by_region": {output_key("west"): {output_key("23"): visible_entry}}
+            })
         );
     }
 

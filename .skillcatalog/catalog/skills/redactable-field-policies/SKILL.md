@@ -5,7 +5,7 @@ metadata:
   skillcatalog/display_name: "Redactable Field Policies"
   skillcatalog/author: "Salvatore Formisano"
   skillcatalog/created_at: "2026-04-29T15:18:46Z"
-  skillcatalog/updated_at: "2026-11-27T23:07:00Z"
+  skillcatalog/updated_at: "2026-11-27T23:30:11Z"
 ---
 # Redactable Field Policies
 
@@ -36,8 +36,8 @@ Redactable applies declared policies; it does not detect secrets in content.
 
 Keep operational identities, cursor positions, and provenance labels or locators
 useful for correlation. Keep concrete credentials and domain-confidential values
-out of those representations. Typed request keys and filters retain their nested
-field policies; their diagnostic purpose does not make every field public.
+out of those representations. Typed request identifiers and filters used as
+ordinary fields retain their nested policies; their diagnostic purpose does not make every field public.
 
 For erased data, use a mapping-owned projection that knows its domain policy.
 When no such projection exists, state an explicit omission reason and retain
@@ -79,15 +79,17 @@ Text and typed IP policies disclose different fragments. For example, the same
 address `1.2.3.4` becomes `***.3.4` as text but `0.0.0.4` as a typed IP. Choose
 the representation and policy together; also assess any preserved port.
 
-Traversal leaves map keys unchanged. Before accepting sensitive keys in logs,
-check the resolved library and enabled features against the selected output.
-Where available, `mask-map-keys` masks keys in `Sensitive` and `SensitiveDual`
-producer JSON, including text adapted from JSON-only output. It does not change
-templates, direct `Debug`, or public bypass producers. Verify the emitted output;
-without key masking, redesign the projection so keys become policy-controlled
-fields. Redacting map values alone does not protect the map. The
+Structural map traversal keeps each key and redacts the values. String and
+integer keys qualify directly. Derive `NotSensitive` on a public custom key
+and retain the value policy. Use a typed entry with separate key and value
+fields when the key needs redaction. Declaring the map field public exposes
+its values as well. Review actual key contents even for admitted key types.
+
+`mask-map-keys` changes the serialized object keys in `Sensitive` and
+`SensitiveDual` producer JSON. Structural key admission also applies with that
+feature enabled. Check templates and direct `Debug` separately. The
 [map-key output contract](https://github.com/sformisano/redactable/blob/main/docs/reference.md#map-key-output)
-defines the serialization and public-field limits.
+covers the output and feature scope.
 
 Redacted set elements may become equal and collapse. Use a sequence projection
 if the output needs to preserve cardinality, and decide whether revealing that

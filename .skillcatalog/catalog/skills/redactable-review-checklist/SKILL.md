@@ -5,7 +5,7 @@ metadata:
   skillcatalog/display_name: "Redactable Review Checklist"
   skillcatalog/author: "Salvatore Formisano"
   skillcatalog/created_at: "2026-04-29T15:18:46Z"
-  skillcatalog/updated_at: "2026-11-27T23:07:00Z"
+  skillcatalog/updated_at: "2026-11-27T23:30:11Z"
 ---
 # Redactable Review Checklist
 
@@ -30,7 +30,8 @@ of annotations. Confirm the consumer's locked version first.
 3. **Does the containing type apply that decision?** An outer public declaration
    can bypass nested sensitive fields. Check the entire output representation,
    including custom formatters, serializers, and policy implementations.
-   Typed keys and filters traverse their own policies. Operational identities,
+   A traversed map retains each public key. Check its declaration separately
+   from the value policy. Operational identities,
    cursor positions, and provenance retain useful context without concrete
    credentials. Erased values need a domain-aware projection or an explicit
    omission reason, while available identity and source metadata remain useful.
