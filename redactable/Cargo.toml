@@ -44,7 +44,7 @@ workspace = true
 [dependencies]
 # Exact pin: the derive generates code against this crate's internal items, so
 # the pair must always ship and resolve together.
-redactable-derive = { version = "=0.16.0", path = "../redactable-derive" }
+redactable-derive = { version = "=0.16.1", path = "../redactable-derive" }
 serde = { version = "1", optional = true, features = ["derive"] }
 # The structured tracing adapter reads 128-bit integers from JSON numbers.
 serde_json = { version = "1.0.130", optional = true }
@@ -60,6 +60,7 @@ uuid = { version = "1", optional = true }
 [dev-dependencies]
 redactable-test-fixtures = { path = "../test-fixtures" }
 serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["raw_value"] }
 trybuild = "1"
 tempfile = "3"
 proptest = { version = "1", default-features = false, features = ["std"] }

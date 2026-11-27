@@ -23,6 +23,8 @@ version = "0.0.0"
 edition = "2024"
 rust-version = "1.97"
 
+[workspace]
+
 [dependencies]
 serde = {{ version = "1", features = ["derive"] }}
 

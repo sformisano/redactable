@@ -1,0 +1,15 @@
+[package]
+name = "host-target-backends"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[workspace]
+
+[dependencies]
+safe = { package = "redactable", path = "../../redactable", features = ["slog"] }
+serde = { version = "1", features = ["derive"] }
+
+[build-dependencies]
+safe = { package = "redactable", path = "../../redactable", features = ["tracing"] }
+serde = { version = "1", features = ["derive"] }

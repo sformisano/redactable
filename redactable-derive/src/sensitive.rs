@@ -227,8 +227,8 @@ fn expand_display(
         #redacted_display_impl
         #to_redacted_impl
         #debug_impl
-        #slog_impl
-        #tracing_impl
+        #crate_root::__private::with_slog! { #slog_impl }
+        #crate_root::__private::with_tracing! { #tracing_impl }
     };
     Ok(isolate_generated_items(generated, fresh))
 }
@@ -314,9 +314,8 @@ fn expand_structural(
 
         #debug_impl
 
-        #slog_impl
-
-        #tracing_impl
+        #crate_root::__private::with_slog! { #slog_impl }
+        #crate_root::__private::with_tracing! { #tracing_impl }
 
     };
     Ok(isolate_generated_items(trait_impl, fresh))

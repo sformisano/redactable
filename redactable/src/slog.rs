@@ -203,11 +203,15 @@ impl_slog_redacted!(@ [T] BypassJsonRedaction<'_, T> where T: Serialize + ?Sized
 /// `Display`.
 ///
 /// ## Example
+///
+/// Enable `redactable/slog` and add `slog`, `serde` with its `derive` feature,
+/// and `serde_json = "1"` to your dependencies.
+///
 /// ```
-/// # #![allow(hidden_glob_reexports)]
 /// # pub use redactable::*;
+/// # mod example {
 /// use redactable::slog::SlogRedactedExt;
-/// use redactable::{Secret, Sensitive};
+/// use redactable::{Secret, Sensitive, ToRedacted};
 ///
 /// #[derive(Clone, serde::Serialize, Sensitive)]
 /// struct Event {
@@ -218,7 +222,7 @@ impl_slog_redacted!(@ [T] BypassJsonRedaction<'_, T> where T: Serialize + ?Sized
 ///     #[sensitive(Secret)]
 ///     token: String,
 /// }
-/// # fn main() {
+/// # pub fn run() {
 /// use ::slog::{Discard, Logger};
 /// let event = Event { request_id: "review-42".into(), attempt: 3, token: "secret".into() };
 /// assert_eq!(event.to_redacted().json(), serde_json::json!({
@@ -227,6 +231,8 @@ impl_slog_redacted!(@ [T] BypassJsonRedaction<'_, T> where T: Serialize + ?Sized
 /// let logger = Logger::root(Discard, ::slog::o!());
 /// ::slog::info!(logger, "event"; "data" => event.slog_redacted_json());
 /// # }
+/// # }
+/// # fn main() { example::run(); }
 /// ```
 pub trait SlogRedactedExt: ToRedacted {
     /// Wraps `&self` for slog logging of its redacted text.

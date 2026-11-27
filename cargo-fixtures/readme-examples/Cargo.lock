@@ -333,7 +333,7 @@ checksum = "f8dcc9c7d52a811697d2151c701e0d08956f92b0e24136cf4cf27b57a6a0d9bf"
 
 [[package]]
 name = "redactable"
-version = "0.16.0"
+version = "0.16.1"
 dependencies = [
  "erased-serde 0.3.31",
  "log",
@@ -347,7 +347,7 @@ dependencies = [
 
 [[package]]
 name = "redactable-derive"
-version = "0.16.0"
+version = "0.16.1"
 dependencies = [
  "proc-macro-crate",
  "proc-macro2",
@@ -442,6 +442,7 @@ version = "1.0.150"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e8014e44b4736ed0538adeecded0fce2a272f22dc9578a7eb6b2d9993c74cfb9"
 dependencies = [
+ "indexmap",
  "itoa",
  "memchr",
  "serde",

@@ -7,6 +7,9 @@ edition = "2024"
 rust-version = "1.97"
 publish = false
 
+[features]
+preserve-order = ["serde_json/preserve_order"]
+
 [dependencies]
 redactable = { path = "../../redactable", features = ["log", "slog", "tracing-valuable"] }
 displaydoc = "0.2"

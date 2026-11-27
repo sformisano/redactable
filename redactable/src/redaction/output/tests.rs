@@ -36,6 +36,39 @@ impl ToRedacted for Once {
 }
 
 #[test]
+fn borrowed_list_is_copy_even_when_its_items_are_not_clone() {
+    fn assert_copy<T: Copy>() {}
+    assert_copy::<RedactedList<'_, Once>>();
+}
+
+#[cfg(feature = "tracing")]
+#[test]
+fn tracing_text_reuses_the_producers_string() {
+    use std::fmt::{self, Write};
+
+    use crate::tracing::TracingRedactedExt;
+
+    struct TextAddress(Option<*const u8>);
+    impl Write for TextAddress {
+        fn write_str(&mut self, value: &str) -> fmt::Result {
+            assert_eq!(value, "ready");
+            self.0 = Some(value.as_ptr());
+            Ok(())
+        }
+    }
+
+    let text = String::from("ready");
+    let original = text.as_ptr();
+    let producer = Once(Cell::new(Some(RedactedValue::from_text_and_json(
+        text,
+        json!({"status": "ready"}),
+    ))));
+    let mut output = TextAddress(None);
+    write!(output, "{}", producer.tracing_redacted()).unwrap();
+    assert_eq!(output.0, Some(original));
+}
+
+#[test]
 fn list_reuses_the_owned_json_of_included_items() {
     // A string clone discards spare capacity even if the allocator recycles its address.
     let mut text = String::with_capacity(256);

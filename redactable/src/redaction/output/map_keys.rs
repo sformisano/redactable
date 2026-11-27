@@ -7,8 +7,8 @@
 //! interface, so their field and tag keys are masked too.
 
 use serde::ser::{
-    Serialize, SerializeMap, SerializeSeq, SerializeStruct, SerializeStructVariant, SerializeTuple,
-    SerializeTupleStruct, SerializeTupleVariant, Serializer,
+    Error as _, Serialize, SerializeMap, SerializeSeq, SerializeStruct, SerializeStructVariant,
+    SerializeTuple, SerializeTupleStruct, SerializeTupleVariant, Serializer,
 };
 
 /// Serialize the wrapped value with every map key, at any depth, masked.
@@ -44,7 +44,7 @@ impl<S: Serializer> Serializer for Masking<S> {
     type SerializeTupleStruct = Compound<S::SerializeTupleStruct>;
     type SerializeTupleVariant = Compound<S::SerializeTupleVariant>;
     type SerializeMap = MaskedMap<S::SerializeMap>;
-    type SerializeStruct = Compound<S::SerializeStruct>;
+    type SerializeStruct = MaskedStruct<S>;
     type SerializeStructVariant = Compound<S::SerializeStructVariant>;
 
     forward_scalars!(
@@ -150,7 +150,14 @@ impl<S: Serializer> Serializer for Masking<S> {
         name: &'static str,
         len: usize,
     ) -> Result<Self::SerializeStruct, Self::Error> {
-        self.0.serialize_struct(name, len).map(Compound)
+        if name == RAW_VALUE && *RAW_VALUE_ENABLED {
+            Ok(MaskedStruct::Raw {
+                target: self.0,
+                parsed: None,
+            })
+        } else {
+            self.0.serialize_struct(name, len).map(MaskedStruct::Typed)
+        }
     }
 
     fn serialize_struct_variant(
@@ -224,24 +231,70 @@ impl<C: SerializeTupleVariant> SerializeTupleVariant for Compound<C> {
     }
 }
 
-impl<C: SerializeStruct> SerializeStruct for Compound<C> {
-    type Ok = C::Ok;
-    type Error = C::Error;
+// RawValue uses this reserved struct name to pass an unparsed JSON string to
+// serde_json. Forwarding it as a normal struct would bypass serialize_map.
+const RAW_VALUE: &str = "$serde_json::private::RawValue";
+
+// Cargo can enable serde_json/raw_value through any consumer. With it off,
+// the same name is an ordinary Serde struct and its typed fields must survive.
+static RAW_VALUE_ENABLED: std::sync::LazyLock<bool> = std::sync::LazyLock::new(|| {
+    read_raw_field(RAW_VALUE, "null").is_ok_and(|probe| probe.is_null())
+});
+
+fn read_raw_field<T: Serialize + ?Sized>(
+    key: &'static str,
+    value: &T,
+) -> serde_json::Result<serde_json::Value> {
+    let mut raw = serde_json::value::Serializer.serialize_struct(RAW_VALUE, 1)?;
+    raw.serialize_field(key, value)?;
+    SerializeStruct::end(raw)
+}
+
+enum MaskedStruct<S: Serializer> {
+    Typed(S::SerializeStruct),
+    Raw {
+        target: S,
+        parsed: Option<serde_json::Value>,
+    },
+}
+
+impl<S: Serializer> SerializeStruct for MaskedStruct<S> {
+    type Ok = S::Ok;
+    type Error = S::Error;
 
     fn serialize_field<T: Serialize + ?Sized>(
         &mut self,
         key: &'static str,
         value: &T,
     ) -> Result<(), Self::Error> {
-        self.0.serialize_field(key, &MaskMapKeys(value))
+        match self {
+            Self::Typed(fields) => fields.serialize_field(key, &MaskMapKeys(value)),
+            Self::Raw { parsed, .. } => {
+                if parsed.is_some() {
+                    return Err(S::Error::custom("duplicate raw JSON field"));
+                }
+                // Let serde_json validate its own raw field and parse it once.
+                *parsed = Some(read_raw_field(key, value).map_err(S::Error::custom)?);
+                Ok(())
+            }
+        }
     }
 
     fn skip_field(&mut self, key: &'static str) -> Result<(), Self::Error> {
-        self.0.skip_field(key)
+        match self {
+            Self::Typed(fields) => fields.skip_field(key),
+            Self::Raw { .. } => Ok(()),
+        }
     }
 
     fn end(self) -> Result<Self::Ok, Self::Error> {
-        self.0.end()
+        match self {
+            Self::Typed(fields) => fields.end(),
+            Self::Raw { target, parsed } => {
+                let value = parsed.ok_or_else(|| S::Error::custom("missing raw JSON field"))?;
+                MaskMapKeys(&value).serialize(target)
+            }
+        }
     }
 }
 

@@ -20,10 +20,13 @@
 //!
 //! # Example
 //!
+//! Enable `redactable/tracing` and add `tracing`, `serde` with its `derive` feature,
+//! and `serde_json = "1"` to your dependencies.
+//!
 //! ```
-//! # #![allow(hidden_glob_reexports)]
 //! # pub use redactable::*;
-//! use redactable::{Secret, Sensitive, SensitiveValue};
+//! # mod example {
+//! use redactable::{Secret, Sensitive, SensitiveValue, ToRedacted};
 //! use redactable::tracing::{TracingRedactedDebugExt, TracingRedactedExt};
 //!
 //! #[derive(Clone, Sensitive, serde::Serialize)]
@@ -34,7 +37,7 @@
 //!     token: String,
 //! }
 //!
-//! # fn main() {
+//! # pub fn run() {
 //! let user = User {
 //!     name: "alice".to_owned(),
 //!     token: "api-token".to_owned(),
@@ -50,6 +53,8 @@
 //! assert_eq!(user.token, "api-token");
 //! assert_eq!(leaf_token.expose(), "api-token");
 //! # }
+//! # }
+//! # fn main() { example::run(); }
 //! ```
 
 use std::fmt::{Debug, Display};
@@ -168,7 +173,7 @@ pub trait TracingRedactedExt {
 
 impl<T: ToRedacted + ?Sized> TracingRedactedExt for T {
     fn tracing_redacted(&self) -> DisplayValue<String> {
-        display(self.to_redacted_cow().text())
+        display(RedactedValue::text_from(self))
     }
 }
 
@@ -250,7 +255,7 @@ impl<T> TracingRedacted for TracingRedactedValue<T> {}
 ///
 /// `tracing::field::valuable` is hidden by upstream `tracing` unless the crate
 /// is compiled with `RUSTFLAGS="--cfg tracing_unstable"`. Run this example with
-/// `RUSTFLAGS="--cfg tracing_unstable" cargo test --doc -p redactable --features tracing-valuable`.
+/// `RUSTFLAGS="--cfg tracing_unstable" RUSTDOCFLAGS="--cfg tracing_unstable" cargo test --doc -p redactable --features tracing-valuable`.
 ///
 /// ```
 /// # #![allow(hidden_glob_reexports)]
@@ -270,6 +275,7 @@ impl<T> TracingRedacted for TracingRedactedValue<T> {}
 /// let user = User { username: "alice".into(), password: "secret".into() };
 ///
 /// let redacted = user.tracing_redacted_valuable();
+/// # #[cfg(tracing_unstable)]
 /// ::tracing::info!(user = ::tracing::field::valuable(&redacted));
 /// let checked = redacted.into_inner();
 /// assert_eq!(checked.username, "alice");

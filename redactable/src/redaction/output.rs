@@ -103,6 +103,15 @@ impl RedactedValue {
         }
     }
 
+    /// Moves freshly produced text or renders a snapshot into an owned string.
+    #[cfg(feature = "tracing")]
+    pub(crate) fn text_from<T: ToRedacted + ?Sized>(producer: &T) -> String {
+        match producer.to_redacted_cow() {
+            Cow::Borrowed(value) => value.text(),
+            Cow::Owned(mut value) => value.text.take().unwrap_or_else(|| value.text()),
+        }
+    }
+
     /// Returns the redacted JSON for this value.
     ///
     /// A text-only value answers with `{"message": text}`. The two

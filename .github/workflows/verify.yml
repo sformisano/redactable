@@ -104,11 +104,17 @@ jobs:
       - name: Tests (all features)
         run: cargo test --locked --workspace --all-targets --all-features
 
-      - name: Doc tests (all features)
-        run: RUSTFLAGS="--cfg tracing_unstable" cargo test --locked --doc --workspace --all-features
+      - name: Stable doc tests (all features)
+        run: cargo test --locked --doc --workspace --all-features
 
-      - name: README consumer examples
-        run: RUSTFLAGS="--cfg tracing_unstable" cargo test --locked --manifest-path cargo-fixtures/readme-examples/Cargo.toml
+      - name: Doc tests and README examples with unstable tracing
+        env:
+          RUSTFLAGS: --cfg tracing_unstable
+          RUSTDOCFLAGS: --cfg tracing_unstable
+        run: |
+          cargo test --locked --doc --workspace --all-features
+          cargo test --locked --manifest-path cargo-fixtures/readme-examples/Cargo.toml
+          cargo test --locked --manifest-path cargo-fixtures/readme-examples/Cargo.toml --doc --features preserve-order
 
       - name: Rustdoc warnings
         run: RUSTDOCFLAGS="-D warnings" cargo doc --locked --workspace --all-features --no-deps
@@ -127,6 +133,9 @@ jobs:
 
       - name: Slog feature-unification fixture
         run: cargo test --manifest-path cargo-fixtures/slog-feature-unification/Cargo.toml --workspace
+
+      - name: Independent build and application backend features
+        run: cargo check --manifest-path cargo-fixtures/host-target-backends/Cargo.toml
 
       - name: Panic-abort RefCell fixture
         run: cargo test --locked -p redactable --test followup_refcell_panic_abort --features slog,tracing
