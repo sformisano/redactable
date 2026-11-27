@@ -22,6 +22,7 @@ struct Captured {
     target: String,
     file: Option<String>,
     line: Option<u32>,
+    literal_message: Option<&'static str>,
     message: String,
     fields: Value,
 }
@@ -39,6 +40,7 @@ impl Log for Capture {
             target: record.target().into(),
             file: record.file().map(str::to_owned),
             line: record.line(),
+            literal_message: record.args().as_str(),
             message: record.args().to_string(),
             fields: log_capture::fields(record),
         });
@@ -79,14 +81,14 @@ struct Outcome {
 #[test]
 fn sink_selection_can_return_early_or_await_in_a_send_future() {
     fn log_if_configured(sink: Option<&Sink>) -> Option<()> {
-        checked_info!(sink?, "ready");
+        checked_info!(sink: sink?, "ready");
         Some(())
     }
     assert_eq!(log_if_configured(None), None);
 
     fn require_send(_: impl Send) {}
     require_send(async {
-        checked_info!(std::future::ready(Sink::Log).await, "ready");
+        checked_info!(sink: std::future::ready(Sink::Log).await, "ready");
     });
 }
 
@@ -119,8 +121,8 @@ fn checked_levels_send_declared_fields_and_preserve_the_call_site() {
         &sink
     };
     let source_line = line!() + 1;
-    checked_info!(select_sink(),
-        user = &user, outcome = Outcome { accepted: true }, cached = &saved,
+    checked_info!(
+        user, outcome = Outcome { accepted: true }, cached = &saved,
         data = select(), selected_display:% = select(), selected_debug:? = select(),
         text = BypassDisplayRedaction("public text"),
         display:% = BypassDisplayRedaction("public display"),
@@ -128,12 +130,14 @@ fn checked_levels_send_declared_fields_and_preserve_the_call_site() {
         roles = BypassJsonRedaction(&["reader", "writer"]);
         "signed in {{audit}}"
     );
-    error!(sink, "error");
-    warn!(sink, "warn");
-    debug!(sink, "debug");
-    trace!(sink, "trace");
+    error!("error");
+    warn!("warn");
+    debug!(sink: select_sink(), "debug");
+    trace!("trace");
+    checked_info!("signed in as {}", select());
+    checked_info!(saved; "audit for {who}", who = select());
     ::log::set_max_level(LevelFilter::Warn);
-    checked_info!(sink, data = select(); "disabled");
+    checked_info!(data = select(); "disabled {}", select());
 
     let records = LOG.0.lock().unwrap();
     let first = &records[0];
@@ -151,6 +155,12 @@ fn checked_levels_send_declared_fields_and_preserve_the_call_site() {
     assert_eq!(first.target, module_path!());
     assert_eq!(first.file.as_deref(), Some(file!()));
     assert_eq!(first.line, Some(source_line));
+    assert_eq!(first.literal_message, Some("signed in {audit}"));
+    assert_eq!(records[1].literal_message, Some("error"));
+    assert_eq!(
+        records.last().unwrap().fields,
+        json!({"saved": expected_user})
+    );
     assert_eq!(
         records
             .iter()
@@ -161,11 +171,13 @@ fn checked_levels_send_declared_fields_and_preserve_the_call_site() {
             (Level::Error, "error"),
             (Level::Warn, "warn"),
             (Level::Debug, "debug"),
-            (Level::Trace, "trace")
+            (Level::Trace, "trace"),
+            (Level::Info, "signed in as selected: [REDACTED]"),
+            (Level::Info, "audit for selected: [REDACTED]")
         ]
     );
-    assert_eq!(calls.get(), 3);
-    assert_eq!(projection.calls.get(), 3);
+    assert_eq!(calls.get(), 5);
+    assert_eq!(projection.calls.get(), 5);
     assert_eq!(selections.get(), 1);
     assert!(!format!("{records:?}").contains(secret));
 }

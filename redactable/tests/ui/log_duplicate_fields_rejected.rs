@@ -1,9 +1,10 @@
-use redactable::logging::Sink;
-
-fn fields(sink: &Sink) {
-    redactable::info!(sink, type = (), r#match:% = (); "distinct keywords");
-    redactable::info!(sink, user = (), other = (), user:? = (); "repeated name");
-    redactable::warn!(sink, r#type = (), type:% = (); "repeated keyword");
+fn fields() {
+    let user = ();
+    let message = ();
+    redactable::info!(type = (), r#match:% = (); "distinct keywords");
+    redactable::info!(user, other = (), user:? = (); "repeated name");
+    redactable::warn!(r#type = (), type:% = (); "repeated keyword");
+    redactable::error!(message; "reserved field");
 }
 
 fn main() {}

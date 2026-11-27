@@ -145,7 +145,10 @@ fn debug_text<'a>(field: &'a RecordedField, name: &str) -> &'a str {
 fn checked_tracing_fields_follow_the_selected_shape_and_level() {
     use std::cell::Cell;
 
-    use redactable::{Sensitive, logging::Sink};
+    use redactable::{
+        Sensitive,
+        logging::{Sink, set_sink},
+    };
     use serde_json::json;
 
     #[derive(Clone, Sensitive, serde::Serialize)]
@@ -193,14 +196,14 @@ fn checked_tracing_fields_follow_the_selected_shape_and_level() {
         calls.set(calls.get() + 1);
         &saved
     };
-    let sink = Sink::Tracing;
+    set_sink(Sink::Tracing).unwrap();
     with_default(subscriber.clone(), || {
-        redactable::info!(sink,
-            batch = select(), text = text, absent = None::<()>, dual = dual,
+        redactable::info!(
+            batch = select(), text, absent = None::<()>, dual,
             displayed:% = dual, debugged:? = dual;
-            "checked {{event}}"
+            "checked {{event}} for {who}", who = &dual
         );
-        redactable::debug!(sink, disabled = select(); "filtered");
+        redactable::debug!(disabled = select(); "filtered {}", select());
     });
 
     let fields = subscriber.captured_fields();
@@ -231,7 +234,7 @@ fn checked_tracing_fields_follow_the_selected_shape_and_level() {
     }
     let message = &field_named(&fields, "message").value;
     assert!(
-        matches!(message, RecordedValue::Str(s) | RecordedValue::Debug(s) if s == "checked {event}"),
+        matches!(message, RecordedValue::Str(s) | RecordedValue::Debug(s) if s == "checked {event} for audit: [REDACTED]"),
         "unexpected tracing message {message:?}"
     );
     assert!(!format!("{fields:?}").contains(secret));
@@ -254,7 +257,7 @@ fn checked_tracing_preserves_digits_beyond_valuables_numeric_range() {
     };
     let saved = BypassJsonRedaction(&numbers).to_redacted();
     let fields = capture_fields(|| {
-        redactable::info!(Sink::Tracing, numbers = &saved; "numbers");
+        redactable::info!(sink: &Sink::Tracing, numbers = &saved; "numbers");
     });
     assert_eq!(
         field_named(&fields, "numbers").value,

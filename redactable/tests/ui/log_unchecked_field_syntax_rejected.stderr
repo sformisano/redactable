@@ -1,19 +1,31 @@
 error: checked fields support only the :% and :? text selectors
  --> tests/ui/log_unchecked_field_syntax_rejected.rs:6:5
   |
-6 |     redactable::info!(sink, valid = (), data:serde = raw; "unchecked serialization");
-  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+6 |     redactable::info!(valid = (), data:serde = raw; "unchecked serialization");
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
   |
   = note: this error originates in the macro `$crate::__redactable_event` which comes from the expansion of the macro `redactable::info` (in Nightly builds, run with -Z macro-backtrace for more info)
 
 error: no rules expected `(`
- --> tests/ui/log_unchecked_field_syntax_rejected.rs:7:29
+ --> tests/ui/log_unchecked_field_syntax_rejected.rs:7:35
   |
-7 |     redactable::warn!(sink, (key) = (); "dynamic key");
-  |                             ^ no rules expected this token in macro call
+7 |     redactable::warn!(sink: sink, (key) = (); "dynamic key");
+  |                                   ^ no rules expected this token in macro call
   |
-note: while trying to match meta-variable `$message:literal`
+note: while trying to match meta-variable `$fmt:literal`
  --> src/logging.rs
   |
-  |     ($level:ident, $sink:expr, $message:literal $(,)?) => {
-  |                                ^^^^^^^^^^^^^^^^
+  |     (@parse ($level:ident, $route:expr) $fmt:literal $($args:tt)*) => {
+  |                                         ^^^^^^^^^^^^
+
+error: no rules expected `"positional sink"`
+ --> tests/ui/log_unchecked_field_syntax_rejected.rs:8:29
+  |
+8 |     redactable::info!(sink, "positional sink");
+  |                             ^^^^^^^^^^^^^^^^^ no rules expected this token in macro call
+  |
+note: while trying to match meta-variable `$key:ident`
+ --> src/logging.rs
+  |
+  |     (@parse ($level:ident, $route:expr) $($key:ident $(:$mode:tt)? $(= $value:expr)?),+ $(,)?; $fmt:literal $($args:tt)*) => {{
+  |                                           ^^^^^^^^^^

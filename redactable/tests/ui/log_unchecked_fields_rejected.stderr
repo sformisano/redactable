@@ -1,8 +1,8 @@
 error[E0277]: the trait bound `String: ToRedacted` is not satisfied
   --> tests/ui/log_unchecked_fields_rejected.rs:35:5
    |
-35 |     redactable::info!(sink, secret = raw; "raw string");
-   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+35 |     redactable::info!(raw; "raw shorthand");
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
    |     |
    |     the trait `ToRedacted` is not implemented for `String`
    |     required by a bound introduced by this call
@@ -22,8 +22,8 @@ error[E0277]: the trait bound `String: ToRedacted` is not satisfied
 error[E0277]: the trait bound `u32: ToRedacted` is not satisfied
   --> tests/ui/log_unchecked_fields_rejected.rs:36:5
    |
-36 |     redactable::warn!(sink, count = number; "raw number");
-   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+36 |     redactable::warn!(count = number; "raw number");
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
    |     |
    |     the trait `ToRedacted` is not implemented for `u32`
    |     required by a bound introduced by this call
@@ -43,8 +43,8 @@ error[E0277]: the trait bound `u32: ToRedacted` is not satisfied
 error[E0277]: the trait bound `Undeclared: ToRedacted` is not satisfied
   --> tests/ui/log_unchecked_fields_rejected.rs:37:5
    |
-37 |     redactable::error!(sink, valid = (), bad = custom, valid_again = (); "mixed");
-   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+37 |     redactable::error!(valid = (), bad = custom, valid_again = (); "mixed");
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
    |     |
    |     unsatisfied trait bound
    |     required by a bound introduced by this call
@@ -69,8 +69,8 @@ help: the trait `ToRedacted` is not implemented for `Undeclared`
 error[E0277]: the trait bound `String: ToRedacted` is not satisfied
   --> tests/ui/log_unchecked_fields_rejected.rs:38:5
    |
-38 |     redactable::debug!(sink, secret:% = raw; "raw display");
-   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+38 |     redactable::debug!(sink: sink, secret:% = raw; "raw display");
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
    |     |
    |     the trait `ToRedacted` is not implemented for `String`
    |     required by a bound introduced by this call
@@ -90,8 +90,8 @@ error[E0277]: the trait bound `String: ToRedacted` is not satisfied
 error[E0277]: the trait bound `String: ToRedacted` is not satisfied
   --> tests/ui/log_unchecked_fields_rejected.rs:39:5
    |
-39 |     redactable::trace!(sink, secret:? = raw; "raw debug");
-   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+39 |     redactable::trace!(secret:? = raw; "raw debug");
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
    |     |
    |     the trait `ToRedacted` is not implemented for `String`
    |     required by a bound introduced by this call
@@ -107,3 +107,50 @@ error[E0277]: the trait bound `String: ToRedacted` is not satisfied
              BypassJsonRedaction<'_, T>
            and $N others
    = note: this error originates in the macro `$crate::__redactable_field` which comes from the expansion of the macro `redactable::trace` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0277]: the trait bound `String: ToRedacted` is not satisfied
+  --> tests/ui/log_unchecked_fields_rejected.rs:40:5
+   |
+40 |     redactable::info!("unchecked {}", raw);
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |     |
+   |     the trait `ToRedacted` is not implemented for `String`
+   |     required by a bound introduced by this call
+   |
+   = help: the following other types implement trait `ToRedacted`:
+             &T
+             &mut T
+             ()
+             Arc<T>
+             Box<T>
+             BypassDebugRedaction<T>
+             BypassDisplayRedaction<T>
+             BypassJsonRedaction<'_, T>
+           and $N others
+   = note: this error originates in the macro `$crate::__redactable_field` which comes from the expansion of the macro `redactable::info` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0277]: the trait bound `Undeclared: ToRedacted` is not satisfied
+  --> tests/ui/log_unchecked_fields_rejected.rs:41:5
+   |
+41 |     redactable::info!(valid = (); "approved {ok} and unchecked {who:?}", ok = (), who = custom);
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |     |
+   |     unsatisfied trait bound
+   |     required by a bound introduced by this call
+   |
+help: the trait `ToRedacted` is not implemented for `Undeclared`
+  --> tests/ui/log_unchecked_fields_rejected.rs:8:1
+   |
+ 8 | struct Undeclared;
+   | ^^^^^^^^^^^^^^^^^
+   = help: the following other types implement trait `ToRedacted`:
+             &T
+             &mut T
+             ()
+             Arc<T>
+             Box<T>
+             BypassDebugRedaction<T>
+             BypassDisplayRedaction<T>
+             BypassJsonRedaction<'_, T>
+           and $N others
+   = note: this error originates in the macro `$crate::__redactable_field` which comes from the expansion of the macro `redactable::info` (in Nightly builds, run with -Z macro-backtrace for more info)

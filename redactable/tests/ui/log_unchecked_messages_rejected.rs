@@ -1,10 +1,8 @@
-use redactable::logging::Sink;
-
-fn unchecked(sink: &Sink) {
+fn unchecked() {
     let secret = "raw";
-    redactable::info!(sink, "signed in {secret}");
-    redactable::warn!(sink, data = (); "signed in {}", secret);
-    redactable::error!(sink, data = (); secret);
+    redactable::info!("signed in {secret}");
+    redactable::warn!(data = (); "signed in as {who} with {secret}", who = ());
+    redactable::error!(data = (); secret);
 }
 
 fn main() {}

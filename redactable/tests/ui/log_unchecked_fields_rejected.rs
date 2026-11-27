@@ -32,11 +32,13 @@ fn unchecked(sink: &Sink) {
     #[cfg(feature = "log")]
     ::log::info!(raw = raw, number = number, custom = custom; "ordinary log");
 
-    redactable::info!(sink, secret = raw; "raw string");
-    redactable::warn!(sink, count = number; "raw number");
-    redactable::error!(sink, valid = (), bad = custom, valid_again = (); "mixed");
-    redactable::debug!(sink, secret:% = raw; "raw display");
-    redactable::trace!(sink, secret:? = raw; "raw debug");
+    redactable::info!(raw; "raw shorthand");
+    redactable::warn!(count = number; "raw number");
+    redactable::error!(valid = (), bad = custom, valid_again = (); "mixed");
+    redactable::debug!(sink: sink, secret:% = raw; "raw display");
+    redactable::trace!(secret:? = raw; "raw debug");
+    redactable::info!("unchecked {}", raw);
+    redactable::info!(valid = (); "approved {ok} and unchecked {who:?}", ok = (), who = custom);
 }
 
 fn main() {}

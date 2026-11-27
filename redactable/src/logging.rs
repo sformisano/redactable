@@ -1,91 +1,49 @@
-//! Checked event logging through an application-selected [`Sink`].
+//! Checked logging for `log`, `slog`, and `tracing`.
 //!
-//! Pass the sink to [`crate::error!`], [`crate::warn!`], [`crate::info!`],
-//! [`crate::debug!`], or [`crate::trace!`]. Each named field requires
-//! [`crate::ToRedacted`]. A plain field selects the structured view.
-//! Both `:%` and `:?` select the producer's [redacted text](crate::RedactedValue::text).
-//! Messages are fixed string literals. Use `{{` and `}}` to emit literal braces.
-//! Each field name must be unique, including its raw identifier spelling.
-//! The event text reserves the field name `message`, including its raw
-//! identifier spelling `r#message`.
+//! Import [`info!`](crate::info!), [`warn!`](crate::warn!), [`error!`](crate::error!),
+//! [`debug!`](crate::debug!), or [`trace!`](crate::trace!). The `log` feature
+//! uses the application's installed `log` logger. To use tracing or a slog
+//! logger, call [`set_sink`] once at startup.
 //!
 //! ```
-//! use redactable::{info, logging::Sink, Secret, SensitiveValue};
+//! use redactable::{info, Secret, SensitiveValue};
 //!
-//! fn checked(sink: &Sink) {
-//!     let token = SensitiveValue::<_, Secret>::from(String::from("example-token"));
-//!     info!(sink, token:% = &token; "credential checked");
-//! }
+//! let token = SensitiveValue::<_, Secret>::from(String::from("example-token"));
+//! info!("started");
+//! info!(token; "credential checked");
+//! info!("credential checked for {}", token);
 //! ```
 //!
-//! Use [`crate::BypassDisplayRedaction`], [`crate::BypassDebugRedaction`],
-//! or [`crate::BypassJsonRedaction`] to declare the complete output public.
+//! Named fields and format arguments require [`crate::ToRedacted`]. A plain
+//! field selects JSON. Both `key:%` and `key:?` select the declared text.
+//! Message arguments format that text, with standard Rust string formatting.
+//! Supply named arguments explicitly, as in `info!("checked {who}", who = user)`.
+//! Use [`crate::BypassDisplayRedaction`], [`crate::BypassDebugRedaction`], or
+//! [`crate::BypassJsonRedaction`] to publish an ordinary value explicitly.
+//!
+//! Each field needs a unique name. The name `message` is reserved for the
+//! event text. For a single event with a contextual destination, use
+//! `info!(sink: &request_sink, user; "signed in")`.
 //!
 //! ```compile_fail
-//! use redactable::{info, logging::Sink};
+//! use redactable::info;
 //!
-//! fn unchecked(sink: &Sink, raw: String) {
-//!     info!(sink, token = raw; "credential checked");
-//! }
+//! let raw = String::from("example-token");
+//! info!("credential checked for {}", raw);
 //! ```
 //!
 //! ```compile_fail
-//! use redactable::{info, logging::Sink};
+//! use redactable::info;
 //!
-//! fn event(sink: &Sink) {
-//!     info!(sink, message = (); "credential checked");
-//! }
+//! info!(message = (); "credential checked");
 //! ```
 
-#[cfg(feature = "slog")]
-use ::slog::Logger as SlogLogger;
-#[cfg(not(feature = "slog"))]
-use std::convert::Infallible as SlogLogger;
+mod message;
+mod route;
 
-/// The backend used by a checked logging macro.
-///
-/// Cargo features make the corresponding variants available. The application
-/// chooses a variant and configures the backend.
-/// The macro evaluates its sink once. The selected backend's native event
-/// macro controls when it evaluates fields.
-#[derive(Clone, Debug)]
-#[non_exhaustive]
-#[allow(missing_copy_implementations)] // The slog variant owns its logger.
-pub enum Sink {
-    /// The application's global `log` logger.
-    #[cfg(feature = "log")]
-    Log,
-    /// The active `tracing` subscriber.
-    #[cfg(feature = "tracing")]
-    Tracing,
-    /// A `slog` logger with its configured drain and context.
-    #[cfg(feature = "slog")]
-    Slog(SlogLogger),
-}
-
-// All arms exist in the consumer macro expansion, regardless of which
-// features Cargo enabled on Redactable. Only enabled sinks produce a route.
 #[doc(hidden)]
-#[derive(Clone, Copy)]
-pub enum Route<'a> {
-    Log,
-    Tracing,
-    Slog(&'a SlogLogger),
-}
-
-impl Sink {
-    #[doc(hidden)]
-    pub fn route(&self) -> Route<'_> {
-        match self {
-            #[cfg(feature = "log")]
-            Self::Log => Route::Log,
-            #[cfg(feature = "tracing")]
-            Self::Tracing => Route::Tracing,
-            #[cfg(feature = "slog")]
-            Self::Slog(logger) => Route::Slog(logger),
-        }
-    }
-}
+pub use route::{__default_route, Route};
+pub use route::{SetSinkError, Sink, set_sink};
 
 #[doc(hidden)]
 pub fn __text(value: &crate::RedactedValue) -> std::borrow::Cow<'_, str> {
@@ -141,15 +99,24 @@ pub use crate::__redactable_emit_tracing as __emit_tracing;
 #[doc(hidden)]
 #[macro_export]
 macro_rules! __redactable_event {
-    ($level:ident, $sink:expr, $message:literal $(,)?) => {
-        $crate::__redactable_event!(@modes [] ($level, $sink, [], $message))
+    ($level:ident, sink: $sink:expr, $($input:tt)+) => {{
+        let selected_sink = &$sink;
+        $crate::__redactable_event!(@parse ($level, $crate::logging::Sink::route(selected_sink)) $($input)+)
+    }};
+    ($level:ident, $($input:tt)+) => {
+        $crate::__redactable_event!(@parse ($level, $crate::logging::__default_route()) $($input)+)
     };
-    ($level:ident, $sink:expr, $($key:ident $(:$mode:tt)? = $value:expr),+ $(,)?; $message:literal $(,)?) => {{
+    (@parse ($level:ident, $route:expr) $fmt:literal $($args:tt)*) => {
+        $crate::__redactable_event!(@modes [] ($level, $route, [], $fmt $($args)*))
+    };
+    (@parse ($level:ident, $route:expr) $($key:ident $(:$mode:tt)? $(= $value:expr)?),+ $(,)?; $fmt:literal $($args:tt)*) => {{
         $crate::__redactable_event!(@keys [$($key),+] $);
         $crate::__redactable_event!(
-            @modes [$($($mode)?)+] ($level, $sink, [$($key [$($mode)?] ($value)),+], $message)
+            @modes [$($($mode)?)+] ($level, $route, [$($key [$($mode)?] ($crate::__redactable_event!(@value $key $(= $value)?))),+], $fmt $($args)*)
         )
     }};
+    (@value $key:ident) => { $key };
+    (@value $key:ident = $value:expr) => { $value };
     (@keys [$($key:ident),+] $dollar:tt) => {
         $($crate::__redactable_event!(@key $key);)+
         // Rust rejects repeated macro binding names and accepts keyword identifiers.
@@ -167,50 +134,52 @@ macro_rules! __redactable_event {
     (@modes [$other:tt $($tail:tt)*] $event:tt) => {
         ::core::compile_error!("checked fields support only the :% and :? text selectors")
     };
-    (@modes [] ($level:ident, $sink:expr, $fields:tt, $message:literal)) => {{
-        const _: &::core::primitive::str = $message;
-        let selected_sink = &$sink;
-        // A format string expanded by concat! cannot capture caller variables.
-        let message = const { ::core::format_args!(::core::concat!($message)) };
-        match $crate::logging::Sink::route(selected_sink) {
+    (@modes [] ($level:ident, $route:expr, $fields:tt, $fmt:literal $($args:tt)*)) => {{
+        const _: &::core::primitive::str = $fmt;
+        // Keep message operands inside the native event macro's level check.
+        $crate::__redactable_event!(@emit ($level, $route, $fields) $crate::__redactable_message!($fmt $($args)*))
+    }};
+    (@emit ($level:ident, $route:expr, $fields:tt) $message:expr) => {
+        match $route {
             $crate::logging::Route::Log => {
-                $crate::logging::__emit_log!($level, (), $fields, message)
+                $crate::logging::__emit_log!($level, (), $fields, $message)
             }
             $crate::logging::Route::Tracing => {
-                $crate::logging::__emit_tracing!($level, (), $fields, message)
+                $crate::logging::__emit_tracing!($level, (), $fields, $message)
             }
             $crate::logging::Route::Slog(logger) => {
-                $crate::logging::__emit_slog!($level, logger, $fields, message)
+                $crate::logging::__emit_slog!($level, logger, $fields, $message)
             }
+            $crate::logging::Route::Disabled => {}
         }
-    }};
+    };
 }
 
-/// Logs a checked event at the error level through a [`Sink`](crate::logging::Sink).
+/// Logs a checked event at the error level through the application's selected backend.
 #[macro_export]
 macro_rules! error {
     ($($args:tt)*) => { $crate::__redactable_event!(Error, $($args)*) };
 }
 
-/// Logs a checked event at the warn level through a [`Sink`](crate::logging::Sink).
+/// Logs a checked event at the warn level through the application's selected backend.
 #[macro_export]
 macro_rules! warn {
     ($($args:tt)*) => { $crate::__redactable_event!(Warn, $($args)*) };
 }
 
-/// Logs a checked event at the info level through a [`Sink`](crate::logging::Sink).
+/// Logs a checked event at the info level through the application's selected backend.
 #[macro_export]
 macro_rules! info {
     ($($args:tt)*) => { $crate::__redactable_event!(Info, $($args)*) };
 }
 
-/// Logs a checked event at the debug level through a [`Sink`](crate::logging::Sink).
+/// Logs a checked event at the debug level through the application's selected backend.
 #[macro_export]
 macro_rules! debug {
     ($($args:tt)*) => { $crate::__redactable_event!(Debug, $($args)*) };
 }
 
-/// Logs a checked event at the trace level through a [`Sink`](crate::logging::Sink).
+/// Logs a checked event at the trace level through the application's selected backend.
 #[macro_export]
 macro_rules! trace {
     ($($args:tt)*) => { $crate::__redactable_event!(Trace, $($args)*) };

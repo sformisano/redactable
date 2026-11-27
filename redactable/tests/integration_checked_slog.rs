@@ -11,7 +11,7 @@ use std::{
 
 use redactable::{
     BypassDebugRedaction, BypassDisplayRedaction, BypassJsonRedaction, RedactedValue, ToRedacted,
-    logging::Sink,
+    logging::{Sink, set_sink},
 };
 use redactable_test_fixtures::GenericDualFixture;
 use serde_json::{Map, Value, json};
@@ -66,8 +66,45 @@ fn native_level_filter_decides_whether_checked_fields_run() {
     let native_calls = calls.replace(0);
 
     let sink = Sink::Slog(logger);
-    redactable::debug!(sink, probe = { calls.set(calls.get() + 1) }; "checked");
+    redactable::debug!(sink: &sink, probe = { calls.set(calls.get() + 1) }; "checked");
     assert_eq!(calls.get(), native_calls);
+}
+
+#[test]
+fn startup_sink_reaches_workers_and_accepts_a_request_logger_override() {
+    #[cfg(feature = "log")]
+    redactable::trace!("before registration");
+    #[cfg(not(feature = "log"))]
+    {
+        let calls = Cell::new(0);
+        let evaluate = || calls.set(calls.get() + 1);
+        redactable::info!(field = evaluate(); "unconfigured {}", evaluate());
+        assert_eq!(calls.get(), 0);
+    }
+
+    let capture = Capture::default();
+    let records = Arc::clone(&capture.0);
+    let logger = Logger::root(capture, slog::o!("app" => "web"));
+    let request = Sink::Slog(logger.new(slog::o!("request_id" => "request-7")));
+    set_sink(Sink::Slog(logger)).unwrap();
+    assert!(set_sink(Sink::Slog(Logger::root(slog::Discard, slog::o!()))).is_err());
+
+    std::thread::spawn(|| redactable::info!("worker started"))
+        .join()
+        .unwrap();
+    redactable::info!(sink: &request, "request accepted");
+    redactable::info!("after request");
+
+    let records = records.lock().unwrap();
+    assert_eq!(records.len(), 3);
+    assert_eq!(records[0].1, "worker started");
+    assert_eq!(records[0].2.live["app"], "web");
+    assert!(!records[0].2.live.contains_key("request_id"));
+    assert_eq!(records[1].1, "request accepted");
+    assert_eq!(records[1].2.live["app"], "web");
+    assert_eq!(records[1].2.live["request_id"], "request-7");
+    assert_eq!(records[2].1, "after request");
+    assert!(!records[2].2.live.contains_key("request_id"));
 }
 
 #[cfg(all(feature = "log", feature = "tracing"))]
@@ -129,7 +166,7 @@ fn one_callsite_matches_the_native_routing_of_each_sink() {
                 _ => unreachable!(),
             }
             let native = take_counts();
-            redactable::info!(sink, value = (); "routed");
+            redactable::info!(sink: &sink, value = (); "routed");
             assert_eq!(take_counts(), native, "{sink:?}");
         }
     });
@@ -160,7 +197,7 @@ fn nested_and_queued_fields_use_the_same_declared_projection() {
         let saved = producer.to_redacted();
         let public = ["web", "app"];
         let invalid_keys = BTreeMap::from([((1, 2), SECRET)]);
-        redactable::warn!(sink,
+        redactable::warn!(sink: &sink,
             account = &saved,
             selected:% = &producer,
             debug:? = &producer,
@@ -169,14 +206,14 @@ fn nested_and_queued_fields_use_the_same_declared_projection() {
             roles = BypassJsonRedaction(&public),
             absent = None::<()>,
             failed = BypassJsonRedaction(&invalid_keys);
-            "checked {{login}}"
+            "checked {{login}} for {}", &producer
         );
     }
 
     let (level, message, fields) = records.lock().unwrap().pop().unwrap();
     assert_eq!(level, Level::Warning);
-    assert_eq!(message, "checked {login}");
-    assert_eq!(calls.get(), 3);
+    assert_eq!(message, "checked {login} for sign-in: [REDACTED]");
+    assert_eq!(calls.get(), 4);
     assert_eq!(
         Value::Object(fields.live.clone()),
         json!({
