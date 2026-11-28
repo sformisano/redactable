@@ -1,5 +1,5 @@
-//! Every member of the Bypass family is constructed by tuple syntax and
-//! reaches a `ToRedacted` sink; `BypassRedaction` only satisfies `Redactable`.
+//! The display, debug and JSON wrappers feed a `ToRedacted` sink. This fixture
+//! also checks `BypassRedaction` at a `Redactable` bound and constructs a marker.
 
 use redactable::{
     BypassDebugRedaction, BypassDisplayRedaction, BypassJsonRedaction, BypassRedaction,

@@ -168,7 +168,7 @@ Each field tells it what to do:
 | `#[not_sensitive]` | Keep the whole field unchanged, including any nested sensitive data |
 | A nested type deriving `Sensitive` | Walk that type's fields and apply its annotations |
 | A supported container such as `Option<T>` or `Vec<T>` | Delegate to its contents, which must also declare redaction behavior |
-| `serde_json::Value`, including through supported containers | Choose `#[sensitive(Secret)]` to mask each JSON value or `#[not_sensitive]` to keep its contents. See [JSON payloads](#json-payloads-need-an-output-view). |
+| `serde_json::Value`, including through nested containers | Apply `#[sensitive(Secret)]` where the field supports that policy, or `#[not_sensitive]` for a wholly public field. See [JSON payloads](#json-payloads-need-an-output-view) for a private tuple. |
 | An undecided scalar or string field | Compile error |
 
 For example, `Address` below declares what to do with its fields. `Account`
@@ -287,14 +287,30 @@ generic bounds, and optional masking of JSON object keys.
 ### JSON payloads need an output view
 
 A field of type `serde_json::Value` needs an explicit declaration in
-`Sensitive` and `SensitiveDual`. This applies to type aliases and to JSON
-values reached by traversal, as in `Option<Vec<serde_json::Value>>`. Choose
-`#[sensitive(Secret)]` to replace each entire JSON value with the JSON string
-`"[REDACTED]"`. Choose `#[not_sensitive]` only when the whole field is public.
+`Sensitive` and `SensitiveDual`. The same rule applies to aliases and JSON
+values inside containers. On a bare JSON value or a field such as
+`Option<Vec<serde_json::Value>>`, `#[sensitive(Secret)]` replaces each JSON
+value with the string `"[REDACTED]"`. Choose `#[not_sensitive]` only when the
+whole field is public.
+
+Applying `Secret` to an entire `(Value, Value)` field fails to compile.
+For a private pair of JSON values, use a tuple struct and mark each
+element. Serde keeps the same two-element array shape. The examples below
+use `serde_json = "1"` as a direct dependency.
+
+```rust
+use redactable::{Secret, Sensitive, ToRedacted};
+use serde_json::{Value, json};
+
+#[derive(Clone, Sensitive, serde::Serialize)]
+struct PayloadPair(#[sensitive(Secret)] Value, #[sensitive(Secret)] Value);
+
+let pair = PayloadPair(json!({"token": "example-token"}), json!(42));
+assert_eq!(pair.to_redacted().json(), json!(["[REDACTED]", "[REDACTED]"]));
+```
 
 For useful diagnostics, select known fields into a typed view with their own
-policies. Keep the raw payload for business use. Add `serde_json = "1"` to
-`[dependencies]` to run this example. The view keeps the review title and
+policies. Keep the raw payload for business use. The view keeps the review title and
 request ID while masking the access token.
 
 ```rust
@@ -893,6 +909,7 @@ type containing just the fields you intend to log.
 | Public value logged with `Display` | `BypassDisplayRedaction<T>` |
 | Borrowed value logged as raw JSON | `BypassJsonRedaction<'_, T>` |
 | Foreign value at a `Redactable`-bounded boundary | `BypassRedaction<T>` |
+| Public foreign map key with separately redacted values | `BypassRedaction<K>` as the key type |
 | Public value using slog's native typed output, even without `Display` or `Debug` | `BypassRedactionMarker<T>` |
 
 Import `redactable::BypassRedactionExt` to borrow a public value with

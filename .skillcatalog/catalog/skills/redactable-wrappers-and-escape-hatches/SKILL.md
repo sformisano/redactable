@@ -47,7 +47,11 @@ public removes their protection.
 For a field in a type you own, an explicit public field declaration is usually
 clearer than changing the field's type. Use `BypassRedaction` when the value
 itself must satisfy a redaction bound and its entire passthrough is justified.
-Neither form walks nested sensitive fields.
+Both forms preserve nested fields, including sensitive values.
+
+For a foreign map key whose output is public, wrap the key in
+`BypassRedaction<K>` and keep the value's redaction policy. Declaring the
+whole map public would also expose its values.
 
 At an output boundary, select a format-specific bypass only after reviewing
 that complete representation. `Debug`, `Display`, and JSON may reveal different

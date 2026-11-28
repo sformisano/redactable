@@ -192,15 +192,15 @@ where
 // BypassRedaction - Wrapper for foreign types that should not be redacted
 // =============================================================================
 
-/// Satisfies a `Redactable` bound on a value you do not own.
+/// Declares the wrapped value public for redaction or as a map key.
 ///
-/// Reach for this only at a boundary that demands `Redactable` on a foreign
-/// value: the wrapper is a passthrough that returns the value without any
-/// redaction, and wrapping is the declaration that doing so is intended.
+/// Use this wrapper when an API requires [`Redactable`] on a public foreign
+/// value. For a public foreign key in a structurally redacted map, wrapping
+/// just the key satisfies [`PublicMapKey`](crate::PublicMapKey). The map's
+/// field policy still applies to its values.
 ///
-/// **A foreign field inside a struct you own does not need this wrapper.**
-/// Annotate the field `#[not_sensitive]` instead — the declaration then sits
-/// on the field it describes, and the field keeps its own type.
+/// Use `#[not_sensitive]` on a field in your own struct when its complete
+/// value is public. On a map field, that declaration includes every value.
 ///
 /// **Serialization:** `serde::Serialize` emits the raw inner value unchanged.
 /// This wrapper is intentionally a passthrough for both redaction and
@@ -223,6 +223,19 @@ where
 ///
 /// let checked = audit(BypassRedaction(ForeignConfig { timeout: 30 }));
 /// assert_eq!(checked.0.timeout, 30);
+/// ```
+///
+/// A reviewed JSON string can serve as a public key while its token stays masked.
+///
+/// ```
+/// use std::collections::HashMap;
+/// use redactable::{BypassRedaction, Secret, apply_policy};
+/// use serde_json::json;
+///
+/// let key = BypassRedaction(json!("search"));
+/// let tokens = HashMap::from([(key.clone(), String::from("example-token"))]);
+/// let masked = apply_policy::<Secret, _>(tokens);
+/// assert_eq!(masked[&key], "[REDACTED]");
 /// ```
 #[derive(Clone, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct BypassRedaction<T>(pub T);

@@ -6,7 +6,10 @@
 //! Public fields use `#[not_sensitive]`; nested types retain their own policies.
 //! For a `serde_json::Value` field in `Sensitive` or `SensitiveDual`, choose
 //! `#[sensitive(Secret)]` to mask the payload or `#[not_sensitive]` to keep it.
-//! This also applies to type aliases and JSON values inside traversed containers.
+//! Aliases and JSON values inside traversed containers also require a decision.
+//! `Secret` applies to supported containers such as `Option<Vec<Value>>`.
+//! For a tuple containing private JSON, derive `Sensitive` on a tuple struct
+//! and annotate each private field.
 //! Structurally traversed maps require public keys. String and integer keys
 //! qualify directly. Derive `NotSensitive` on a public custom key to keep the
 //! key and apply the field's redaction policy to map values.
@@ -27,7 +30,8 @@
 //! Use a bypass wrapper only when its complete output is public.
 //! `BypassDisplayRedaction`, `BypassDebugRedaction`, and `BypassJsonRedaction`
 //! select an output format. `BypassRedactionMarker` declares a value public
-//! without choosing a format. `BypassRedaction` satisfies a `Redactable` bound.
+//! without choosing a format. `BypassRedaction` satisfies a `Redactable` bound
+//! on a public foreign value or a `PublicMapKey` bound on a public foreign key.
 //!
 //! Serde on `BypassDisplayRedaction`, `BypassDebugRedaction`, and
 //! `BypassRedaction` exposes the raw inner value for transport or storage.

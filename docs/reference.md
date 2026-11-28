@@ -605,6 +605,8 @@ the wrapper's policy is authoritative.
 - **`BypassRedaction<T>`**
   - Wraps a foreign value to satisfy a `Redactable` bound it cannot implement
   - Passes the value through unchanged
+  - Implements `PublicMapKey`. As a map key it declares the key's complete
+    representation public. The map values keep their own redaction rules.
 - **`BypassDebugRedaction<T>`**
   - Owns a value explicitly declared safe to log through `Debug`
   - Implements `ToRedacted`, common value traits, `inner()`, and `into_inner()`
@@ -805,9 +807,11 @@ Include populated samples to exercise those paths.
 For the 0.17 upgrade, declare a policy on each previously unannotated JSON
 payload in `Sensitive` or `SensitiveDual`. This includes a JSON value hidden
 by a type alias or nested in traversed containers, and a structural field
-omitted from a dual template. Choose `#[sensitive(Secret)]` to keep the
-previous whole-value mask in structured output, or `#[not_sensitive]` when
-the complete field may be disclosed.
+omitted from a dual template. On a bare JSON value or a container that supports
+the policy, choose `#[sensitive(Secret)]` to keep the previous whole-value mask.
+For a private tuple, use a tuple struct deriving `Sensitive` and annotate each
+JSON element. Choose `#[not_sensitive]` only when the complete field may be
+disclosed.
 
 For a custom map key, derive `NotSensitive` on the key type when the full key
 is public. Retain the value's existing redaction policy. A generic key needs

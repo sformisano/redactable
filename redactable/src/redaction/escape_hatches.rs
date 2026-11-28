@@ -15,9 +15,10 @@
 //! Their Serde implementations preserve the raw inner wire value and do not
 //! redact it.
 //!
-//! A foreign field inside a struct you own is not a job for this family:
-//! annotate it `#[not_sensitive]`. Reach for [`crate::BypassRedaction`] only
-//! when an API demands `Redactable` on a value you do not own.
+//! Mark a foreign field in your own struct `#[not_sensitive]` when the entire
+//! field is public. Use [`crate::BypassRedaction`] for a public foreign value
+//! that needs `Redactable`, or for a public foreign key in a map whose values
+//! still need redaction.
 
 use std::{
     fmt::{Debug, Display, Formatter, Result as FmtResult},
